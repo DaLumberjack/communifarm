@@ -1,7 +1,11 @@
-from homeassistant.helpers import discovery
+
+from __future__ import annotations
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN
 
-async def async_setup(hass, config):
+def setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data[DOMAIN] = {}
-    await discovery.async_load_platform(hass, 'sensor', DOMAIN, {}, config)
+    hass.states.set("communifarm.Farm", "works!")
     return True
