@@ -1,0 +1,10 @@
+{
+    "domain": "communifarm",
+    "name": "Communifarm",
+    "codeowners": [@DaLumberjack],
+    "dependencies": [],
+    "documentation": "https://www.example.com",
+    "integration_type": "hub",
+    "iot_class": "cloud_polling",
+    "requirements": []
+  }
