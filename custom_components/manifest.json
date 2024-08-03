@@ -1,0 +1,10 @@
+{
+    "domain": "communifarm",
+    "name": "Communifarm",
+    "iot_class": "assumed_state",
+    "version": "0.1.0",
+    "documentation": "www.example.com",
+    "codeowners" : "@DaLumberjack",
+    "issue_tracker": "https://github.com/dalumberjack/communifarm/issues"
+
+}
