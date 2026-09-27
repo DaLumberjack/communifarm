@@ -34,6 +34,8 @@ def test_dashboard_includes_weigh_tab_with_scale_and_nfc(sample_state) -> None:
     titles = [card.get("title") for card in weigh["cards"]]
     assert "Ingredient (NFC)" in titles
     assert "Scale" in titles
+    assert "Recipe scale" in titles
+    assert "This session" in titles
     scale = next(card for card in weigh["cards"] if card.get("title") == "Scale")
     entity_ids = [
         row["entity"] if isinstance(row, dict) else row for row in scale["entities"]
@@ -43,6 +45,11 @@ def test_dashboard_includes_weigh_tab_with_scale_and_nfc(sample_state) -> None:
     assert "button.esp32dev_record_weight" in entity_ids
     nfc = next(card for card in weigh["cards"] if card.get("title") == "Ingredient (NFC)")
     assert nfc["entities"][0]["entity"] == "input_select.esp32dev_selected_ingredient"
+    recipe = next(card for card in weigh["cards"] if card.get("title") == "Recipe scale")
+    recipe_ids = [row["entity"] for row in recipe["entities"]]
+    assert "number.communifarm_recipe_scale" in recipe_ids
+    assert "sensor.communifarm_weigh_session" in recipe_ids
+    assert "sensor.communifarm_batch_nfc_uid" in recipe_ids
 
 
 def test_dashboard_current_settings_use_live_entity_templates(sample_state) -> None:

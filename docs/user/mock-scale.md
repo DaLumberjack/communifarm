@@ -79,11 +79,15 @@ button.press → button.esp32dev_record_weight
 
 Communifarm Lovelace includes a **Weigh** view (`/communifarm/weigh`) with:
 
-- Live current mass (`sensor.esp32dev_calibrated_g`)
-- NFC / ingredient dropdown (`input_select.esp32dev_selected_ingredient`)
-- Tare / location tare / record weight buttons
+| Card | Entities / content |
+| --- | --- |
+| Recipe scale | `number.communifarm_recipe_scale`, batch NFC UID, session sensor |
+| This session | Markdown from `progress_text` (scaled targets vs last recorded per line) |
+| Live reading | Current / gross / selected / last recorded |
+| Ingredient (NFC) | `input_select.esp32dev_selected_ingredient` |
+| Scale | tare / location tare / record |
 
-**Record weight** also writes `weight_events` in Communifarm SQLite (`communifarm.record_weight` / button hook). See [storage.md](storage.md).
+**Record weight** writes `weight_events` (with `recipe_scale` + `target_amount`) and refreshes the session sensor. See [storage.md](storage.md).
 
-Reload the Communifarm integration after upgrade so the dashboard model re-provisions.
+Reload Communifarm after upgrade so the dashboard model re-provisions.
 

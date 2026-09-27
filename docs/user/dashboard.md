@@ -5,7 +5,19 @@ After Communifarm setup finishes, open **Communifarm** in the sidebar (`/communi
 | Tab | Path | Purpose |
 | --- | --- | --- |
 | Overview | `/communifarm/overview` | Environment, targets, controls, batch |
-| Weigh | `/communifarm/weigh` | Scale mass, tare, NFC ingredient select, record weight |
+| Weigh | `/communifarm/weigh` | Recipe scale, session progress from SQLite, NFC select, tare/record |
+
+### Weigh session
+
+| Control | Entity |
+| --- | --- |
+| Recipe scale (0.1–10×) | `number.communifarm_recipe_scale` |
+| Batch NFC UID | `sensor.communifarm_batch_nfc_uid` |
+| Progress (this batch) | `sensor.communifarm_weigh_session` |
+| Ingredient dropdown | `input_select.esp32dev_selected_ingredient` |
+| Current mass / tare / record | `esp32dev_*` scale entities |
+
+Session table lists each recipe line’s **scaled target**, last recorded value, and closeness — enough to see what’s done without dumping full DB history. Gauges later.
 
 If the sidebar entry is missing after an upgrade, reload the Communifarm integration (or restart Home Assistant) so provisioning can register the Lovelace storage dashboard. A prior bug left the config only in memory — fixed by creating the real storage dashboard.
 

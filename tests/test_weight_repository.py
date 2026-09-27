@@ -89,3 +89,11 @@ async def test_record_weight_service_persists(
     assert rows[0].mass_g == 199.5
     assert rows[0].ingredient_label == "gypsum"
     assert rows[0].nfc_uid == "nfc-gypsum"
+    assert rows[0].recipe_scale == 1.0
+    assert rows[0].target_amount == 200.0  # wood-lover gypsum @ 1×
+
+    session = hass.states.get("sensor.communifarm_weigh_session")
+    assert session is not None
+    assert session.state == "1/9 lines recorded"
+    assert "gypsum" in session.attributes["progress_text"]
+

@@ -29,7 +29,7 @@ class CommunifarmRepository:
         return self._state
 
     async def async_save(self, state: CommunifarmState) -> None:
-        state.profile.validate()
+        state.validate()
         self._state = state
         await self._store.async_save(state.to_dict())
 

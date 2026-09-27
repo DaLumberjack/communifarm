@@ -35,9 +35,14 @@ ENTITY_TEMPERATURE_TARGET = "number.communifarm_temperature_target"
 ENTITY_HUMIDITY_TARGET = "number.communifarm_humidity_target"
 ENTITY_ALLOWLISTED_SWITCH = "switch.communifarm_allowlisted_switch"
 ENTITY_BATCH_STAGE = "sensor.communifarm_batch_stage"
+ENTITY_WEIGH_SESSION = "sensor.communifarm_weigh_session"
+ENTITY_BATCH_NFC_UID = "sensor.communifarm_batch_nfc_uid"
+ENTITY_RECIPE_SCALE = "number.communifarm_recipe_scale"
 
 SERVICE_TRANSITION_BATCH = "transition_batch"
 SERVICE_RECORD_WEIGHT = "record_weight"
+
+SIGNAL_WEIGH_SESSION_UPDATED = f"{DOMAIN}_weigh_session_updated"
 
 # Scale entities used when recording from the Weigh station (live or mock).
 ENTITY_SCALE_MASS_G = "sensor.esp32dev_calibrated_g"

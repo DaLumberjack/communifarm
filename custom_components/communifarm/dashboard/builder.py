@@ -9,9 +9,12 @@ from ..const import (
     DASHBOARD_VIEW_OVERVIEW,
     DASHBOARD_VIEW_WEIGH,
     ENTITY_ALLOWLISTED_SWITCH,
+    ENTITY_BATCH_NFC_UID,
     ENTITY_BATCH_STAGE,
     ENTITY_HUMIDITY_TARGET,
+    ENTITY_RECIPE_SCALE,
     ENTITY_TEMPERATURE_TARGET,
+    ENTITY_WEIGH_SESSION,
     ROLE_FAN,
     ROLE_HUMIDITY,
     ROLE_SWITCH,
@@ -147,11 +150,38 @@ class DashboardBuilder:
                     "type": "markdown",
                     "content": (
                         f"## Weigh station\n"
-                        f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
-                        "1. Scan NFC (or pick ingredient)\n"
-                        "2. Tare\n"
-                        "3. Add material\n"
-                        "4. Record weight (saved to Communifarm SQLite)\n"
+                        f"Batch: **{state.batch.name}** ({state.batch.stage})\n"
+                        f"NFC UID: `{state.batch.nfc_uid}`\n\n"
+                        "1. Set recipe scale if needed\n"
+                        "2. Scan NFC (or pick ingredient)\n"
+                        "3. Tare → add material → Record\n"
+                        "Session progress below comes from Communifarm SQLite.\n"
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Recipe scale",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_RECIPE_SCALE,
+                            "name": "Scale factor (0.1×–10×)",
+                        },
+                        {
+                            "entity": ENTITY_BATCH_NFC_UID,
+                            "name": "Batch NFC UID",
+                        },
+                        {
+                            "entity": ENTITY_WEIGH_SESSION,
+                            "name": "Session progress",
+                        },
+                    ],
+                },
+                {
+                    "type": "markdown",
+                    "title": "This session",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_WEIGH_SESSION}', 'progress_text') }}}}"
                     ),
                 },
                 {

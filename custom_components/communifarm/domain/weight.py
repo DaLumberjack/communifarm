@@ -28,6 +28,8 @@ class WeightEvent:
     source_entity_id: str | None = None
     nfc_uid: str | None = None
     unit: str = "g"
+    recipe_scale: float | None = None
+    target_amount: float | None = None
     id: str = ""
 
     def __post_init__(self) -> None:

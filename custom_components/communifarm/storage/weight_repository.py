@@ -54,8 +54,9 @@ class WeightEventRepository:
             INSERT INTO weight_events (
               stable_id, site_id, environment_id, batch_id,
               ingredient_key, ingredient_label, mass_g, unit,
-              source_entity_id, nfc_uid, recorded_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              source_entity_id, nfc_uid, recorded_at, created_at,
+              recipe_scale, target_amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.id,
@@ -70,6 +71,8 @@ class WeightEventRepository:
                 event.nfc_uid,
                 event.recorded_at,
                 created,
+                event.recipe_scale,
+                event.target_amount,
             ),
         )
         self._conn.commit()
@@ -83,7 +86,8 @@ class WeightEventRepository:
             """
             SELECT stable_id, site_id, environment_id, batch_id,
                    ingredient_key, ingredient_label, mass_g, unit,
-                   source_entity_id, nfc_uid, recorded_at
+                   source_entity_id, nfc_uid, recorded_at,
+                   recipe_scale, target_amount
             FROM weight_events
             WHERE batch_id = ?
             ORDER BY recorded_at ASC, id ASC
@@ -103,6 +107,8 @@ class WeightEventRepository:
                 source_entity_id=row["source_entity_id"],
                 nfc_uid=row["nfc_uid"],
                 recorded_at=row["recorded_at"],
+                recipe_scale=row["recipe_scale"],
+                target_amount=row["target_amount"],
             )
             for row in rows
         ]

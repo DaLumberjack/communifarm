@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -36,7 +36,11 @@ MIGRATIONS: dict[int, str] = {
       ON weight_events (environment_id, recorded_at);
     CREATE INDEX IF NOT EXISTS idx_weight_events_ingredient
       ON weight_events (ingredient_key, recorded_at);
-    """
+    """,
+    2: """
+    ALTER TABLE weight_events ADD COLUMN recipe_scale REAL;
+    ALTER TABLE weight_events ADD COLUMN target_amount REAL;
+    """,
 }
 
 

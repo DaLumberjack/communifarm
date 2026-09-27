@@ -12,6 +12,8 @@ from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
     DOMAIN,
@@ -22,9 +24,11 @@ from .const import (
     PLATFORMS,
     SERVICE_RECORD_WEIGHT,
     SERVICE_TRANSITION_BATCH,
+    SIGNAL_WEIGH_SESSION_UPDATED,
 )
 from .dashboard.provisioner import async_provision_dashboard
 from .domain.models import CommunifarmState
+from .domain.recipe import WOOD_LOVER_RECIPE, clamp_recipe_scale
 from .domain.weight import WeightEvent, ingredient_key_from_label
 from .storage.repository import CommunifarmRepository
 from .storage.weight_repository import WeightEventRepository
@@ -173,24 +177,37 @@ async def _async_persist_weight_event(
     ):
         nfc_uid = nfc_state.state
 
+    key = ingredient_key_from_label(label) if label else None
+    scale = clamp_recipe_scale(state.recipe_scale)
+    target_amount = None
+    if key:
+        for line in WOOD_LOVER_RECIPE:
+            if line.key == key:
+                target_amount = line.amount * scale
+                break
+
     event = WeightEvent(
         site_id=state.site.id,
         environment_id=state.environment.id,
         batch_id=state.batch.id,
         mass_g=float(mass_g),
         ingredient_label=label,
-        ingredient_key=ingredient_key_from_label(label) if label else None,
+        ingredient_key=key,
         source_entity_id=ENTITY_SCALE_MASS_G,
         nfc_uid=nfc_uid,
         recorded_at=datetime.now(tz=UTC).isoformat(),
+        recipe_scale=scale,
+        target_amount=target_amount,
     )
     await weight_repo.async_insert(event)
     _LOGGER.info(
-        "Recorded weight_event %s mass=%sg ingredient=%s",
+        "Recorded weight_event %s mass=%sg ingredient=%s scale=%s",
         event.id,
         event.mass_g,
         event.ingredient_label,
+        scale,
     )
+    async_dispatcher_send(hass, SIGNAL_WEIGH_SESSION_UPDATED, entry_id)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

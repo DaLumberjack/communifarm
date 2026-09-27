@@ -6,10 +6,12 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, SIGNAL_WEIGH_SESSION_UPDATED
 from .domain.models import CommunifarmState
+from .domain.recipe import clamp_recipe_scale
 from .storage.repository import CommunifarmRepository
 
 
@@ -25,6 +27,7 @@ async def async_setup_entry(
         [
             CommunifarmTemperatureTarget(entry, state, repo),
             CommunifarmHumidityTarget(entry, state, repo),
+            CommunifarmRecipeScale(entry, state, repo),
         ]
     )
 
@@ -117,3 +120,37 @@ class CommunifarmHumidityTarget(_ProfileNumber):
         runtime.profile.validate()
         await self._async_persist()
         self.async_write_ha_state()
+
+
+class CommunifarmRecipeScale(_ProfileNumber):
+    """Scale Wood Lover (and future) recipes by 0.1×–10× for container size."""
+
+    _attr_name = "Recipe scale"
+    _attr_unique_id = "communifarm_recipe_scale"
+    _attr_icon = "mdi:multiplication"
+    _attr_native_min_value = 0.1
+    _attr_native_max_value = 10.0
+    _attr_native_step = 0.1
+
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        state: CommunifarmState,
+        repo: CommunifarmRepository,
+    ) -> None:
+        super().__init__(entry, state, repo)
+        self.entity_id = "number.communifarm_recipe_scale"
+
+    @property
+    def native_value(self) -> float:
+        return self._runtime().recipe_scale
+
+    async def async_set_native_value(self, value: float) -> None:
+        runtime = self._runtime()
+        runtime.recipe_scale = clamp_recipe_scale(value)
+        runtime.validate()
+        await self._async_persist()
+        self.async_write_ha_state()
+        async_dispatcher_send(
+            self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._entry.entry_id
+        )

@@ -132,7 +132,13 @@ class ProductionBatch:
     environment_id: str
     stage: str = BATCH_STAGE_PLANNED
     id: str = field(default_factory=lambda: new_id("batch"))
+    # Written to NFC and follows the bag until split into containers.
+    nfc_uid: str = ""
     events: list[ProcessEvent] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.nfc_uid:
+            self.nfc_uid = self.id
 
     def can_transition(self, new_stage: str) -> bool:
         return new_stage in ALLOWED_BATCH_TRANSITIONS.get(self.stage, set())
@@ -156,6 +162,7 @@ class ProductionBatch:
             "name": self.name,
             "environment_id": self.environment_id,
             "stage": self.stage,
+            "nfc_uid": self.nfc_uid,
             "events": [event.to_dict() for event in self.events],
         }
 
@@ -166,6 +173,7 @@ class ProductionBatch:
             name=data["name"],
             environment_id=data["environment_id"],
             stage=data.get("stage", BATCH_STAGE_PLANNED),
+            nfc_uid=data.get("nfc_uid") or data["id"],
             events=[ProcessEvent.from_dict(item) for item in data.get("events", [])],
         )
 
@@ -179,6 +187,7 @@ class CommunifarmState:
     profile: EnvironmentalProfile
     batch: ProductionBatch
     bindings: list[EntityBinding] = field(default_factory=list)
+    recipe_scale: float = 1.0
     schema_version: int = 1
 
     def binding_for(self, role: str) -> EntityBinding | None:
@@ -186,6 +195,11 @@ class CommunifarmState:
             if binding.role == role:
                 return binding
         return None
+
+    def validate(self) -> None:
+        self.profile.validate()
+        if not (0.1 <= self.recipe_scale <= 10.0):
+            raise ValueError("recipe_scale must be between 0.1 and 10")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -195,18 +209,22 @@ class CommunifarmState:
             "profile": self.profile.to_dict(),
             "batch": self.batch.to_dict(),
             "bindings": [binding.to_dict() for binding in self.bindings],
+            "recipe_scale": self.recipe_scale,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CommunifarmState:
-        return cls(
+        state = cls(
             schema_version=int(data.get("schema_version", 1)),
             site=Site.from_dict(data["site"]),
             environment=Environment.from_dict(data["environment"]),
             profile=EnvironmentalProfile.from_dict(data["profile"]),
             batch=ProductionBatch.from_dict(data["batch"]),
             bindings=[EntityBinding.from_dict(item) for item in data.get("bindings", [])],
+            recipe_scale=float(data.get("recipe_scale", 1.0)),
         )
+        state.validate()
+        return state
 
 
 def suggest_role_from_entity(
