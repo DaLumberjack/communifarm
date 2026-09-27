@@ -83,4 +83,7 @@ Communifarm Lovelace includes a **Weigh** view (`/communifarm/weigh`) with:
 - NFC / ingredient dropdown (`input_select.esp32dev_selected_ingredient`)
 - Tare / location tare / record weight buttons
 
+**Record weight** also writes `weight_events` in Communifarm SQLite (`communifarm.record_weight` / button hook). See [storage.md](storage.md).
+
 Reload the Communifarm integration after upgrade so the dashboard model re-provisions.
+

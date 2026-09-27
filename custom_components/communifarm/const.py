@@ -36,9 +36,16 @@ ENTITY_HUMIDITY_TARGET = "number.communifarm_humidity_target"
 ENTITY_ALLOWLISTED_SWITCH = "switch.communifarm_allowlisted_switch"
 ENTITY_BATCH_STAGE = "sensor.communifarm_batch_stage"
 
-PLATFORMS = ["sensor", "number", "switch"]
-
 SERVICE_TRANSITION_BATCH = "transition_batch"
+SERVICE_RECORD_WEIGHT = "record_weight"
+
+# Scale entities used when recording from the Weigh station (live or mock).
+ENTITY_SCALE_MASS_G = "sensor.esp32dev_calibrated_g"
+ENTITY_SCALE_SELECTED_INGREDIENT = "input_select.esp32dev_selected_ingredient"
+ENTITY_SCALE_NFC_UID = "input_text.esp32dev_last_nfc_uid"
+ENTITY_SCALE_RECORD_BUTTON = "button.esp32dev_record_weight"
+
+PLATFORMS = ["sensor", "number", "switch"]
 
 BATCH_STAGE_PLANNED = "planned"
 BATCH_STAGE_ACTIVE = "active"

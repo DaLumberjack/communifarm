@@ -151,7 +151,7 @@ class DashboardBuilder:
                         "1. Scan NFC (or pick ingredient)\n"
                         "2. Tare\n"
                         "3. Add material\n"
-                        "4. Record weight\n"
+                        "4. Record weight (saved to Communifarm SQLite)\n"
                     ),
                 },
                 {

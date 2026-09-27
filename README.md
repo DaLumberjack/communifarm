@@ -69,6 +69,7 @@ Feature branch → merge to `main` → bump `manifest.json` version → local T2
 - One generated dashboard with Current settings + Targets controls
 - Allowlisted switch proxy
 - Local `esp32dev` scale mock + NFC ingredient select stub ([docs/user/mock-scale.md](docs/user/mock-scale.md))
+- Communifarm SQLite for weigh events ([docs/user/storage.md](docs/user/storage.md), ADR 0003)
 
 See [docs/user/dashboard.md](docs/user/dashboard.md).
 

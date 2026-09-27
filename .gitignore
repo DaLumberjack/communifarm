@@ -22,10 +22,13 @@ playwright/.cache/
 blob-report/
 
 # --- Secrets & credentials (never commit) ---
+.devenv
 .env
 .env.*
 !.env.example
-*.pem
+
+# Local Communifarm SQLite (created at runtime under HA config)
+devcontainer/ha_config/communifarm/*.pem
 *.key
 id_rsa*
 id_ed25519*
