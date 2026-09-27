@@ -49,6 +49,19 @@ ENTITY_SCALE_MASS_G = "sensor.esp32dev_calibrated_g"
 ENTITY_SCALE_SELECTED_INGREDIENT = "input_select.esp32dev_selected_ingredient"
 ENTITY_SCALE_NFC_UID = "input_text.esp32dev_last_nfc_uid"
 ENTITY_SCALE_RECORD_BUTTON = "button.esp32dev_record_weight"
+ENTITY_SCALE_TARE_BUTTON = "button.esp32dev_tare"
+ENTITY_SCALE_LOCATION_TARE_BUTTON = "button.esp32dev_location_tare"
+
+# Default empty weigh-session tracker (mutated at runtime in hass.data).
+def new_weigh_session_tracker() -> dict:
+    return {
+        "tare_seen": False,
+        "last_mass_g": None,
+        "last_ingredient_key": None,
+        "record_count": 0,
+        "warnings": [],
+        "last_reject": None,
+    }
 
 PLATFORMS = ["sensor", "number", "switch"]
 

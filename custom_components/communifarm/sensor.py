@@ -8,9 +8,10 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SIGNAL_WEIGH_SESSION_UPDATED
+from .const import DOMAIN, ROLE_HUMIDITY, ROLE_TEMPERATURE, SIGNAL_WEIGH_SESSION_UPDATED
 from .domain.models import CommunifarmState
 from .domain.recipe import build_weigh_session_progress
+from .domain.validation import assess_environment_readings
 from .storage.weight_repository import WeightEventRepository
 
 
@@ -29,6 +30,18 @@ async def async_setup_entry(
             CommunifarmWeighSessionSensor(entry.entry_id, state),
         ]
     )
+
+
+def _parse_float_state(hass: HomeAssistant, entity_id: str | None) -> float | None:
+    if not entity_id:
+        return None
+    state = hass.states.get(entity_id)
+    if state is None or state.state in ("unknown", "unavailable", ""):
+        return None
+    try:
+        return float(state.state)
+    except (TypeError, ValueError):
+        return None
 
 
 class CommunifarmBatchStageSensor(SensorEntity):
@@ -60,7 +73,7 @@ class CommunifarmBatchStageSensor(SensorEntity):
 
 
 class CommunifarmEnvironmentStatusSensor(SensorEntity):
-    """Simple environment health status for the dashboard."""
+    """Environment health from bound sensors (absolute range checks)."""
 
     _attr_has_entity_name = True
     _attr_name = "Environment status"
@@ -71,16 +84,33 @@ class CommunifarmEnvironmentStatusSensor(SensorEntity):
         self._state = state
         self.entity_id = "sensor.communifarm_environment_status"
 
-    @property
-    def native_value(self) -> str:
-        return "ok"
+    def _assessment(self):
+        runtime: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
+        temp_binding = runtime.binding_for(ROLE_TEMPERATURE)
+        hum_binding = runtime.binding_for(ROLE_HUMIDITY)
+        temp = _parse_float_state(
+            self.hass, temp_binding.entity_id if temp_binding else None
+        )
+        hum = _parse_float_state(
+            self.hass, hum_binding.entity_id if hum_binding else None
+        )
+        return assess_environment_readings(temp, hum)
 
     @property
-    def extra_state_attributes(self) -> dict[str, str]:
+    def native_value(self) -> str:
+        assessment = self._assessment()
+        return "ok" if assessment.ok else "degraded"
+
+    @property
+    def extra_state_attributes(self) -> dict:
         runtime = self.hass.data[DOMAIN][self._entry_id]["state"]
+        assessment = self._assessment()
         return {
             "site": runtime.site.name,
             "environment": runtime.environment.name,
+            "warnings": list(assessment.warnings),
+            "temperature_c": assessment.temperature_c,
+            "humidity_pct": assessment.humidity_pct,
         }
 
 
@@ -139,6 +169,7 @@ class CommunifarmWeighSessionSensor(SensorEntity):
         weight_repo: WeightEventRepository = self.hass.data[DOMAIN][self._entry_id][
             "weight_repository"
         ]
+        session = self.hass.data[DOMAIN][self._entry_id].get("weigh_session", {})
         events = await weight_repo.async_list_for_batch(runtime.batch.id)
         progress = build_weigh_session_progress(
             batch_id=runtime.batch.id,
@@ -146,7 +177,13 @@ class CommunifarmWeighSessionSensor(SensorEntity):
             recipe_scale=runtime.recipe_scale,
             events=events,
         )
+        warnings = list(session.get("warnings") or [])
+        last_reject = session.get("last_reject")
         self._progress_text = progress.progress_text()
+        if warnings:
+            self._progress_text += "\n\n**Warnings:** " + ", ".join(warnings)
+        if last_reject:
+            self._progress_text += f"\n\n**Last reject:** {last_reject}"
         self._attrs = {
             "summary": progress.summary,
             "recipe_name": progress.recipe_name,
@@ -158,6 +195,11 @@ class CommunifarmWeighSessionSensor(SensorEntity):
             "next_label": progress.next_label,
             "progress_text": self._progress_text,
             "lines": [line.to_attr_dict() for line in progress.lines],
+            "warnings": warnings,
+            "warning": warnings[0] if warnings else None,
+            "last_reject": last_reject,
+            "tare_seen": bool(session.get("tare_seen")),
+            "record_count": int(session.get("record_count") or 0),
         }
         self.async_write_ha_state()
 

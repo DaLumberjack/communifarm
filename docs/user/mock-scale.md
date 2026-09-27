@@ -87,7 +87,18 @@ Communifarm Lovelace includes a **Weigh** view (`/communifarm/weigh`) with:
 | Ingredient (NFC) | `input_select.esp32dev_selected_ingredient` |
 | Scale | tare / location tare / record |
 
-**Record weight** writes `weight_events` (with `recipe_scale` + `target_amount`) and refreshes the session sensor. See [storage.md](storage.md).
+**Record weight** writes `weight_events` (with `recipe_scale` + `target_amount`) and refreshes the session sensor. Negative mass is rejected; over-capacity and other suspect readings warn on `sensor.communifarm_weigh_session`. See [storage.md](storage.md).
+
+### Mock inject for validity (C12)
+
+Use the same inject helpers to exercise reject/warn paths in T1:
+
+| Scenario | How |
+| --- | --- |
+| Over capacity | set calibrated mass &gt; 100000 g then record |
+| Missing NFC | select ingredient, clear `input_text.esp32dev_last_nfc_uid`, record |
+| Tare skipped | record without pressing tare first |
+| Env degraded | set `sensor.mock_temperature` outside -40…80 °C |
 
 Reload Communifarm after upgrade so the dashboard model re-provisions.
 

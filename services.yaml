@@ -14,11 +14,11 @@ record_weight:
   fields:
     mass_g:
       name: Mass (g)
-      description: Optional override; otherwise uses sensor.esp32dev_calibrated_g.
+      description: Optional override; otherwise uses sensor.esp32dev_calibrated_g. Negative values are rejected.
       selector:
         number:
-          min: -5000
-          max: 100000
+          min: 0
+          max: 250000
           step: 0.1
           unit_of_measurement: g
     ingredient:

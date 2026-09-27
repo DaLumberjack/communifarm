@@ -24,6 +24,22 @@ Recorder is for entity history. Grow analysis needs Communifarm stable IDs (site
 
 Weigh dashboard tab shows scaled targets vs recorded amounts for the **active batch** only (latest event per ingredient). Colored gauges for closeness are deferred.
 
+Session sensor also exposes calibration **warnings** / **last_reject** (negative mass rejected; over-capacity / stuck / missing NFC / tare skipped accepted with alert).
+
+## Validity rules (operator-usable)
+
+| Case | Behavior |
+| --- | --- |
+| `mass_g` &lt; 0, NaN, Inf | **Reject** — no SQLite row; `last_reject` on session |
+| `mass_g` &gt; 100 kg (bench capacity) | **Warn** `over_capacity` — row stored for audit |
+| Large jump without tare | **Warn** `unstable_reading` |
+| Same mass, different ingredient | **Warn** `stuck_reading` |
+| First record without tare | **Warn** `tare_skipped` |
+| Ingredient set, NFC empty | **Warn** `missing_nfc` |
+| Names / ingredient / NFC UID over length | **Reject** (readability limits) |
+| Every 50th record | **Warn** `calibration_due` |
+| Temp/humidity outside absolute sensor range | Environment status `degraded` |
+
 ## weight_events (schema v2)
 
 | Column | Purpose |

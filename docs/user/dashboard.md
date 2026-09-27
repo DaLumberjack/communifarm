@@ -19,6 +19,12 @@ After Communifarm setup finishes, open **Communifarm** in the sidebar (`/communi
 
 Session table lists each recipe line’s **scaled target**, last recorded value, and closeness — enough to see what’s done without dumping full DB history. Gauges later.
 
+| Validity signal | Where |
+| --- | --- |
+| Rejects (negative mass, bad labels) | Service error + `last_reject` on session sensor |
+| Warnings (capacity, tare, NFC, stuck) | `warnings` / `warning` attrs + progress text |
+| Env sensor out of range | `sensor.communifarm_environment_status` = `degraded` |
+
 If the sidebar entry is missing after an upgrade, reload the Communifarm integration (or restart Home Assistant) so provisioning can register the Lovelace storage dashboard. A prior bug left the config only in memory — fixed by creating the real storage dashboard.
 
 ## What you see

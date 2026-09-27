@@ -16,6 +16,7 @@ from ..const import (
     ROLE_SWITCH,
     ROLE_TEMPERATURE,
 )
+from .validation import validate_nfc_uid, validate_readable_name
 
 
 def new_id(prefix: str) -> str:
@@ -200,6 +201,10 @@ class CommunifarmState:
         self.profile.validate()
         if not (0.1 <= self.recipe_scale <= 10.0):
             raise ValueError("recipe_scale must be between 0.1 and 10")
+        validate_readable_name(self.site.name, field_name="site.name")
+        validate_readable_name(self.environment.name, field_name="environment.name")
+        validate_readable_name(self.batch.name, field_name="batch.name")
+        validate_nfc_uid(self.batch.nfc_uid, required=True)
 
     def to_dict(self) -> dict[str, Any]:
         return {
