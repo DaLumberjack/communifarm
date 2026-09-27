@@ -83,8 +83,14 @@ export BAO_ADDR=http://127.0.0.1:8200
 export BAO_NAMESPACE=homelab
 # BAO_TOKEN is set by `bao login` into the CLI token helper; if needed:
 # export BAO_TOKEN=...
+
+# REQUIRED: eval — running the script alone only *prints* exports; it does not set them.
 eval "$(./scripts/load_openbao_ha_secrets.sh)"
-# Now: TEST_HA_USERNAME / TEST_HA_PASSWORD (+ TEST_HA_TOKEN if present)
+
+# Verify Playwright will see them (should print two lines, not empty):
+echo "user=${TEST_HA_USERNAME:+set} pass=${TEST_HA_PASSWORD:+set}"
+
+yarn playwright test e2e/flows/dashboard-targets.spec.ts
 ```
 
 Never commit tokens, unseal keys, or exported password values.
@@ -96,4 +102,5 @@ Never commit tokens, unseal keys, or exported password values.
 | connection refused on `:8200` | Server not started (terminal 1) |
 | sealed / permission denied | Missing unseal ×3 or expired/missing login |
 | empty / missing secret | `BAO_NAMESPACE` not `homelab`, or wrong path |
-| Playwright login fails | Forgot `eval "$(./scripts/load_openbao_ha_secrets.sh)"` in that shell |
+| Playwright: `TEST_HA_USERNAME/TEST_HA_PASSWORD required` | Ran the loader **without** `eval "$(...)"` — exports printed but not applied |
+| Playwright login fails | Credentials wrong for this HA instance, or not eval'd in **this** shell |

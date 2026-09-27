@@ -37,6 +37,13 @@ if [[ -z "$RAW" ]]; then
   exit 1
 fi
 
+# If someone runs this without eval, stdout is just text — warn on a TTY.
+if [[ -t 1 ]]; then
+  echo "NOTE: outputs export lines only. Load them with:" >&2
+  echo "  eval \"\$(./scripts/load_openbao_ha_secrets.sh)\"" >&2
+  echo "Bare './scripts/load_openbao_ha_secrets.sh' does NOT set variables in your shell." >&2
+fi
+
 py - <<'PY' "$RAW"
 import json, sys
 raw = json.loads(sys.argv[1])
