@@ -11,7 +11,12 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 
-from ..domain.batch_milestones import BATCH_STATUS_ACTIVE, BATCH_STATUS_COMPLETE
+from ..domain.batch_milestones import (
+    BATCH_STATUS_ACTIVE,
+    BATCH_STATUS_COMPLETE,
+    DEFAULT_RECIPE_KEY,
+    PHASE_PLANNED,
+)
 from ..domain.models import new_id
 from . import sqlite_db
 
@@ -20,6 +25,8 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class BatchRecord:
+    """Master batch row — hub FK for weigh-ins, milestones, future production/sales."""
+
     id: str
     site_id: str
     environment_id: str
@@ -32,6 +39,9 @@ class BatchRecord:
     mixing_finished_at: str | None = None
     container_count: int | None = None
     notes: str | None = None
+    recipe_scale: float = 1.0
+    lifecycle_phase: str = PHASE_PLANNED
+    recipe_key: str = DEFAULT_RECIPE_KEY
 
     def to_attr_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +49,9 @@ class BatchRecord:
             "name": self.name,
             "nfc_uid": self.nfc_uid,
             "status": self.status,
+            "lifecycle_phase": self.lifecycle_phase,
+            "recipe_scale": self.recipe_scale,
+            "recipe_key": self.recipe_key,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
             "mixing_started_at": self.mixing_started_at,
@@ -99,6 +112,9 @@ class BatchRepository:
         name: str,
         nfc_uid: str,
         created_at: str | None = None,
+        recipe_scale: float = 1.0,
+        recipe_key: str = DEFAULT_RECIPE_KEY,
+        lifecycle_phase: str = PHASE_PLANNED,
     ) -> BatchRecord:
         return await self._hass.async_add_executor_job(
             self._ensure_batch_sync,
@@ -108,6 +124,9 @@ class BatchRepository:
             name,
             nfc_uid,
             created_at,
+            recipe_scale,
+            recipe_key,
+            lifecycle_phase,
         )
 
     def _ensure_batch_sync(
@@ -118,21 +137,49 @@ class BatchRepository:
         name: str,
         nfc_uid: str,
         created_at: str | None,
+        recipe_scale: float,
+        recipe_key: str,
+        lifecycle_phase: str,
     ) -> BatchRecord:
         assert self._conn is not None
         row = self._conn.execute(
             "SELECT * FROM batches WHERE stable_id = ?", (batch_id,)
         ).fetchone()
         if row:
-            return self._row_to_batch(row)
+            # Keep scale in sync when the operator changes the dashboard control.
+            self._conn.execute(
+                """
+                UPDATE batches
+                SET recipe_scale = ?, name = ?, nfc_uid = ?
+                WHERE stable_id = ? AND status = ?
+                """,
+                (float(recipe_scale), name, nfc_uid, batch_id, BATCH_STATUS_ACTIVE),
+            )
+            self._conn.commit()
+            refreshed = self._conn.execute(
+                "SELECT * FROM batches WHERE stable_id = ?", (batch_id,)
+            ).fetchone()
+            return self._row_to_batch(refreshed)
         when = created_at or datetime.now(tz=UTC).isoformat()
         self._conn.execute(
             """
             INSERT INTO batches (
-              stable_id, site_id, environment_id, name, nfc_uid, status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              stable_id, site_id, environment_id, name, nfc_uid, status, created_at,
+              recipe_scale, lifecycle_phase, recipe_key
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (batch_id, site_id, environment_id, name, nfc_uid, BATCH_STATUS_ACTIVE, when),
+            (
+                batch_id,
+                site_id,
+                environment_id,
+                name,
+                nfc_uid,
+                BATCH_STATUS_ACTIVE,
+                when,
+                float(recipe_scale),
+                lifecycle_phase,
+                recipe_key,
+            ),
         )
         self._conn.commit()
         return BatchRecord(
@@ -143,6 +190,9 @@ class BatchRepository:
             nfc_uid=nfc_uid,
             status=BATCH_STATUS_ACTIVE,
             created_at=when,
+            recipe_scale=float(recipe_scale),
+            lifecycle_phase=lifecycle_phase,
+            recipe_key=recipe_key,
         )
 
     async def async_list_batches(self) -> list[BatchRecord]:
@@ -175,10 +225,36 @@ class BatchRepository:
         self._conn.execute(
             """
             UPDATE batches
-            SET status = ?, completed_at = ?
+            SET status = ?, completed_at = ?, lifecycle_phase = ?
             WHERE stable_id = ?
             """,
-            (BATCH_STATUS_COMPLETE, completed_at, batch_id),
+            (BATCH_STATUS_COMPLETE, completed_at, "complete", batch_id),
+        )
+        self._conn.commit()
+
+    async def async_set_lifecycle_phase(self, batch_id: str, phase: str) -> None:
+        await self._hass.async_add_executor_job(
+            self._set_lifecycle_phase_sync, batch_id, phase
+        )
+
+    def _set_lifecycle_phase_sync(self, batch_id: str, phase: str) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE batches SET lifecycle_phase = ? WHERE stable_id = ?",
+            (phase, batch_id),
+        )
+        self._conn.commit()
+
+    async def async_set_recipe_scale(self, batch_id: str, recipe_scale: float) -> None:
+        await self._hass.async_add_executor_job(
+            self._set_recipe_scale_sync, batch_id, recipe_scale
+        )
+
+    def _set_recipe_scale_sync(self, batch_id: str, recipe_scale: float) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE batches SET recipe_scale = ? WHERE stable_id = ?",
+            (float(recipe_scale), batch_id),
         )
         self._conn.commit()
 
@@ -340,6 +416,7 @@ class BatchRepository:
 
     @staticmethod
     def _row_to_batch(row: Any) -> BatchRecord:
+        keys = row.keys() if hasattr(row, "keys") else []
         return BatchRecord(
             id=row["stable_id"],
             site_id=row["site_id"],
@@ -353,6 +430,19 @@ class BatchRepository:
             mixing_finished_at=row["mixing_finished_at"],
             container_count=row["container_count"],
             notes=row["notes"],
+            recipe_scale=float(row["recipe_scale"])
+            if "recipe_scale" in keys and row["recipe_scale"] is not None
+            else 1.0,
+            lifecycle_phase=(
+                row["lifecycle_phase"]
+                if "lifecycle_phase" in keys and row["lifecycle_phase"]
+                else PHASE_PLANNED
+            ),
+            recipe_key=(
+                row["recipe_key"]
+                if "recipe_key" in keys and row["recipe_key"]
+                else DEFAULT_RECIPE_KEY
+            ),
         )
 
     @staticmethod
@@ -360,12 +450,13 @@ class BatchRepository:
         if not batches:
             return "_No batches yet._"
         lines = [
-            "| Status | Name | ID | Mix start | Mix finish | Containers |",
-            "| --- | --- | --- | --- | --- | ---: |",
+            "| Status | Phase | Scale | Name | ID | Mix start | Mix finish | Containers |",
+            "| --- | --- | ---: | --- | --- | --- | --- | ---: |",
         ]
         for batch in batches:
             lines.append(
-                f"| {batch.status} | {batch.name} | `{batch.id}` | "
+                f"| {batch.status} | {batch.lifecycle_phase} | "
+                f"×{batch.recipe_scale:g} | {batch.name} | `{batch.id}` | "
                 f"{batch.mixing_started_at or '—'} | "
                 f"{batch.mixing_finished_at or '—'} | "
                 f"{batch.container_count if batch.container_count is not None else '—'} |"

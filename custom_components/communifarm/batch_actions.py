@@ -19,6 +19,7 @@ from .const import (
 from .dashboard.provisioner import async_provision_dashboard
 from .domain.batch_milestones import (
     BATCH_TAB_MILESTONES,
+    DEFAULT_RECIPE_KEY,
     HEAT_METHODS,
     MILESTONE_BATCH_COMPLETED,
     MILESTONE_BATCH_CREATED,
@@ -26,9 +27,11 @@ from .domain.batch_milestones import (
     MILESTONE_CONTAINERS_SEPARATED,
     MILESTONE_DRY_MIXING_STARTED,
     MILESTONE_HEAT_TREATED,
+    MILESTONE_TO_PHASE,
     WEIGH_MILESTONES,
 )
 from .domain.models import CommunifarmState, ProductionBatch, new_id
+from .domain.recipe import clamp_recipe_scale
 from .domain.validation import validate_readable_name
 from .storage.batch_repository import BatchRepository
 from .storage.repository import CommunifarmRepository
@@ -36,6 +39,20 @@ from .storage.repository import CommunifarmRepository
 _LOGGER = logging.getLogger(__name__)
 
 ALLOWED_MANUAL = WEIGH_MILESTONES | BATCH_TAB_MILESTONES
+
+
+async def _ensure_active_batch_row(
+    batch_repo: BatchRepository, state: CommunifarmState
+) -> None:
+    await batch_repo.async_ensure_batch(
+        batch_id=state.batch.id,
+        site_id=state.site.id,
+        environment_id=state.environment.id,
+        name=state.batch.name,
+        nfc_uid=state.batch.nfc_uid,
+        recipe_scale=clamp_recipe_scale(state.recipe_scale),
+        recipe_key=DEFAULT_RECIPE_KEY,
+    )
 
 
 async def async_record_milestone(
@@ -67,13 +84,7 @@ async def async_record_milestone(
         await batch_repo.async_set_containers(state.batch.id, count, notes)
 
     when = datetime.now(tz=UTC).isoformat()
-    await batch_repo.async_ensure_batch(
-        batch_id=state.batch.id,
-        site_id=state.site.id,
-        environment_id=state.environment.id,
-        name=state.batch.name,
-        nfc_uid=state.batch.nfc_uid,
-    )
+    await _ensure_active_batch_row(batch_repo, state)
     await batch_repo.async_insert_milestone(
         batch_id=state.batch.id,
         event_type=event_type,
@@ -86,6 +97,10 @@ async def async_record_milestone(
     if event_type == MILESTONE_COMPLETELY_MIXED:
         await batch_repo.async_mark_mixing_finished(state.batch.id, when)
 
+    phase = MILESTONE_TO_PHASE.get(event_type)
+    if phase:
+        await batch_repo.async_set_lifecycle_phase(state.batch.id, phase)
+
     _LOGGER.info("Batch %s milestone %s detail=%s", state.batch.id, event_type, detail)
     async_dispatcher_send(hass, SIGNAL_BATCH_UPDATED, entry_id)
     async_dispatcher_send(hass, SIGNAL_WEIGH_SESSION_UPDATED, entry_id)
@@ -96,13 +111,7 @@ async def async_ensure_dry_mixing_started(hass: HomeAssistant, entry_id: str) ->
     bucket = hass.data[DOMAIN][entry_id]
     state: CommunifarmState = bucket["state"]
     batch_repo: BatchRepository = bucket["batch_repository"]
-    await batch_repo.async_ensure_batch(
-        batch_id=state.batch.id,
-        site_id=state.site.id,
-        environment_id=state.environment.id,
-        name=state.batch.name,
-        nfc_uid=state.batch.nfc_uid,
-    )
+    await _ensure_active_batch_row(batch_repo, state)
     if await batch_repo.async_has_milestone(state.batch.id, MILESTONE_DRY_MIXING_STARTED):
         return
     await async_record_milestone(
@@ -129,13 +138,7 @@ async def async_complete_and_new_batch(
         raise HomeAssistantError("Communifarm config entry missing")
 
     when = datetime.now(tz=UTC).isoformat()
-    await batch_repo.async_ensure_batch(
-        batch_id=state.batch.id,
-        site_id=state.site.id,
-        environment_id=state.environment.id,
-        name=state.batch.name,
-        nfc_uid=state.batch.nfc_uid,
-    )
+    await _ensure_active_batch_row(batch_repo, state)
     await batch_repo.async_insert_milestone(
         batch_id=state.batch.id,
         event_type=MILESTONE_BATCH_COMPLETED,
@@ -163,11 +166,16 @@ async def async_complete_and_new_batch(
         name=new_batch.name,
         nfc_uid=new_batch.nfc_uid,
         created_at=when,
+        recipe_scale=clamp_recipe_scale(state.recipe_scale),
+        recipe_key=DEFAULT_RECIPE_KEY,
     )
     await batch_repo.async_insert_milestone(
         batch_id=new_batch.id,
         event_type=MILESTONE_BATCH_CREATED,
         recorded_at=when,
+    )
+    await batch_repo.async_set_lifecycle_phase(
+        new_batch.id, MILESTONE_TO_PHASE[MILESTONE_BATCH_CREATED]
     )
 
     bucket["weigh_session"] = new_weigh_session_tracker()

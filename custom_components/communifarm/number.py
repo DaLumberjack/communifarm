@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, SIGNAL_WEIGH_SESSION_UPDATED
+from .const import DOMAIN, SIGNAL_BATCH_UPDATED, SIGNAL_WEIGH_SESSION_UPDATED
 from .domain.models import CommunifarmState
 from .domain.recipe import clamp_recipe_scale
 from .storage.repository import CommunifarmRepository
@@ -151,9 +151,17 @@ class CommunifarmRecipeScale(_ProfileNumber):
         runtime.recipe_scale = clamp_recipe_scale(value)
         runtime.validate()
         await self._async_persist()
+        batch_repo = self.hass.data[DOMAIN][self._entry.entry_id].get("batch_repository")
+        if batch_repo is not None:
+            await batch_repo.async_set_recipe_scale(
+                runtime.batch.id, runtime.recipe_scale
+            )
         self.async_write_ha_state()
         async_dispatcher_send(
             self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._entry.entry_id
+        )
+        async_dispatcher_send(
+            self.hass, SIGNAL_BATCH_UPDATED, self._entry.entry_id
         )
 
 

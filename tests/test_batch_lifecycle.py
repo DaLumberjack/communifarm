@@ -57,6 +57,8 @@ async def test_first_weight_auto_starts_dry_mixing(
     record = await batch_repo.async_get_batch(state.batch.id)
     assert record is not None
     assert record.mixing_started_at is not None
+    assert record.lifecycle_phase == "dry_mixing"
+    assert record.recipe_scale == 1.0
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -75,6 +75,16 @@ MIGRATIONS: dict[int, str] = {
       ON batch_milestones (batch_id, recorded_at);
     CREATE INDEX IF NOT EXISTS idx_batch_milestones_type
       ON batch_milestones (event_type, recorded_at);
+    """,
+    4: """
+    ALTER TABLE batches ADD COLUMN recipe_scale REAL DEFAULT 1.0;
+    ALTER TABLE batches ADD COLUMN lifecycle_phase TEXT DEFAULT 'planned';
+    ALTER TABLE batches ADD COLUMN recipe_key TEXT DEFAULT 'wood_lover';
+
+    CREATE INDEX IF NOT EXISTS idx_batches_lifecycle_phase
+      ON batches (lifecycle_phase, created_at);
+    CREATE INDEX IF NOT EXISTS idx_weight_events_batch_ingredient
+      ON weight_events (batch_id, ingredient_key, recorded_at);
     """,
 }
 

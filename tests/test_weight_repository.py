@@ -14,6 +14,7 @@ from custom_components.communifarm.domain.weight import (
     ingredient_key_from_label,
 )
 from custom_components.communifarm.storage import sqlite_db
+from custom_components.communifarm.storage.batch_repository import BatchRepository
 from custom_components.communifarm.storage.weight_repository import WeightEventRepository
 
 
@@ -94,6 +95,32 @@ async def test_record_weight_service_persists(
     assert rows[0].nfc_uid == "nfc-gypsum"
     assert rows[0].recipe_scale == 1.0
     assert rows[0].target_amount == 200.0  # wood-lover gypsum @ 1×
+
+    batch_repo: BatchRepository = hass.data[DOMAIN][mock_config_entry.entry_id][
+        "batch_repository"
+    ]
+    master = await batch_repo.async_get_batch(state.batch.id)
+    assert master is not None
+    assert master.recipe_scale == 1.0
+    assert master.lifecycle_phase in {"dry_mixing", "planned"}
+
+    # Mixing table columns exist for scale + target
+    path = batch_repo._path
+    import sqlite3
+
+    conn = sqlite3.connect(path)
+    cols = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(weight_events)").fetchall()
+    }
+    assert "recipe_scale" in cols
+    assert "target_amount" in cols
+    batch_cols = {
+        row[1] for row in conn.execute("PRAGMA table_info(batches)").fetchall()
+    }
+    assert "recipe_scale" in batch_cols
+    assert "lifecycle_phase" in batch_cols
+    conn.close()
 
     session = hass.states.get("sensor.communifarm_weigh_session")
     assert session is not None

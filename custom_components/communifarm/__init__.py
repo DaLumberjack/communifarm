@@ -35,6 +35,7 @@ from .const import (
 from .dashboard.provisioner import async_provision_dashboard
 from .domain.batch_milestones import (
     BATCH_TAB_MILESTONES,
+    DEFAULT_RECIPE_KEY,
     HEAT_METHODS,
     WEIGH_MILESTONES,
 )
@@ -125,6 +126,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         environment_id=state.environment.id,
         name=state.batch.name,
         nfc_uid=state.batch.nfc_uid,
+        recipe_scale=clamp_recipe_scale(state.recipe_scale),
+        recipe_key=DEFAULT_RECIPE_KEY,
     )
 
     hass.data[DOMAIN][entry.entry_id] = {
@@ -248,6 +251,7 @@ async def _async_persist_weight_event(
         return
     state: CommunifarmState = bucket["state"]
     weight_repo: WeightEventRepository = bucket["weight_repository"]
+    batch_repo: BatchRepository = bucket["batch_repository"]
     session: dict = bucket["weigh_session"]
 
     mass_state = hass.states.get(ENTITY_SCALE_MASS_G)
@@ -349,6 +353,15 @@ async def _async_persist_weight_event(
         unit=recipe_unit,
     )
     await weight_repo.async_insert(event)
+    await batch_repo.async_ensure_batch(
+        batch_id=state.batch.id,
+        site_id=state.site.id,
+        environment_id=state.environment.id,
+        name=state.batch.name,
+        nfc_uid=state.batch.nfc_uid,
+        recipe_scale=scale,
+        recipe_key=DEFAULT_RECIPE_KEY,
+    )
 
     session["last_mass_g"] = assessment.mass_g
     session["last_ingredient_key"] = key
