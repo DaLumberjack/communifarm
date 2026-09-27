@@ -6,6 +6,8 @@ from typing import Any
 
 from ..const import (
     DASHBOARD_TITLE,
+    DASHBOARD_VIEW_OVERVIEW,
+    DASHBOARD_VIEW_WEIGH,
     ENTITY_ALLOWLISTED_SWITCH,
     ENTITY_BATCH_STAGE,
     ENTITY_HUMIDITY_TARGET,
@@ -16,16 +18,36 @@ from ..const import (
     ROLE_TEMPERATURE,
 )
 from ..domain.models import CommunifarmState
+from ..fixtures.esp32dev_scale import (
+    ENTITY_ESP32DEV_CALIBRATED_G,
+    ENTITY_ESP32DEV_CALIBRATED_SENSOR,
+    ENTITY_ESP32DEV_LAST_RECORDED,
+    ENTITY_ESP32DEV_LOCATION_TARE,
+    ENTITY_ESP32DEV_RECORD_WEIGHT,
+    ENTITY_ESP32DEV_SELECTED_INGREDIENT,
+    ENTITY_ESP32DEV_TARE,
+)
 
 
 class DashboardBuilder:
-    """Build a mobile-first Lovelace view from Communifarm state."""
+    """Build a mobile-first Lovelace dashboard from Communifarm state."""
 
     def build(self, state: CommunifarmState, resolved: dict[str, str | None]) -> dict[str, Any]:
         """Return a Lovelace dashboard config dict.
 
         resolved maps role -> current entity_id (may be None).
         """
+        return {
+            "title": DASHBOARD_TITLE,
+            "views": [
+                self._overview_view(state, resolved),
+                self._weigh_view(state),
+            ],
+        }
+
+    def _overview_view(
+        self, state: CommunifarmState, resolved: dict[str, str | None]
+    ) -> dict[str, Any]:
         cards: list[dict[str, Any]] = [
             {
                 "type": "markdown",
@@ -46,7 +68,8 @@ class DashboardBuilder:
                     f"{{{{ states('{ENTITY_TEMPERATURE_TARGET}') }}}} °C |\n"
                     f"| Humidity | "
                     f"{{{{ states('{ENTITY_HUMIDITY_TARGET}') }}}} % |\n\n"
-                    "Values update live when you change the Targets controls."
+                    "Values update live when you change the Targets controls.\n\n"
+                    "Weighing? Open the **Weigh** tab."
                 ),
             },
         ]
@@ -107,12 +130,84 @@ class DashboardBuilder:
         )
 
         return {
-            "title": DASHBOARD_TITLE,
-            "views": [
+            "title": state.environment.name,
+            "path": DASHBOARD_VIEW_OVERVIEW,
+            "icon": "mdi:home",
+            "cards": cards,
+        }
+
+    def _weigh_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Activity tab for scale tare / NFC ingredient / record during weighing."""
+        return {
+            "title": "Weigh",
+            "path": DASHBOARD_VIEW_WEIGH,
+            "icon": "mdi:scale-balance",
+            "cards": [
                 {
-                    "title": state.environment.name,
-                    "path": "overview",
-                    "cards": cards,
-                }
+                    "type": "markdown",
+                    "content": (
+                        f"## Weigh station\n"
+                        f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
+                        "1. Scan NFC (or pick ingredient)\n"
+                        "2. Tare\n"
+                        "3. Add material\n"
+                        "4. Record weight\n"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Live reading",
+                    "content": (
+                        "| | |\n"
+                        "| --- | ---: |\n"
+                        f"| Current (g) | "
+                        f"{{{{ states('{ENTITY_ESP32DEV_CALIBRATED_G}') }}}} |\n"
+                        f"| Gross | "
+                        f"{{{{ states('{ENTITY_ESP32DEV_CALIBRATED_SENSOR}') }}}} |\n"
+                        f"| Selected | "
+                        f"{{{{ states('{ENTITY_ESP32DEV_SELECTED_INGREDIENT}') }}}} |\n"
+                        "| Last recorded | "
+                        "{{ states('input_text.esp32dev_last_recorded') }} |\n"
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Ingredient (NFC)",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_ESP32DEV_SELECTED_INGREDIENT,
+                            "name": "Selected ingredient",
+                        }
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Scale",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_ESP32DEV_CALIBRATED_G,
+                            "name": "Current mass (g)",
+                        },
+                        {
+                            "entity": ENTITY_ESP32DEV_CALIBRATED_SENSOR,
+                            "name": "Calibrated sensor",
+                        },
+                        {"entity": ENTITY_ESP32DEV_TARE, "name": "Tare"},
+                        {
+                            "entity": ENTITY_ESP32DEV_LOCATION_TARE,
+                            "name": "Location tare",
+                        },
+                        {
+                            "entity": ENTITY_ESP32DEV_RECORD_WEIGHT,
+                            "name": "Record weight",
+                        },
+                        {
+                            "entity": ENTITY_ESP32DEV_LAST_RECORDED,
+                            "name": "Last recorded (g)",
+                        },
+                    ],
+                },
             ],
         }

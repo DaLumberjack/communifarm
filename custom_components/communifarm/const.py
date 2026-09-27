@@ -28,6 +28,8 @@ STORAGE_VERSION = 1
 DASHBOARD_URL_PATH = "communifarm"
 DASHBOARD_TITLE = "Communifarm"
 DASHBOARD_ICON = "mdi:sprout"
+DASHBOARD_VIEW_OVERVIEW = "overview"
+DASHBOARD_VIEW_WEIGH = "weigh"
 
 ENTITY_TEMPERATURE_TARGET = "number.communifarm_temperature_target"
 ENTITY_HUMIDITY_TARGET = "number.communifarm_humidity_target"

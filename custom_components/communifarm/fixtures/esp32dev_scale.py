@@ -2,26 +2,45 @@
 
 from __future__ import annotations
 
+ENTITY_ESP32DEV_CALIBRATED_G = "sensor.esp32dev_calibrated_g"
+ENTITY_ESP32DEV_CALIBRATED_SENSOR = "sensor.esp32dev_calibrated_sensor"
+ENTITY_ESP32DEV_CALIBRATION_VALUE = "sensor.esp32dev_calibration_value"
+ENTITY_ESP32DEV_G = "sensor.esp32dev_g"
+ENTITY_ESP32DEV_KG = "sensor.esp32dev_kg"
+ENTITY_ESP32DEV_RAW = "sensor.esp32dev_raw"
+ENTITY_ESP32DEV_RAW_SCALE_VALUE = "sensor.esp32dev_raw_scale_value"
+ENTITY_ESP32DEV_TARED_MASS = "sensor.esp32dev_tared_mass_on_scale"
+ENTITY_ESP32DEV_TEMPERATURE = "sensor.esp32dev_temperature"
+ENTITY_ESP32DEV_HUMIDITY = "sensor.esp32dev_humidity"
+ENTITY_ESP32DEV_PRESSURE = "sensor.esp32dev_pressure"
+ENTITY_ESP32DEV_LAST_RECORDED = "sensor.esp32dev_last_recorded"
+ENTITY_ESP32DEV_TARE = "button.esp32dev_tare"
+ENTITY_ESP32DEV_LOCATION_TARE = "button.esp32dev_location_tare"
+ENTITY_ESP32DEV_RECORD_WEIGHT = "button.esp32dev_record_weight"
+ENTITY_ESP32DEV_SCALE_BASE_WEIGHT = "number.esp32dev_scale_base_weight"
+ENTITY_ESP32DEV_SCALE_WEIGHTLESS_CAL = "number.esp32dev_scale_weightless_calibration"
+ENTITY_ESP32DEV_SELECTED_INGREDIENT = "input_select.esp32dev_selected_ingredient"
+
 # Public surface — prefer these in Communifarm bindings / process code.
 ESP32DEV_PUBLIC_ENTITIES: tuple[str, ...] = (
-    "sensor.esp32dev_calibrated_g",
-    "sensor.esp32dev_calibrated_sensor",
-    "sensor.esp32dev_calibration_value",
-    "sensor.esp32dev_g",
-    "sensor.esp32dev_kg",
-    "sensor.esp32dev_raw",
-    "sensor.esp32dev_raw_scale_value",
-    "sensor.esp32dev_tared_mass_on_scale",
-    "sensor.esp32dev_temperature",
-    "sensor.esp32dev_humidity",
-    "sensor.esp32dev_pressure",
-    "sensor.esp32dev_last_recorded",
-    "button.esp32dev_tare",
-    "button.esp32dev_location_tare",
-    "button.esp32dev_record_weight",
-    "number.esp32dev_scale_base_weight",
-    "number.esp32dev_scale_weightless_calibration",
-    "input_select.esp32dev_selected_ingredient",
+    ENTITY_ESP32DEV_CALIBRATED_G,
+    ENTITY_ESP32DEV_CALIBRATED_SENSOR,
+    ENTITY_ESP32DEV_CALIBRATION_VALUE,
+    ENTITY_ESP32DEV_G,
+    ENTITY_ESP32DEV_KG,
+    ENTITY_ESP32DEV_RAW,
+    ENTITY_ESP32DEV_RAW_SCALE_VALUE,
+    ENTITY_ESP32DEV_TARED_MASS,
+    ENTITY_ESP32DEV_TEMPERATURE,
+    ENTITY_ESP32DEV_HUMIDITY,
+    ENTITY_ESP32DEV_PRESSURE,
+    ENTITY_ESP32DEV_LAST_RECORDED,
+    ENTITY_ESP32DEV_TARE,
+    ENTITY_ESP32DEV_LOCATION_TARE,
+    ENTITY_ESP32DEV_RECORD_WEIGHT,
+    ENTITY_ESP32DEV_SCALE_BASE_WEIGHT,
+    ENTITY_ESP32DEV_SCALE_WEIGHTLESS_CAL,
+    ENTITY_ESP32DEV_SELECTED_INGREDIENT,
 )
 
 # Mock injectors — T1 only; not on live ESPHome.

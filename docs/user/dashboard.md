@@ -2,6 +2,11 @@
 
 After Communifarm setup finishes, open **Communifarm** in the sidebar (`/communifarm/overview`).
 
+| Tab | Path | Purpose |
+| --- | --- | --- |
+| Overview | `/communifarm/overview` | Environment, targets, controls, batch |
+| Weigh | `/communifarm/weigh` | Scale mass, tare, NFC ingredient select, record weight |
+
 If the sidebar entry is missing after an upgrade, reload the Communifarm integration (or restart Home Assistant) so provisioning can register the Lovelace storage dashboard. A prior bug left the config only in memory — fixed by creating the real storage dashboard.
 
 ## What you see

@@ -75,6 +75,12 @@ button.press → button.esp32dev_record_weight
 3. Bind live entity registry IDs on T3; keep mock package as the T1 default.
 4. Redact/move intake `scale.yaml` secrets (API/OTA keys) into OpenBao; never commit live keys.
 
-## Restart note
+## Dashboard Weigh tab
 
-After pulling this package, restart local HA (or Developer Tools → YAML → reload all) so `packages/mock_esp32dev_scale.yaml` loads.
+Communifarm Lovelace includes a **Weigh** view (`/communifarm/weigh`) with:
+
+- Live current mass (`sensor.esp32dev_calibrated_g`)
+- NFC / ingredient dropdown (`input_select.esp32dev_selected_ingredient`)
+- Tare / location tare / record weight buttons
+
+Reload the Communifarm integration after upgrade so the dashboard model re-provisions.
