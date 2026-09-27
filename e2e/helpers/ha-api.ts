@@ -120,6 +120,36 @@ export async function getStateViaHass(
   return state;
 }
 
+/** Read entity attributes via the logged-in frontend session. */
+export async function getAttributesViaHass(
+  page: Page,
+  entityId: string
+): Promise<Record<string, unknown>> {
+  await page.waitForFunction(
+    (id) => {
+      const el = document.querySelector("home-assistant") as
+        | (HTMLElement & {
+            hass?: { states?: Record<string, { attributes?: Record<string, unknown> }> };
+          })
+        | null;
+      return Boolean(el?.hass?.states?.[id]);
+    },
+    entityId,
+    { timeout: 30000 }
+  );
+
+  const attrs = await page.evaluate((id) => {
+    const el = document.querySelector("home-assistant") as HTMLElement & {
+      hass: {
+        states: Record<string, { attributes?: Record<string, unknown> }>;
+      };
+    };
+    return el.hass.states[id]?.attributes ?? {};
+  }, entityId);
+
+  return attrs;
+}
+
 export async function getNumberValueViaHass(
   page: Page,
   entityId: string

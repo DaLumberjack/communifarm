@@ -100,5 +100,9 @@ Use the same inject helpers to exercise reject/warn paths in T1:
 | Tare skipped | record without pressing tare first |
 | Env degraded | set `sensor.mock_temperature` outside -40…80 °C |
 
+### Full recipe weigh process (E2E)
+
+`yarn test:e2e:weigh` runs `e2e/flows/weigh-process.spec.ts`: for each Wood Lover line — NFC scan → tare mix bin → set mass → record — then asserts `sensor.communifarm_weigh_session` is `9/9 lines recorded` with every line non-pending.
+
 Reload Communifarm after upgrade so the dashboard model re-provisions.
 

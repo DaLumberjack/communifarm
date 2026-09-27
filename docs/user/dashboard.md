@@ -25,6 +25,9 @@ Session table lists each recipe line’s **scaled target**, last recorded value,
 | Warnings (capacity, tare, NFC, stuck) | `warnings` / `warning` attrs + progress text |
 | Env sensor out of range | `sensor.communifarm_environment_status` = `degraded` |
 
+E2E: `yarn test:e2e:weigh` walks the full Wood Lover recipe (NFC → tare → weigh → record ×9) and asserts the session table.
+
+
 If the sidebar entry is missing after an upgrade, reload the Communifarm integration (or restart Home Assistant) so provisioning can register the Lovelace storage dashboard. A prior bug left the config only in memory — fixed by creating the real storage dashboard.
 
 ## What you see
