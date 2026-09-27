@@ -28,7 +28,8 @@ blob-report/
 !.env.example
 
 # Local Communifarm SQLite (created at runtime under HA config)
-devcontainer/ha_config/communifarm/*.pem
+devcontainer/ha_config/communifarm/
+*.pem
 *.key
 id_rsa*
 id_ed25519*
