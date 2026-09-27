@@ -1,0 +1,76 @@
+# Loads default config
+
+default_config:
+
+logger:
+  default: info
+  logs:
+    custom_components.communifarm: debug
+
+# Local mock ESP / template devices for T1
+template:
+  - sensor:
+      - name: "Mock Temperature"
+        unique_id: communifarm_mock_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: "{{ states('input_number.mock_temperature') }}"
+      - name: "Mock Humidity"
+        unique_id: communifarm_mock_humidity
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+        state: "{{ states('input_number.mock_humidity') }}"
+  - fan:
+      - name: "Mock Circulation Fan"
+        unique_id: communifarm_mock_fan
+        state: "{{ is_state('input_boolean.mock_fan', 'on') }}"
+        turn_on:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.mock_fan
+        turn_off:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.mock_fan
+
+input_number:
+  mock_temperature:
+    name: Mock Temperature Value
+    min: -20
+    max: 50
+    step: 0.5
+    initial: 22.0
+    unit_of_measurement: "°C"
+  mock_humidity:
+    name: Mock Humidity Value
+    min: 0
+    max: 100
+    step: 1
+    initial: 60
+    unit_of_measurement: "%"
+
+input_boolean:
+  mock_fan:
+    name: Mock Fan Power
+    initial: false
+  mock_exhaust:
+    name: Mock Exhaust Switch Source
+    initial: false
+
+switch:
+  - platform: template
+    switches:
+      mock_exhaust:
+        unique_id: communifarm_mock_exhaust
+        friendly_name: "Mock Exhaust"
+        value_template: "{{ is_state('input_boolean.mock_exhaust', 'on') }}"
+        turn_on:
+          service: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.mock_exhaust
+        turn_off:
+          service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.mock_exhaust

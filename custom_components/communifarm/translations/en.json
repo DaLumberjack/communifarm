@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Communifarm site",
+        "description": "Create a Site and Environment.",
+        "data": {
+          "site_name": "Site name",
+          "environment_name": "Environment name"
+        }
+      },
+      "bindings": {
+        "title": "Bind devices",
+        "description": "Accept or change suggested entity mappings.",
+        "data": {
+          "temperature_entity": "Temperature sensor",
+          "humidity_entity": "Humidity sensor",
+          "fan_entity": "Fan",
+          "switch_entity": "Allowlisted switch"
+        }
+      },
+      "profile": {
+        "title": "Profile and batch",
+        "description": "Set basic targets and create a starter batch.",
+        "data": {
+          "temperature_target": "Temperature target (°C)",
+          "humidity_target": "Humidity target (%)",
+          "batch_name": "Starter batch name"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one Communifarm configuration is supported in this MVP."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Communifarm options",
+        "data": {
+          "temperature_target": "Temperature target (°C)",
+          "humidity_target": "Humidity target (%)",
+          "temperature_entity": "Temperature sensor",
+          "humidity_entity": "Humidity sensor",
+          "fan_entity": "Fan",
+          "switch_entity": "Allowlisted switch"
+        }
+      }
+    }
+  }
+}

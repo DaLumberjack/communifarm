@@ -1,0 +1,1 @@
+"""Communifarm domain package."""
