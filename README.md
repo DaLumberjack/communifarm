@@ -20,7 +20,18 @@ On this machine the Python launcher is `py` (not `python`). Prefer `py -m pip` /
 ```bash
 cd repos/communifarm
 py -m pip install -r requirements_test.txt
+# Same gate as GitHub Actions "Ruff" step (auto-fix then verify):
+./scripts/lint.sh
+# or: py -m ruff check --fix custom_components tests && py -m ruff check custom_components tests
 py -m pytest --cov=custom_components/communifarm
+```
+
+Optional every-commit automation:
+
+```bash
+py -m pip install pre-commit
+pre-commit install          # once per clone
+pre-commit run --all-files  # manual full run
 ```
 
 Start the local HA stack (Docker):

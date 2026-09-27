@@ -9,12 +9,12 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, EVENT_CALL_SERVICE, Platform
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.dispatcher import async_dispatcher_send
-
+from . import batch_actions
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
     DOMAIN,
@@ -42,9 +42,9 @@ from .domain.batch_milestones import (
 from .domain.models import CommunifarmState
 from .domain.recipe import WOOD_LOVER_RECIPE, clamp_recipe_scale
 from .domain.validation import (
-    ValidationError,
     WARNING_MISSING_NFC,
     WARNING_UNKNOWN_INGREDIENT,
+    ValidationError,
     assess_mass_g,
     validate_ingredient_label,
     validate_nfc_uid,
@@ -54,7 +54,6 @@ from .domain.weight import WeightEvent, ingredient_key_from_label
 from .storage.batch_repository import BatchRepository
 from .storage.repository import CommunifarmRepository
 from .storage.weight_repository import WeightEventRepository
-from . import batch_actions
 
 _LOGGER = logging.getLogger(__name__)
 
