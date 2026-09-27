@@ -46,12 +46,14 @@ Testing stages (authoritative): workspace `.agents/skills/testing/SKILL.md`.
 
 ## Secrets
 
-HA UI credentials for shared test identities come from OpenBao:
+HA UI credentials for shared test identities come from OpenBao. **Start and unseal OpenBao first** — see [docs/user/openbao.md](docs/user/openbao.md).
+
+Dev-container fields in `kv/ha-test` (namespace `homelab`): `username_dev_container`, `password_dev_container`.
 
 ```bash
-export VAULT_ADDR=http://127.0.0.1:8200
-export VAULT_NAMESPACE=homelab
-export VAULT_TOKEN=...   # short-lived session token
+export BAO_ADDR=http://127.0.0.1:8200
+export BAO_NAMESPACE=homelab
+# after: bao server, unseal×3, bao login
 eval "$(./scripts/load_openbao_ha_secrets.sh)"
 ```
 
