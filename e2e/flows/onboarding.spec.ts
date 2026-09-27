@@ -1,5 +1,4 @@
-import { test, expect } from "@playwright/test";
-import { loginHa } from "../fixtures/ha-auth";
+import { test, expect } from "../fixtures/ha-test";
 import { CommunifarmPage } from "../fixtures/communifarm-page";
 import { getStage } from "../fixtures/environment";
 
@@ -7,15 +6,17 @@ test.describe("Communifarm onboarding", () => {
   test("standalone config flow produces dashboard path", async ({ page }) => {
     const stage = getStage();
     test.skip(stage === "T2", "Upgrade flow covered in upgrade.spec.ts");
+    test.skip(
+      !process.env.TEST_HA_USERNAME || !process.env.TEST_HA_PASSWORD,
+      "OpenBao secrets missing — see docs/user/openbao.md"
+    );
 
-    await loginHa(page);
+    // ha-test: homepage → login if required, then navigate
     const cf = new CommunifarmPage(page);
 
-    // If already configured, this may abort — still verify dashboard route exists or integrations page loads.
     await cf.openIntegrations();
     await expect(page.locator("body")).toContainText(/integration|Communifarm|Devices/i);
 
-    // Best-effort happy path when integration is addable.
     try {
       await cf.startCommunifarmFlow();
       await cf.completeOnboarding({
@@ -28,7 +29,6 @@ test.describe("Communifarm onboarding", () => {
     }
 
     await cf.openCommunifarmDashboard();
-    // Dashboard may 404 until first successful setup; integrations page is the soft assert fallback.
     const body = await page.locator("body").innerText();
     expect(body.length).toBeGreaterThan(0);
   });

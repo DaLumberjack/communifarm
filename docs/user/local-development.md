@@ -56,13 +56,26 @@ Intake backups: `docs/intake/Dev Container Backups/`. Details: workspace `docs/i
 
 See the workspace testing skill for T0–T3. Local UI work is always T1/T2 first.
 
+## Playwright session contract
+
+Configured-instance UI tests (`dashboard-targets`, `onboarding`, `mock-conditions`, `upgrade`):
+
+1. Open homepage `/`
+2. Log in if the auth form appears (usual)
+3. Navigate to the flow endpoint (e.g. `/communifarm/overview`, integrations)
+4. Execute assertions
+
+Implemented by `e2e/fixtures/ha-test.ts` (auto) + `startHaSession` in `e2e/fixtures/ha-session.ts`.
+
+Scratch bootstrap (`00-ha-scratch-to-communifarm`) starts at onboarding instead; backup catalog (`01-…`) has no UI session.
+
 ## OpenBao (dev-container HA login)
 
 T1 Playwright needs HA credentials from OpenBao (`kv/ha-test` → `username_dev_container` / `password_dev_container`).
 
-**OpenBao must be running, unsealed, and you must have run `bao login` once.** Playwright then auto-loads secrets — no manual export. Details: [openbao.md](openbao.md).
+**OpenBao must be running, unsealed, and you must have run `bao login` once.** Playwright auto-loads secrets — no manual export. Details: [openbao.md](openbao.md).
 
 ```bash
-yarn playwright test e2e/flows/dashboard-targets.spec.ts
+yarn test:e2e:dashboard
 ```
 

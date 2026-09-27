@@ -1,5 +1,4 @@
-import { test, expect } from "@playwright/test";
-import { loginHa } from "../fixtures/ha-auth";
+import { test, expect } from "../fixtures/ha-test";
 import { CommunifarmPage } from "../fixtures/communifarm-page";
 import { getStage } from "../fixtures/environment";
 import {
@@ -20,7 +19,7 @@ test.describe("Dashboard target controls (T1)", () => {
       "OpenBao secrets missing — start/unseal OpenBao, bao login, see docs/user/openbao.md"
     );
 
-    await loginHa(page);
+    // ha-test fixture already: homepage → login if required
     const cf = new CommunifarmPage(page);
     await cf.openCommunifarmDashboard();
     await expect(page.getByText(/current settings|targets/i).first()).toBeVisible({
