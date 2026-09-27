@@ -27,6 +27,12 @@ STORAGE_VERSION = 1
 
 DASHBOARD_URL_PATH = "communifarm"
 DASHBOARD_TITLE = "Communifarm"
+DASHBOARD_ICON = "mdi:sprout"
+
+ENTITY_TEMPERATURE_TARGET = "number.communifarm_temperature_target"
+ENTITY_HUMIDITY_TARGET = "number.communifarm_humidity_target"
+ENTITY_ALLOWLISTED_SWITCH = "switch.communifarm_allowlisted_switch"
+ENTITY_BATCH_STAGE = "sensor.communifarm_batch_stage"
 
 PLATFORMS = ["sensor", "number", "switch"]
 

@@ -36,6 +36,7 @@ test.describe("00 HA scratch onboarding to Communifarm", () => {
     await onboarding.completeIntegrationIfPresent();
     await onboarding.expectPastOnboarding();
 
+    // Now on homepage shell — navigate to Communifarm setup endpoints
     const cf = new CommunifarmPage(page);
     await cf.startCommunifarmFlow();
     await cf.completeOnboarding({

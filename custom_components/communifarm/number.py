@@ -31,7 +31,8 @@ async def async_setup_entry(
 
 class _ProfileNumber(NumberEntity):
     _attr_has_entity_name = True
-    _attr_mode = NumberMode.BOX
+    # Slider is easier to nudge from the managed dashboard than a settings dig.
+    _attr_mode = NumberMode.SLIDER
 
     def __init__(
         self,
@@ -59,6 +60,7 @@ class CommunifarmTemperatureTarget(_ProfileNumber):
 
     _attr_name = "Temperature target"
     _attr_unique_id = "communifarm_temperature_target"
+    _attr_icon = "mdi:thermometer"
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_native_min_value = -40.0
     _attr_native_max_value = 80.0
@@ -90,6 +92,7 @@ class CommunifarmHumidityTarget(_ProfileNumber):
 
     _attr_name = "Humidity target"
     _attr_unique_id = "communifarm_humidity_target"
+    _attr_icon = "mdi:water-percent"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_native_min_value = 0.0
     _attr_native_max_value = 100.0

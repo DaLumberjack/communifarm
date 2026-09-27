@@ -46,13 +46,12 @@ Testing stages (authoritative): workspace `.agents/skills/testing/SKILL.md`.
 
 ## Secrets
 
-HA UI credentials for shared test identities come from OpenBao:
+HA UI credentials come from OpenBao. **Start and unseal OpenBao, then `bao login` once** — see [docs/user/openbao.md](docs/user/openbao.md).
+
+Playwright loads `username_dev_container` / `password_dev_container` from `kv/ha-test` (namespace `homelab`) automatically via `playwright.config.ts`. No manual `eval` for tests.
 
 ```bash
-export VAULT_ADDR=http://127.0.0.1:8200
-export VAULT_NAMESPACE=homelab
-export VAULT_TOKEN=...   # short-lived session token
-eval "$(./scripts/load_openbao_ha_secrets.sh)"
+yarn playwright test e2e/flows/dashboard-targets.spec.ts
 ```
 
 Never commit tokens, passwords, or `known_hosts.test` private material.
@@ -65,7 +64,9 @@ Feature branch → merge to `main` → bump `manifest.json` version → local T2
 
 - Site + Environment config flow
 - Bind temperature / humidity / fan / switch
-- Profile targets (`number` entities)
+- Profile targets (`number` entities, adjustable on the dashboard)
 - Starter batch lifecycle (`planned → active → complete`)
-- One generated dashboard model
+- One generated dashboard with Current settings + Targets controls
 - Allowlisted switch proxy
+
+See [docs/user/dashboard.md](docs/user/dashboard.md).

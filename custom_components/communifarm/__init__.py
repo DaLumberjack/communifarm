@@ -89,12 +89,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             schema=TRANSITION_SCHEMA,
         )
 
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    # Do not add_update_listener here: profile number saves update entry.data and
+    # would reload the integration on every ±1°C/±1% nudge from the dashboard.
     return True
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload Communifarm when options or data change."""
+    """Reload Communifarm (call explicitly from options flow when added)."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 

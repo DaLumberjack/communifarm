@@ -1,12 +1,18 @@
 import { Page, expect } from "@playwright/test";
 import { DEFAULT_CF_FLOW } from "../helpers/har-flow-constants";
 
+/**
+ * Communifarm UI navigation. Call only after startHaSession / ha-test fixture
+ * (homepage + login). Methods navigate from the authenticated home shell.
+ */
 export class CommunifarmPage {
   constructor(private readonly page: Page) {}
 
   async openIntegrations(): Promise<void> {
-    await this.page.goto("/config/integrations");
-    await expect(this.page.getByText(/integrations|devices & services/i).first()).toBeVisible({
+    await this.page.goto("/config/integrations", { waitUntil: "domcontentloaded" });
+    await expect(
+      this.page.getByText(/integrations|devices & services/i).first()
+    ).toBeVisible({
       timeout: 30000,
     });
   }
@@ -38,14 +44,14 @@ export class CommunifarmPage {
     const site = opts?.site ?? DEFAULT_CF_FLOW.site;
     const environment = opts?.environment ?? DEFAULT_CF_FLOW.environment;
     const batch = opts?.batch ?? DEFAULT_CF_FLOW.batch;
-    const temperatureTarget = opts?.temperatureTarget ?? DEFAULT_CF_FLOW.temperatureTarget;
+    const temperatureTarget =
+      opts?.temperatureTarget ?? DEFAULT_CF_FLOW.temperatureTarget;
     const humidityTarget = opts?.humidityTarget ?? DEFAULT_CF_FLOW.humidityTarget;
 
     await this.fillIfPresent(/site name/i, site);
     await this.fillIfPresent(/environment name/i, environment);
     await this.clickSubmit();
 
-    // Bindings — accept suggestions or fill mock entity ids when inputs are free-text.
     await this.fillIfPresent(/temperature/i, DEFAULT_CF_FLOW.temperatureEntity);
     await this.fillIfPresent(/humidity/i, DEFAULT_CF_FLOW.humidityEntity);
     await this.fillIfPresent(/fan/i, DEFAULT_CF_FLOW.fanEntity);
@@ -57,8 +63,17 @@ export class CommunifarmPage {
     await this.clickSubmit();
   }
 
+  /** Navigate to the managed Communifarm dashboard (sidebar when present). */
   async openCommunifarmDashboard(): Promise<void> {
-    await this.page.goto("/communifarm/overview");
+    const sidebarLink = this.page.locator('a[href*="communifarm"]').first();
+    if (await sidebarLink.isVisible().catch(() => false)) {
+      await sidebarLink.click();
+    } else {
+      await this.page.goto("/communifarm/overview", {
+        waitUntil: "domcontentloaded",
+      });
+    }
+    await expect(this.page).toHaveURL(/communifarm/, { timeout: 30000 });
   }
 
   private async fillIfPresent(label: RegExp, value: string): Promise<void> {
@@ -69,6 +84,9 @@ export class CommunifarmPage {
   }
 
   private async clickSubmit(): Promise<void> {
-    await this.page.getByRole("button", { name: /submit|next|create|finish/i }).first().click();
+    await this.page
+      .getByRole("button", { name: /submit|next|create|finish/i })
+      .first()
+      .click();
   }
 }

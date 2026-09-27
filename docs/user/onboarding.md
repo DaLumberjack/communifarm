@@ -7,5 +7,6 @@
 5. Accept or change temperature, humidity, fan, and switch bindings.
 6. Set temperature/humidity targets and a starter batch name.
 7. Finish — Communifarm entities and a managed dashboard model are created.
+8. Open **Communifarm** in the sidebar to see Current settings and adjust Targets there (see [dashboard.md](dashboard.md)).
 
 No `configuration.yaml` edits are required for the normal path.

@@ -12,4 +12,4 @@ export HA_TEST_SSH_KEY=~/.ssh/id_ed25519   # or use ssh-agent
 ./scripts/deploy_test_vm.sh rollback
 ```
 
-HA UI credentials for Playwright come from OpenBao (`kv/local-services/ha-test`), not from SSH keys.
+HA UI credentials for Playwright come from OpenBao (`kv/ha-test`, namespace `homelab`) — see [openbao.md](openbao.md). Not from SSH keys. OpenBao must be running and unsealed.

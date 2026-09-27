@@ -1,3 +1,4 @@
+import { Page } from "@playwright/test";
 import { getCredentials, getHaUrl } from "../fixtures/environment";
 
 /** Minimal HA REST helpers for mock injection and assertions. */
@@ -28,10 +29,127 @@ export async function setMockTemperature(value: number): Promise<void> {
   }
 }
 
-export async function getState(entityId: string): Promise<unknown> {
+export async function getState(entityId: string): Promise<{ state: string }> {
   const res = await haApi(`/api/states/${entityId}`);
   if (!res.ok) {
     throw new Error(`Failed to get state ${entityId}: ${res.status}`);
   }
-  return res.json();
+  return res.json() as Promise<{ state: string }>;
+}
+
+export async function setNumberValue(entityId: string, value: number): Promise<void> {
+  const res = await haApi("/api/services/number/set_value", {
+    method: "POST",
+    body: JSON.stringify({ entity_id: entityId, value }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to set ${entityId} to ${value}: ${res.status}`);
+  }
+}
+
+/** Read a Communifarm number entity as a float (requires TEST_HA_TOKEN). */
+export async function getNumberValue(entityId: string): Promise<number> {
+  const body = await getState(entityId);
+  const value = Number.parseFloat(body.state);
+  if (Number.isNaN(value)) {
+    throw new Error(`Expected numeric state for ${entityId}, got ${body.state}`);
+  }
+  return value;
+}
+
+/**
+ * Call an HA service through the logged-in frontend `hass` object.
+ * Prefer this for T1 when OpenBao has no long-lived token yet.
+ */
+export async function callServiceViaHass(
+  page: Page,
+  domain: string,
+  service: string,
+  data: Record<string, unknown>
+): Promise<void> {
+  await page.waitForFunction(() => {
+    const el = document.querySelector("home-assistant") as
+      | (HTMLElement & { hass?: { callService?: unknown } })
+      | null;
+    return Boolean(el?.hass?.callService);
+  }, undefined, { timeout: 30000 });
+
+  await page.evaluate(
+    async ({ domain, service, data }) => {
+      const el = document.querySelector("home-assistant") as HTMLElement & {
+        hass: {
+          callService: (
+            d: string,
+            s: string,
+            payload: Record<string, unknown>
+          ) => Promise<unknown>;
+        };
+      };
+      await el.hass.callService(domain, service, data);
+    },
+    { domain, service, data }
+  );
+}
+
+/** Read entity state via the logged-in frontend session (no TEST_HA_TOKEN). */
+export async function getStateViaHass(
+  page: Page,
+  entityId: string
+): Promise<string> {
+  await page.waitForFunction(
+    (id) => {
+      const el = document.querySelector("home-assistant") as
+        | (HTMLElement & { hass?: { states?: Record<string, { state: string }> } })
+        | null;
+      return Boolean(el?.hass?.states?.[id]);
+    },
+    entityId,
+    { timeout: 30000 }
+  );
+
+  const state = await page.evaluate((id) => {
+    const el = document.querySelector("home-assistant") as HTMLElement & {
+      hass: { states: Record<string, { state: string }> };
+    };
+    return el.hass.states[id]?.state;
+  }, entityId);
+
+  if (state == null) {
+    throw new Error(`No state for ${entityId} via hass`);
+  }
+  return state;
+}
+
+export async function getNumberValueViaHass(
+  page: Page,
+  entityId: string
+): Promise<number> {
+  const raw = await getStateViaHass(page, entityId);
+  const value = Number.parseFloat(raw);
+  if (Number.isNaN(value)) {
+    throw new Error(`Expected numeric state for ${entityId}, got ${raw}`);
+  }
+  return value;
+}
+
+export async function setNumberValueViaHass(
+  page: Page,
+  entityId: string,
+  value: number
+): Promise<void> {
+  await callServiceViaHass(page, "number", "set_value", {
+    entity_id: entityId,
+    value,
+  });
+  await page.waitForFunction(
+    ({ id, expected }) => {
+      const el = document.querySelector("home-assistant") as
+        | (HTMLElement & { hass?: { states?: Record<string, { state: string }> } })
+        | null;
+      const raw = el?.hass?.states?.[id]?.state;
+      return raw != null && Math.abs(Number.parseFloat(raw) - expected) < 0.01;
+    },
+    { id: entityId, expected: value },
+    { timeout: 10000 }
+  );
 }
