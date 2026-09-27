@@ -12,11 +12,6 @@ MOUNT="${OPENBAO_KV_MOUNT:-kv}"
 # UI: http://127.0.0.1:8200/ui/vault/secrets/kv/show/ha-test?namespace=homelab
 PATH_NAME="${OPENBAO_HA_PATH:-ha-test}"
 
-if [[ -z "$TOKEN" ]]; then
-  echo "BAO_TOKEN or VAULT_TOKEN is required (run: bao login)" >&2
-  exit 1
-fi
-
 if command -v bao >/dev/null 2>&1; then
   CLI=(bao)
 elif command -v vault >/dev/null 2>&1; then
@@ -28,22 +23,24 @@ fi
 
 export BAO_ADDR="$ADDR" VAULT_ADDR="$ADDR"
 export BAO_NAMESPACE="$NAMESPACE" VAULT_NAMESPACE="$NAMESPACE"
-export BAO_TOKEN="$TOKEN" VAULT_TOKEN="$TOKEN"
+# Prefer explicit token; otherwise rely on CLI token helper (~/.bao-token).
+if [[ -n "$TOKEN" ]]; then
+  export BAO_TOKEN="$TOKEN" VAULT_TOKEN="$TOKEN"
+fi
 
 # Prefer KV v2 read; fail closed on missing fields.
 RAW="$("${CLI[@]}" kv get -format=json "${MOUNT}/${PATH_NAME}" 2>/dev/null || true)"
 if [[ -z "$RAW" ]]; then
-  echo "Failed to read ${MOUNT}/${PATH_NAME} (namespace=${NAMESPACE}). Is OpenBao unsealed?" >&2
+  echo "Failed to read ${MOUNT}/${PATH_NAME} (namespace=${NAMESPACE}). Is OpenBao unsealed? Run: bao login" >&2
   exit 1
 fi
 
 # If someone runs this without eval, stdout is just text — warn on a TTY.
+# Playwright loads secrets automatically via e2e/load-openbao-secrets.ts — no eval needed for yarn tests.
 if [[ -t 1 ]]; then
-  echo "NOTE: outputs export lines only. Load them with:" >&2
-  echo "  eval \"\$(./scripts/load_openbao_ha_secrets.sh)\"" >&2
-  echo "Bare './scripts/load_openbao_ha_secrets.sh' does NOT set variables in your shell." >&2
+  echo "NOTE: for shells use: eval \"\$(./scripts/load_openbao_ha_secrets.sh)\"" >&2
+  echo "Playwright already auto-loads OpenBao secrets from playwright.config.ts." >&2
 fi
-
 py - <<'PY' "$RAW"
 import json, sys
 raw = json.loads(sys.argv[1])

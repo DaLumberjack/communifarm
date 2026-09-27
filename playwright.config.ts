@@ -1,4 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import { loadOpenBaoHaSecrets } from "./e2e/load-openbao-secrets";
+
+// Pull TEST_HA_* from OpenBao before workers spawn (no manual eval needed).
+loadOpenBaoHaSecrets();
 
 const url = process.env.TEST_HA_URL || "http://127.0.0.1:8123";
 const stage = process.env.TEST_HA_STAGE || "T1";

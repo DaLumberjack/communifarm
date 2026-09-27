@@ -60,10 +60,9 @@ See the workspace testing skill for T0–T3. Local UI work is always T1/T2 first
 
 T1 Playwright needs HA credentials from OpenBao (`kv/ha-test` → `username_dev_container` / `password_dev_container`).
 
-**OpenBao must be running and unsealed** before loading secrets. Full bash (and PowerShell) steps: [openbao.md](openbao.md).
+**OpenBao must be running, unsealed, and you must have run `bao login` once.** Playwright then auto-loads secrets — no manual export. Details: [openbao.md](openbao.md).
 
 ```bash
-# After bao server + unseal×3 + bao login + BAO_NAMESPACE=homelab:
-eval "$(./scripts/load_openbao_ha_secrets.sh)"
+yarn playwright test e2e/flows/dashboard-targets.spec.ts
 ```
 

@@ -74,23 +74,38 @@ bao login
 $env:BAO_NAMESPACE = "homelab"
 ```
 
-## Load into Communifarm shell
+## Load into Communifarm / Playwright
 
-From `repos/communifarm` after login + `BAO_NAMESPACE=homelab`:
+**Playwright auto-loads** `TEST_HA_USERNAME` / `TEST_HA_PASSWORD` from OpenBao when you run `yarn playwright …` (`e2e/load-openbao-secrets.ts` via `playwright.config.ts`). No manual `eval` for tests.
+
+Still required once per machine boot:
+
+1. OpenBao server running
+2. Unsealed (×3)
+3. `bao login` (token helper `~/.bao-token` or `~/.vault-token`)
+
+Then:
+
+```bash
+yarn playwright test e2e/flows/dashboard-targets.spec.ts
+```
+
+| Override | Purpose |
+| --- | --- |
+| `BAO_ADDR` | default `http://127.0.0.1:8200` |
+| `BAO_NAMESPACE` | default `homelab` |
+| `OPENBAO_HA_PATH` | default `ha-test` |
+| `SKIP_OPENBAO_SECRETS=1` | skip auto-load |
+| `TEST_HA_USERNAME` / `TEST_HA_PASSWORD` | use pre-set values (skip OpenBao) |
+
+### Manual shell export (optional)
+
+Only for interactive shells (not needed for Playwright):
 
 ```bash
 export BAO_ADDR=http://127.0.0.1:8200
 export BAO_NAMESPACE=homelab
-# BAO_TOKEN is set by `bao login` into the CLI token helper; if needed:
-# export BAO_TOKEN=...
-
-# REQUIRED: eval — running the script alone only *prints* exports; it does not set them.
 eval "$(./scripts/load_openbao_ha_secrets.sh)"
-
-# Verify Playwright will see them (should print two lines, not empty):
-echo "user=${TEST_HA_USERNAME:+set} pass=${TEST_HA_PASSWORD:+set}"
-
-yarn playwright test e2e/flows/dashboard-targets.spec.ts
 ```
 
 Never commit tokens, unseal keys, or exported password values.
@@ -101,6 +116,6 @@ Never commit tokens, unseal keys, or exported password values.
 | --- | --- |
 | connection refused on `:8200` | Server not started (terminal 1) |
 | sealed / permission denied | Missing unseal ×3 or expired/missing login |
-| empty / missing secret | `BAO_NAMESPACE` not `homelab`, or wrong path |
-| Playwright: `TEST_HA_USERNAME/TEST_HA_PASSWORD required` | Ran the loader **without** `eval "$(...)"` — exports printed but not applied |
-| Playwright login fails | Credentials wrong for this HA instance, or not eval'd in **this** shell |
+| empty / missing secret | Wrong namespace/path in OpenBao |
+| Playwright: could not load HA secrets | Not logged in (`bao login`) or OpenBao sealed |
+| Playwright login fails | Secret values do not match this HA owner user |

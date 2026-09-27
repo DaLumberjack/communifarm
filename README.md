@@ -46,15 +46,12 @@ Testing stages (authoritative): workspace `.agents/skills/testing/SKILL.md`.
 
 ## Secrets
 
-HA UI credentials for shared test identities come from OpenBao. **Start and unseal OpenBao first** — see [docs/user/openbao.md](docs/user/openbao.md).
+HA UI credentials come from OpenBao. **Start and unseal OpenBao, then `bao login` once** — see [docs/user/openbao.md](docs/user/openbao.md).
 
-Dev-container fields in `kv/ha-test` (namespace `homelab`): `username_dev_container`, `password_dev_container`.
+Playwright loads `username_dev_container` / `password_dev_container` from `kv/ha-test` (namespace `homelab`) automatically via `playwright.config.ts`. No manual `eval` for tests.
 
 ```bash
-export BAO_ADDR=http://127.0.0.1:8200
-export BAO_NAMESPACE=homelab
-# after: bao server, unseal×3, bao login
-eval "$(./scripts/load_openbao_ha_secrets.sh)"
+yarn playwright test e2e/flows/dashboard-targets.spec.ts
 ```
 
 Never commit tokens, passwords, or `known_hosts.test` private material.

@@ -17,7 +17,7 @@ test.describe("Dashboard target controls (T1)", () => {
     test.skip(getStage() !== "T1", "Dashboard target nudge is a T1 local flow");
     test.skip(
       !process.env.TEST_HA_USERNAME || !process.env.TEST_HA_PASSWORD,
-      'Set credentials with: eval "$(./scripts/load_openbao_ha_secrets.sh)"'
+      "OpenBao secrets missing — start/unseal OpenBao, bao login, see docs/user/openbao.md"
     );
 
     await loginHa(page);

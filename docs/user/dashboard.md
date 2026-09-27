@@ -31,4 +31,4 @@ Changes persist in Communifarm Store and survive restarts.
 | Stage | Coverage |
 | --- | --- |
 | T0 | `test_adjust_targets_minus_one_then_plus_one` nudges temp −1/+1 °C and humidity −1/+1 % |
-| T1 | `e2e/flows/dashboard-targets.spec.ts` (UI login + hass session; needs `eval "$(./scripts/load_openbao_ha_secrets.sh)"`) |
+| T1 | `e2e/flows/dashboard-targets.spec.ts` (auto-loads OpenBao secrets; OpenBao must be unsealed + `bao login`) |
