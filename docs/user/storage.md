@@ -40,6 +40,15 @@ Session sensor also exposes calibration **warnings** / **last_reject** (negative
 | Every 50th record | **Warn** `calibration_due` |
 | Temp/humidity outside absolute sensor range | Environment status `degraded` |
 
+## Batches + mix milestones (schema v3)
+
+| Item | Purpose |
+| --- | --- |
+| `batches` | Active/complete mix batches; `mixing_started_at` / `mixing_finished_at` |
+| `batch_milestones` | Append-only process events |
+| Auto | First `weight_events` row for a batch → `dry_mixing_started` |
+| Services | `record_batch_milestone`, `complete_and_new_batch` |
+
 ## weight_events (schema v2)
 
 | Column | Purpose |

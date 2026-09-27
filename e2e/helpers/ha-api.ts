@@ -183,3 +183,43 @@ export async function setNumberValueViaHass(
     { timeout: 10000 }
   );
 }
+
+/** Reload the Communifarm config entry so new platforms/dashboard views appear. */
+export async function reloadCommunifarmViaHass(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const el = document.querySelector("home-assistant") as
+      | (HTMLElement & {
+          hass?: {
+            callWS?: (msg: Record<string, unknown>) => Promise<unknown>;
+            callService?: unknown;
+          };
+        })
+      | null;
+    return Boolean(el?.hass?.callWS && el?.hass?.callService);
+  }, undefined, { timeout: 30000 });
+
+  await page.evaluate(async () => {
+    const el = document.querySelector("home-assistant") as HTMLElement & {
+      hass: {
+        callWS: (msg: Record<string, unknown>) => Promise<
+          Array<{ entry_id: string; domain: string }>
+        >;
+        callService: (
+          d: string,
+          s: string,
+          payload: Record<string, unknown>
+        ) => Promise<unknown>;
+      };
+    };
+    const entries = await el.hass.callWS({ type: "config_entries/get" });
+    const entry = entries.find((e) => e.domain === "communifarm");
+    if (!entry) {
+      throw new Error("Communifarm config entry not found");
+    }
+    await el.hass.callService("homeassistant", "reload_config_entry", {
+      entry_id: entry.entry_id,
+    });
+  });
+  // Give platforms + Lovelace provision time to settle.
+  await page.waitForTimeout(5000);
+}

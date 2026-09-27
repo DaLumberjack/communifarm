@@ -28,6 +28,7 @@ async def async_setup_entry(
             CommunifarmTemperatureTarget(entry, state, repo),
             CommunifarmHumidityTarget(entry, state, repo),
             CommunifarmRecipeScale(entry, state, repo),
+            CommunifarmContainerCount(entry.entry_id),
         ]
     )
 
@@ -154,3 +155,33 @@ class CommunifarmRecipeScale(_ProfileNumber):
         async_dispatcher_send(
             self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._entry.entry_id
         )
+
+
+class CommunifarmContainerCount(NumberEntity):
+    """How many containers this mix will be split into (Batches tab)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Container count"
+    _attr_unique_id = "communifarm_container_count"
+    _attr_icon = "mdi:package-variant"
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = 1.0
+    _attr_native_max_value = 100.0
+    _attr_native_step = 1.0
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "number.communifarm_container_count"
+        self._value = 1.0
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["container_count"] = int(self._value)
+
+    @property
+    def native_value(self) -> float:
+        return float(self.hass.data[DOMAIN][self._entry_id].get("container_count", 1))
+
+    async def async_set_native_value(self, value: float) -> None:
+        count = max(1, int(value))
+        self.hass.data[DOMAIN][self._entry_id]["container_count"] = count
+        self.async_write_ha_state()

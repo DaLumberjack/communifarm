@@ -85,6 +85,15 @@ export class CommunifarmPage {
     });
   }
 
+  /** Open the Batches tab (list + complete/new + post-weigh milestones). */
+  async openBatches(): Promise<void> {
+    await this.page.goto("/communifarm/batches", { waitUntil: "domcontentloaded" });
+    await expect(this.page).toHaveURL(/communifarm\/batches/, { timeout: 30000 });
+    await expect(this.page.getByText(/batches|complete batch|batch list/i).first()).toBeVisible({
+      timeout: 30000,
+    });
+  }
+
   private async fillIfPresent(label: RegExp, value: string): Promise<void> {
     const field = this.page.getByLabel(label).first();
     if (await field.count()) {

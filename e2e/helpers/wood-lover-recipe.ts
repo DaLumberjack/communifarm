@@ -35,3 +35,23 @@ export const WOOD_LOVER_WEIGH_STEPS: WoodLoverLine[] = [
 
 /** Empty mix-bin mass before each tare (simulates container on the scale). */
 export const MIX_BIN_TARE_G = 1000;
+
+export type WeighVarianceMode = "exact" | "under" | "over" | "random";
+
+/** Scale each recipe amount by a variance mode (±5% band). */
+export function variedWoodLoverSteps(
+  mode: WeighVarianceMode,
+  rng: () => number = Math.random
+): WoodLoverLine[] {
+  return WOOD_LOVER_WEIGH_STEPS.map((line) => {
+    let factor = 1;
+    if (mode === "under") factor = 0.95;
+    else if (mode === "over") factor = 1.05;
+    else if (mode === "random") factor = 0.95 + rng() * 0.1;
+    const amountG =
+      line.unit === "qts"
+        ? Math.max(1, Math.round(line.amountG * factor))
+        : Math.round(line.amountG * factor * 10) / 10;
+    return { ...line, amountG };
+  });
+}

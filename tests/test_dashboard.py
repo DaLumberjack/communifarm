@@ -17,7 +17,7 @@ def test_dashboard_includes_bound_sensors_and_batch(sample_state) -> None:
     }
     config = DashboardBuilder().build(sample_state, resolved)
     assert config["title"] == "Communifarm"
-    assert len(config["views"]) == 2
+    assert len(config["views"]) == 3
     cards = config["views"][0]["cards"]
     titles = [card.get("title") for card in cards]
     assert "Current settings" in titles
@@ -36,6 +36,13 @@ def test_dashboard_includes_weigh_tab_with_scale_and_nfc(sample_state) -> None:
     assert "Scale" in titles
     assert "Recipe scale" in titles
     assert "This session" in titles
+    assert "Mix milestones (weigh)" in titles
+    mix = next(
+        card for card in weigh["cards"] if card.get("title") == "Mix milestones (weigh)"
+    )
+    mix_ids = [row["entity"] for row in mix["entities"]]
+    assert "button.communifarm_water_added" in mix_ids
+    assert "button.communifarm_field_capacity_reached" in mix_ids
     scale = next(card for card in weigh["cards"] if card.get("title") == "Scale")
     entity_ids = [
         row["entity"] if isinstance(row, dict) else row for row in scale["entities"]
@@ -70,6 +77,20 @@ def test_dashboard_targets_card_is_interactive(sample_state) -> None:
     assert ENTITY_TEMPERATURE_TARGET in entity_ids
     assert ENTITY_HUMIDITY_TARGET in entity_ids
     assert targets.get("show_header_toggle") is False
+
+
+def test_dashboard_includes_batches_tab(sample_state) -> None:
+    config = DashboardBuilder().build(sample_state, {})
+    batches = next(view for view in config["views"] if view.get("path") == "batches")
+    assert batches["title"] == "Batches"
+    titles = [card.get("title") for card in batches["cards"]]
+    assert "Batch list" in titles
+    assert "Post-weigh process" in titles
+    active = next(card for card in batches["cards"] if card.get("title") == "Active batch")
+    ids = [
+        row["entity"] if isinstance(row, dict) else row for row in active["entities"]
+    ]
+    assert "button.communifarm_complete_and_new_batch" in ids
 
 
 def test_dashboard_omits_missing_optional_controls(sample_state) -> None:

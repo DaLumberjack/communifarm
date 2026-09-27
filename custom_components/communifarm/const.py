@@ -30,6 +30,7 @@ DASHBOARD_TITLE = "Communifarm"
 DASHBOARD_ICON = "mdi:sprout"
 DASHBOARD_VIEW_OVERVIEW = "overview"
 DASHBOARD_VIEW_WEIGH = "weigh"
+DASHBOARD_VIEW_BATCHES = "batches"
 
 ENTITY_TEMPERATURE_TARGET = "number.communifarm_temperature_target"
 ENTITY_HUMIDITY_TARGET = "number.communifarm_humidity_target"
@@ -38,11 +39,29 @@ ENTITY_BATCH_STAGE = "sensor.communifarm_batch_stage"
 ENTITY_WEIGH_SESSION = "sensor.communifarm_weigh_session"
 ENTITY_BATCH_NFC_UID = "sensor.communifarm_batch_nfc_uid"
 ENTITY_RECIPE_SCALE = "number.communifarm_recipe_scale"
+ENTITY_BATCH_LIST = "sensor.communifarm_batch_list"
+ENTITY_BATCH_MILESTONES = "sensor.communifarm_batch_milestones"
+ENTITY_CONTAINER_COUNT = "number.communifarm_container_count"
+ENTITY_HEAT_TREATMENT = "select.communifarm_heat_treatment"
+
+ENTITY_BTN_WATER_ADDED = "button.communifarm_water_added"
+ENTITY_BTN_DRY_WET_MIX = "button.communifarm_dry_wet_mix_started"
+ENTITY_BTN_SETTLING = "button.communifarm_settling_started"
+ENTITY_BTN_FIELD_CAPACITY = "button.communifarm_field_capacity_reached"
+ENTITY_BTN_COMPLETELY_MIXED = "button.communifarm_completely_mixed"
+ENTITY_BTN_SEPARATE_CONTAINERS = "button.communifarm_separate_containers"
+ENTITY_BTN_HEAT_TREATED = "button.communifarm_heat_treated"
+ENTITY_BTN_STORED_COOLING = "button.communifarm_stored_for_cooling"
+ENTITY_BTN_PRODUCTION_START = "button.communifarm_production_cycle_started"
+ENTITY_BTN_COMPLETE_NEW_BATCH = "button.communifarm_complete_and_new_batch"
 
 SERVICE_TRANSITION_BATCH = "transition_batch"
 SERVICE_RECORD_WEIGHT = "record_weight"
+SERVICE_RECORD_BATCH_MILESTONE = "record_batch_milestone"
+SERVICE_COMPLETE_AND_NEW_BATCH = "complete_and_new_batch"
 
 SIGNAL_WEIGH_SESSION_UPDATED = f"{DOMAIN}_weigh_session_updated"
+SIGNAL_BATCH_UPDATED = f"{DOMAIN}_batch_updated"
 
 # Scale entities used when recording from the Weigh station (live or mock).
 ENTITY_SCALE_MASS_G = "sensor.esp32dev_calibrated_g"
@@ -63,7 +82,7 @@ def new_weigh_session_tracker() -> dict:
         "last_reject": None,
     }
 
-PLATFORMS = ["sensor", "number", "switch"]
+PLATFORMS = ["sensor", "number", "switch", "button", "select"]
 
 BATCH_STAGE_PLANNED = "planned"
 BATCH_STAGE_ACTIVE = "active"

@@ -25,12 +25,19 @@ from .const import (
     ENTITY_SCALE_SELECTED_INGREDIENT,
     ENTITY_SCALE_TARE_BUTTON,
     PLATFORMS,
+    SERVICE_COMPLETE_AND_NEW_BATCH,
+    SERVICE_RECORD_BATCH_MILESTONE,
     SERVICE_RECORD_WEIGHT,
     SERVICE_TRANSITION_BATCH,
     SIGNAL_WEIGH_SESSION_UPDATED,
     new_weigh_session_tracker,
 )
 from .dashboard.provisioner import async_provision_dashboard
+from .domain.batch_milestones import (
+    BATCH_TAB_MILESTONES,
+    HEAT_METHODS,
+    WEIGH_MILESTONES,
+)
 from .domain.models import CommunifarmState
 from .domain.recipe import WOOD_LOVER_RECIPE, clamp_recipe_scale
 from .domain.validation import (
@@ -43,8 +50,10 @@ from .domain.validation import (
     validate_recipe_unit,
 )
 from .domain.weight import WeightEvent, ingredient_key_from_label
+from .storage.batch_repository import BatchRepository
 from .storage.repository import CommunifarmRepository
 from .storage.weight_repository import WeightEventRepository
+from . import batch_actions
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +74,19 @@ RECORD_WEIGHT_SCHEMA = vol.Schema(
         vol.Optional("ingredient"): cv.string,
         vol.Optional("nfc_uid"): cv.string,
     }
+)
+
+RECORD_MILESTONE_SCHEMA = vol.Schema(
+    {
+        vol.Required("event_type"): vol.In(WEIGH_MILESTONES | BATCH_TAB_MILESTONES),
+        vol.Optional("heat_method"): vol.In(HEAT_METHODS),
+        vol.Optional("container_count"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+        vol.Optional("notes"): cv.string,
+    }
+)
+
+COMPLETE_NEW_BATCH_SCHEMA = vol.Schema(
+    {vol.Optional("name"): cv.string}
 )
 
 _TARE_BUTTONS = frozenset(
@@ -95,12 +117,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     weight_repo = WeightEventRepository(hass)
     await weight_repo.async_setup()
+    batch_repo = BatchRepository(hass, path=weight_repo.path)
+    await batch_repo.async_setup()
+    await batch_repo.async_ensure_batch(
+        batch_id=state.batch.id,
+        site_id=state.site.id,
+        environment_id=state.environment.id,
+        name=state.batch.name,
+        nfc_uid=state.batch.nfc_uid,
+    )
 
     hass.data[DOMAIN][entry.entry_id] = {
         "repository": repo,
         "weight_repository": weight_repo,
+        "batch_repository": batch_repo,
         "state": state,
         "weigh_session": new_weigh_session_tracker(),
+        "container_count": 1,
+        "heat_treatment": "pasteurized",
     }
 
     dashboard_url = await async_provision_dashboard(hass, state)
@@ -127,6 +161,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass, entry.entry_id, call.data, raise_on_reject=True
         )
 
+    async def async_record_milestone(call: ServiceCall) -> None:
+        detail: dict = {}
+        if "heat_method" in call.data:
+            detail["method"] = call.data["heat_method"]
+        if "container_count" in call.data:
+            detail["container_count"] = call.data["container_count"]
+        if "notes" in call.data:
+            detail["notes"] = call.data["notes"]
+        await batch_actions.async_record_milestone(
+            hass,
+            entry.entry_id,
+            call.data["event_type"],
+            detail=detail or None,
+        )
+
+    async def async_complete_new(call: ServiceCall) -> None:
+        await batch_actions.async_complete_and_new_batch(
+            hass, entry.entry_id, new_name=call.data.get("name")
+        )
+
     if not hass.services.has_service(DOMAIN, SERVICE_TRANSITION_BATCH):
         hass.services.async_register(
             DOMAIN,
@@ -140,6 +194,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_RECORD_WEIGHT,
             async_record_weight,
             schema=RECORD_WEIGHT_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_BATCH_MILESTONE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_BATCH_MILESTONE,
+            async_record_milestone,
+            schema=RECORD_MILESTONE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_COMPLETE_AND_NEW_BATCH):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_COMPLETE_AND_NEW_BATCH,
+            async_complete_new,
+            schema=COMPLETE_NEW_BATCH_SCHEMA,
         )
 
     @callback
@@ -307,6 +375,7 @@ async def _async_persist_weight_event(
             scale,
         )
     async_dispatcher_send(hass, SIGNAL_WEIGH_SESSION_UPDATED, entry_id)
+    await batch_actions.async_ensure_dry_mixing_started(hass, entry_id)
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -323,6 +392,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     weight_repo: WeightEventRepository | None = bucket.get("weight_repository")
     if weight_repo is not None:
         await weight_repo.async_close()
+    batch_repo: BatchRepository | None = bucket.get("batch_repository")
+    if batch_repo is not None:
+        await batch_repo.async_close()
 
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, [Platform(p) for p in PLATFORMS]
@@ -330,8 +402,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not any(key != "dashboard_config" for key in hass.data.get(DOMAIN, {})):
-            if hass.services.has_service(DOMAIN, SERVICE_TRANSITION_BATCH):
-                hass.services.async_remove(DOMAIN, SERVICE_TRANSITION_BATCH)
-            if hass.services.has_service(DOMAIN, SERVICE_RECORD_WEIGHT):
-                hass.services.async_remove(DOMAIN, SERVICE_RECORD_WEIGHT)
+            for service in (
+                SERVICE_TRANSITION_BATCH,
+                SERVICE_RECORD_WEIGHT,
+                SERVICE_RECORD_BATCH_MILESTONE,
+                SERVICE_COMPLETE_AND_NEW_BATCH,
+            ):
+                if hass.services.has_service(DOMAIN, service):
+                    hass.services.async_remove(DOMAIN, service)
     return unload_ok

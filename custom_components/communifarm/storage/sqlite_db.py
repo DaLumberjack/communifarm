@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -40,6 +40,41 @@ MIGRATIONS: dict[int, str] = {
     2: """
     ALTER TABLE weight_events ADD COLUMN recipe_scale REAL;
     ALTER TABLE weight_events ADD COLUMN target_amount REAL;
+    """,
+    3: """
+    CREATE TABLE IF NOT EXISTS batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      nfc_uid TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      mixing_started_at TEXT,
+      mixing_finished_at TEXT,
+      container_count INTEGER,
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_batches_status_created
+      ON batches (status, created_at);
+
+    CREATE TABLE IF NOT EXISTS batch_milestones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      batch_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      detail TEXT,
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_batch_milestones_batch_time
+      ON batch_milestones (batch_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_batch_milestones_type
+      ON batch_milestones (event_type, recorded_at);
     """,
 }
 

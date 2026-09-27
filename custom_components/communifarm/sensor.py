@@ -8,10 +8,17 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, ROLE_HUMIDITY, ROLE_TEMPERATURE, SIGNAL_WEIGH_SESSION_UPDATED
+from .const import (
+    DOMAIN,
+    ROLE_HUMIDITY,
+    ROLE_TEMPERATURE,
+    SIGNAL_BATCH_UPDATED,
+    SIGNAL_WEIGH_SESSION_UPDATED,
+)
 from .domain.models import CommunifarmState
 from .domain.recipe import build_weigh_session_progress
 from .domain.validation import assess_environment_readings
+from .storage.batch_repository import BatchRepository
 from .storage.weight_repository import WeightEventRepository
 
 
@@ -28,6 +35,8 @@ async def async_setup_entry(
             CommunifarmEnvironmentStatusSensor(entry.entry_id, state),
             CommunifarmBatchNfcUidSensor(entry.entry_id, state),
             CommunifarmWeighSessionSensor(entry.entry_id, state),
+            CommunifarmBatchListSensor(entry.entry_id),
+            CommunifarmBatchMilestonesSensor(entry.entry_id),
         ]
     )
 
@@ -206,6 +215,129 @@ class CommunifarmWeighSessionSensor(SensorEntity):
     @property
     def native_value(self) -> str:
         return str(self._attrs.get("summary", "0/0 lines recorded"))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmBatchListSensor(SensorEntity):
+    """Historical + active batches with mix start/finish times."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Batch list"
+    _attr_unique_id = "communifarm_batch_list"
+    _attr_icon = "mdi:format-list-bulleted"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "sensor.communifarm_batch_list"
+        self._value = "0 batches"
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
+            )
+        )
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._on_update
+            )
+        )
+
+    @callback
+    def _on_update(self, entry_id: str) -> None:
+        if entry_id != self._entry_id:
+            return
+        self.hass.async_create_task(self.async_refresh())
+
+    async def async_refresh(self) -> None:
+        runtime: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
+        batch_repo: BatchRepository = self.hass.data[DOMAIN][self._entry_id][
+            "batch_repository"
+        ]
+        batches = await batch_repo.async_list_batches()
+        self._value = f"{len(batches)} batches"
+        self._attrs = {
+            "active_batch_id": runtime.batch.id,
+            "active_batch_name": runtime.batch.name,
+            "batches": [b.to_attr_dict() for b in batches],
+            "list_text": BatchRepository.format_batch_list_text(batches),
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmBatchMilestonesSensor(SensorEntity):
+    """Milestones for the active batch."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Batch milestones"
+    _attr_unique_id = "communifarm_batch_milestones"
+    _attr_icon = "mdi:timeline-clock"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "sensor.communifarm_batch_milestones"
+        self._value = "0 milestones"
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
+            )
+        )
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._on_update
+            )
+        )
+
+    @callback
+    def _on_update(self, entry_id: str) -> None:
+        if entry_id != self._entry_id:
+            return
+        self.hass.async_create_task(self.async_refresh())
+
+    async def async_refresh(self) -> None:
+        runtime: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
+        batch_repo: BatchRepository = self.hass.data[DOMAIN][self._entry_id][
+            "batch_repository"
+        ]
+        milestones = await batch_repo.async_list_milestones(runtime.batch.id)
+        types = [m.event_type for m in milestones]
+        self._value = f"{len(milestones)} milestones"
+        lines = [
+            "| When | Event | Detail |",
+            "| --- | --- | --- |",
+        ]
+        for m in milestones:
+            detail = m.detail or {}
+            detail_s = ", ".join(f"{k}={v}" for k, v in detail.items()) or "—"
+            lines.append(f"| {m.recorded_at} | {m.event_type} | {detail_s} |")
+        self._attrs = {
+            "batch_id": runtime.batch.id,
+            "event_types": types,
+            "milestones": [m.to_attr_dict() for m in milestones],
+            "progress_text": "\n".join(lines) if milestones else "_No milestones yet._",
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
 
     @property
     def extra_state_attributes(self) -> dict:
