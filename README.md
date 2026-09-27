@@ -68,5 +68,7 @@ Feature branch → merge to `main` → bump `manifest.json` version → local T2
 - Starter batch lifecycle (`planned → active → complete`)
 - One generated dashboard with Current settings + Targets controls
 - Allowlisted switch proxy
+- Local `esp32dev` scale mock + NFC ingredient select stub ([docs/user/mock-scale.md](docs/user/mock-scale.md))
 
 See [docs/user/dashboard.md](docs/user/dashboard.md).
+
