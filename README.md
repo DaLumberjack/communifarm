@@ -65,7 +65,9 @@ Feature branch → merge to `main` → bump `manifest.json` version → local T2
 
 - Site + Environment config flow
 - Bind temperature / humidity / fan / switch
-- Profile targets (`number` entities)
+- Profile targets (`number` entities, adjustable on the dashboard)
 - Starter batch lifecycle (`planned → active → complete`)
-- One generated dashboard model
+- One generated dashboard with Current settings + Targets controls
 - Allowlisted switch proxy
+
+See [docs/user/dashboard.md](docs/user/dashboard.md).

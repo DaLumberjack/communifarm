@@ -6,6 +6,10 @@ from typing import Any
 
 from ..const import (
     DASHBOARD_TITLE,
+    ENTITY_ALLOWLISTED_SWITCH,
+    ENTITY_BATCH_STAGE,
+    ENTITY_HUMIDITY_TARGET,
+    ENTITY_TEMPERATURE_TARGET,
     ROLE_FAN,
     ROLE_HUMIDITY,
     ROLE_SWITCH,
@@ -30,7 +34,21 @@ class DashboardBuilder:
                     f"Site: **{state.site.name}**\n"
                     f"Batch: **{state.batch.name}** ({state.batch.stage})"
                 ),
-            }
+            },
+            {
+                "type": "markdown",
+                "title": "Current settings",
+                "content": (
+                    "Adjust targets below — no need to open Settings → Devices & services.\n\n"
+                    "| Setting | Target |\n"
+                    "| --- | ---: |\n"
+                    f"| Temperature | "
+                    f"{{{{ states('{ENTITY_TEMPERATURE_TARGET}') }}}} °C |\n"
+                    f"| Humidity | "
+                    f"{{{{ states('{ENTITY_HUMIDITY_TARGET}') }}}} % |\n\n"
+                    "Values update live when you change the Targets controls."
+                ),
+            },
         ]
 
         sensor_entities = [
@@ -39,31 +57,41 @@ class DashboardBuilder:
             if (entity_id := resolved.get(role))
         ]
         if sensor_entities:
-            cards.append({"type": "entities", "title": "Environment", "entities": sensor_entities})
+            cards.append(
+                {"type": "entities", "title": "Environment", "entities": sensor_entities}
+            )
 
         cards.append(
             {
                 "type": "entities",
                 "title": "Targets",
+                "show_header_toggle": False,
                 "entities": [
-                    "number.communifarm_temperature_target",
-                    "number.communifarm_humidity_target",
+                    {
+                        "entity": ENTITY_TEMPERATURE_TARGET,
+                        "name": "Temperature target",
+                        "secondary_info": "last-changed",
+                    },
+                    {
+                        "entity": ENTITY_HUMIDITY_TARGET,
+                        "name": "Humidity target",
+                        "secondary_info": "last-changed",
+                    },
                 ],
             }
         )
 
-        actuator_entities = [
-            entity_id
-            for role in (ROLE_FAN, ROLE_SWITCH)
-            if (entity_id := resolved.get(role))
-        ]
-        # Prefer Communifarm proxy switch when a switch binding exists.
         control_entities: list[str] = []
         if resolved.get(ROLE_SWITCH):
-            control_entities.append("switch.communifarm_allowlisted_switch")
+            control_entities.append(ENTITY_ALLOWLISTED_SWITCH)
         if resolved.get(ROLE_FAN):
             control_entities.append(resolved[ROLE_FAN])  # type: ignore[arg-type]
-        if not control_entities and actuator_entities:
+        if not control_entities:
+            actuator_entities = [
+                entity_id
+                for role in (ROLE_FAN, ROLE_SWITCH)
+                if (entity_id := resolved.get(role))
+            ]
             control_entities = actuator_entities
         if control_entities:
             cards.append(
@@ -74,7 +102,7 @@ class DashboardBuilder:
             {
                 "type": "entities",
                 "title": "Production",
-                "entities": ["sensor.communifarm_batch_stage"],
+                "entities": [ENTITY_BATCH_STAGE],
             }
         )
 

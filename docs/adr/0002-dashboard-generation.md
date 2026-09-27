@@ -16,3 +16,4 @@ Build a pure `DashboardBuilder` that emits built-in Lovelace cards from bindings
 
 - No custom cards in MVP.
 - Provisioning may be partial on some HA versions; DOMAIN data remains the source of truth for assertions.
+- Day-to-day temperature/humidity target changes happen on the managed dashboard via `number` entities (slider mode); Current settings markdown uses live `states()` templates so values stay accurate without re-provisioning.

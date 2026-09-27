@@ -95,6 +95,63 @@ async def test_temperature_target_update(
     assert state.profile.temperature_target == 24.5
 
 
+async def test_adjust_targets_minus_one_then_plus_one(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+) -> None:
+    """T0: nudge temp ±1°C and humidity ±1% via number entities (dashboard path)."""
+    hass.states.async_set("switch.mock_exhaust", "off")
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    def runtime() -> CommunifarmState:
+        return hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
+
+    baseline_temp = float(runtime().profile.temperature_target)
+    baseline_hum = float(runtime().profile.humidity_target)
+
+    async def set_number(entity_id: str, value: float) -> None:
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": entity_id, "value": value},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+    # Temperature: current → −1°C → +1°C (back to baseline)
+    await set_number("number.communifarm_temperature_target", baseline_temp - 1.0)
+    assert float(hass.states.get("number.communifarm_temperature_target").state) == (
+        baseline_temp - 1.0
+    )
+    assert runtime().profile.temperature_target == baseline_temp - 1.0
+
+    await set_number("number.communifarm_temperature_target", baseline_temp - 1.0 + 1.0)
+    assert float(hass.states.get("number.communifarm_temperature_target").state) == (
+        baseline_temp
+    )
+    assert runtime().profile.temperature_target == baseline_temp
+
+    # Humidity: current → −1% → +1% (back to baseline)
+    await set_number("number.communifarm_humidity_target", baseline_hum - 1.0)
+    assert float(hass.states.get("number.communifarm_humidity_target").state) == (
+        baseline_hum - 1.0
+    )
+    assert runtime().profile.humidity_target == baseline_hum - 1.0
+
+    await set_number("number.communifarm_humidity_target", baseline_hum - 1.0 + 1.0)
+    assert float(hass.states.get("number.communifarm_humidity_target").state) == (
+        baseline_hum
+    )
+    assert runtime().profile.humidity_target == baseline_hum
+
+    # Persisted entry data matches the restored baselines
+    assert mock_config_entry.data["state"]["profile"]["temperature_target"] == baseline_temp
+    assert mock_config_entry.data["state"]["profile"]["humidity_target"] == baseline_hum
+
+
 async def test_allowlisted_switch_tracks_underlying_state(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
