@@ -1,0 +1,7 @@
+transition_batch:
+  name: Transition batch
+  description: Move the starter production batch to the next lifecycle stage.
+  fields:
+    stage:
+      name: Stage
+      description: Target stage (active or complete).

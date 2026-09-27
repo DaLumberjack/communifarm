@@ -1,0 +1,12 @@
+{
+  "domain": "communifarm",
+  "name": "Communifarm",
+  "codeowners": ["@DaLumberjack"],
+  "config_flow": true,
+  "documentation": "https://github.com/DaLumberjack/communifarm",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/DaLumberjack/communifarm/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

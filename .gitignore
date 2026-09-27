@@ -1,0 +1,86 @@
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# --- Node / Playwright ---
+node_modules/
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
+
+# --- Secrets & credentials (never commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+*.p12
+*.pfx
+secrets.yaml
+**/secrets.yaml
+scripts/known_hosts.test
+!scripts/known_hosts.test.example
+*emergency_kit*
+*emergency-kit*
+**/VAULT_TOKEN*
+**/BAO_TOKEN*
+
+# OpenBao / Vault local dumps
+.vault-token
+.bao-token
+
+# --- Home Assistant local runtime (regenerable / sensitive) ---
+# Auth tokens, user hashes, registries — never commit
+devcontainer/ha_config/.storage/
+devcontainer/ha_config/.cloud/
+devcontainer/ha_config/.cache/
+devcontainer/ha_config/.HA_VERSION
+devcontainer/ha_config/.ha_run.lock
+devcontainer/ha_config/home-assistant.log*
+devcontainer/ha_config/home-assistant_v2.db*
+devcontainer/ha_config/tts/
+devcontainer/ha_config/backups/
+# Bind-mount target only; source of truth is repo custom_components/communifarm/
+devcontainer/ha_config/custom_components/
+
+# Generic HA runtime patterns if paths move
+**/.storage/
+**/.cloud/
+**/home-assistant_v2.db*
+**/home-assistant.log*
+config/.storage/
+.ha_version
+
+# Encrypted HA backup tarballs (restore keys are secrets; keep in OpenBao / workspace intake)
+*.tar
+!docs/**/*.md
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# --- Misc regenerable ---
+*.log
+coverage.xml
+.tox/
+.nox/

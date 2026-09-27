@@ -1,0 +1,3 @@
+# Populate this file locally with:
+#   ssh-keyscan -H 192.168.102.20 >> scripts/known_hosts.test
+# Do not disable StrictHostKeyChecking.

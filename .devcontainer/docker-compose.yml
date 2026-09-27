@@ -1,0 +1,17 @@
+services:
+  dev:
+    image: mcr.microsoft.com/devcontainers/python:3.12
+    volumes:
+      - ..:/workspaces/communifarm:cached
+    command: sleep infinity
+    network_mode: service:homeassistant
+
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    volumes:
+      - ../devcontainer/ha_config:/config
+      - ../custom_components/communifarm:/config/custom_components/communifarm
+    ports:
+      - "8123:8123"
+    environment:
+      - TZ=UTC

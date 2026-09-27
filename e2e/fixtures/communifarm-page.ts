@@ -1,0 +1,74 @@
+import { Page, expect } from "@playwright/test";
+import { DEFAULT_CF_FLOW } from "../helpers/har-flow-constants";
+
+export class CommunifarmPage {
+  constructor(private readonly page: Page) {}
+
+  async openIntegrations(): Promise<void> {
+    await this.page.goto("/config/integrations");
+    await expect(this.page.getByText(/integrations|devices & services/i).first()).toBeVisible({
+      timeout: 30000,
+    });
+  }
+
+  async startCommunifarmFlow(): Promise<void> {
+    await this.openIntegrations();
+    const add = this.page.getByRole("button", { name: /add integration/i });
+    if (await add.count()) {
+      await add.click();
+    }
+    const search = this.page.getByPlaceholder(/search/i).first();
+    if (await search.count()) {
+      await search.fill("Communifarm");
+    }
+    await this.page.getByText("Communifarm", { exact: false }).first().click();
+  }
+
+  /**
+   * Completes Communifarm config flow matching HAR payloads:
+   * site → bindings (mock entities) → profile/batch.
+   */
+  async completeOnboarding(opts?: {
+    site?: string;
+    environment?: string;
+    batch?: string;
+    temperatureTarget?: number;
+    humidityTarget?: number;
+  }): Promise<void> {
+    const site = opts?.site ?? DEFAULT_CF_FLOW.site;
+    const environment = opts?.environment ?? DEFAULT_CF_FLOW.environment;
+    const batch = opts?.batch ?? DEFAULT_CF_FLOW.batch;
+    const temperatureTarget = opts?.temperatureTarget ?? DEFAULT_CF_FLOW.temperatureTarget;
+    const humidityTarget = opts?.humidityTarget ?? DEFAULT_CF_FLOW.humidityTarget;
+
+    await this.fillIfPresent(/site name/i, site);
+    await this.fillIfPresent(/environment name/i, environment);
+    await this.clickSubmit();
+
+    // Bindings — accept suggestions or fill mock entity ids when inputs are free-text.
+    await this.fillIfPresent(/temperature/i, DEFAULT_CF_FLOW.temperatureEntity);
+    await this.fillIfPresent(/humidity/i, DEFAULT_CF_FLOW.humidityEntity);
+    await this.fillIfPresent(/fan/i, DEFAULT_CF_FLOW.fanEntity);
+    await this.clickSubmit();
+
+    await this.fillIfPresent(/temperature target/i, String(temperatureTarget));
+    await this.fillIfPresent(/humidity target/i, String(humidityTarget));
+    await this.fillIfPresent(/batch/i, batch);
+    await this.clickSubmit();
+  }
+
+  async openCommunifarmDashboard(): Promise<void> {
+    await this.page.goto("/communifarm/overview");
+  }
+
+  private async fillIfPresent(label: RegExp, value: string): Promise<void> {
+    const field = this.page.getByLabel(label).first();
+    if (await field.count()) {
+      await field.fill(value);
+    }
+  }
+
+  private async clickSubmit(): Promise<void> {
+    await this.page.getByRole("button", { name: /submit|next|create|finish/i }).first().click();
+  }
+}

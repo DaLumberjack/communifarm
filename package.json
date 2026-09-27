@@ -1,0 +1,17 @@
+{
+  "name": "communifarm-e2e",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:t1": "cross-env TEST_HA_STAGE=T1 TEST_HA_URL=http://127.0.0.1:8123 playwright test e2e/flows/00-ha-scratch-to-communifarm.spec.ts e2e/flows/01-ha-backup-artifacts.spec.ts e2e/flows/onboarding.spec.ts e2e/flows/mock-conditions.spec.ts",
+    "test:e2e:t1:scratch": "cross-env TEST_HA_STAGE=T1 TEST_HA_URL=http://127.0.0.1:8123 playwright test e2e/flows/00-ha-scratch-to-communifarm.spec.ts",
+    "test:e2e:t2": "cross-env TEST_HA_STAGE=T2 TEST_HA_URL=http://127.0.0.1:8123 playwright test e2e/flows/upgrade.spec.ts",
+    "test:e2e:t3": "cross-env TEST_HA_STAGE=T3 TEST_HA_URL=http://192.168.102.20:8123 playwright test e2e/flows/onboarding.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "cross-env": "^7.0.3",
+    "typescript": "^5.5.0"
+  }
+}

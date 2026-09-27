@@ -1,0 +1,26 @@
+{
+  "name": "Communifarm HA Dev",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "forwardPorts": [8123],
+  "postCreateCommand": "pip install -e '.[test]' && yarn --cwd . install || true",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-playwright.playwright"
+      ]
+    }
+  },
+  "remoteEnv": {
+    "TEST_HA_URL": "http://127.0.0.1:8123",
+    "TEST_HA_STAGE": "T1"
+  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/workspaces/communifarm"
+}
