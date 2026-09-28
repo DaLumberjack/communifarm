@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -265,6 +265,14 @@ MIGRATIONS: dict[int, str] = {
     ALTER TABLE harvest_events ADD COLUMN zone_id TEXT;
     CREATE INDEX IF NOT EXISTS idx_harvest_events_zone
       ON harvest_events (zone_id);
+    """,
+    8: """
+    ALTER TABLE culture_lots ADD COLUMN zone_id TEXT;
+    ALTER TABLE media_batches ADD COLUMN zone_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_zone
+      ON culture_lots (zone_id);
+    CREATE INDEX IF NOT EXISTS idx_media_batches_zone
+      ON media_batches (zone_id);
     """,
 }
 

@@ -5,9 +5,9 @@ Long-term Communifarm events live in a Communifarm-owned SQLite file — not Hom
 | Item | Value |
 | --- | --- |
 | Path | `<HA config>/communifarm/communifarm.db` |
-| Schema | v7 |
+| Schema | v8 |
 | ADR | [0003-communifarm-sqlite.md](../adr/0003-communifarm-sqlite.md) |
-| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location` |
+| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location`, `set_culture_location`, `set_media_location` |
 
 ## Why not Recorder?
 
@@ -31,12 +31,14 @@ placement_areas (site tents / fridges / cabinets)
 media_batches (culture media hub)
   ├── media_weight_events.media_batch_id
   ├── media_milestones.media_batch_id
-  └── culture_events.media_batch_id
+  ├── culture_events.media_batch_id
+  └── media_batches.zone_id           # placement slot (v8)
 
 culture_lots (culture inventory)
   ├── culture_events.culture_id
   ├── culture_events.batch_id         # production inoculate link
-  └── culture_lots.parent_culture_id  # lineage; expand always creates a child
+  ├── culture_lots.parent_culture_id  # lineage; expand always creates a child
+  └── culture_lots.zone_id            # placement slot (v8)
 ```
 
 | Column | Purpose |
@@ -64,11 +66,13 @@ Sibling process family for agar / liquid culture prep. **Do not overload product
 
 | Service | Purpose |
 | --- | --- |
-| `create_media_batch` | Start MEA agar (default) or honey/Karo LC prep |
+| `create_media_batch` | Start MEA agar (default) or honey/Karo LC prep; optional `zone_id` |
 | `record_media_weight` | Recipe line amount (`g` / `ml`) with scale + target |
 | `record_media_milestone` | `media_portioned` → `media_sterilized` → `media_ready` (pour plates **before** sterilize) |
-| `acquire_culture` | Register lot (`wild` / `acquaintance` / `purchased`) |
-| `introduce_culture` | Requires `media_ready` or `in_use`; **always** creates a new child `culture_lot` |
+| `acquire_culture` | Register lot (`wild` / `acquaintance` / `purchased`); optional `zone_id` |
+| `introduce_culture` | Requires `media_ready` or `in_use`; **always** creates a new child `culture_lot`; optional child `zone_id` |
+| `set_culture_location` | Set `culture_lots.zone_id`; event `culture_location_set` |
+| `set_media_location` | Set `media_batches.zone_id`; event `media_location_set` |
 
 Hard gate: introducing culture into a planned/weighing/sterilizing media batch is rejected.
 
@@ -91,7 +95,7 @@ Culture → substrate containers (independent of mix recipe). See [production-in
 
 `harvest_events` rows FK `batches.stable_id`. Dashboard **Production** tab drives the flow.
 
-## Placement locations (schema v7)
+## Placement locations (schema v7–v8)
 
 Site → PlacementArea → Zone. See [placement-locations.md](../process/placement-locations.md).
 
@@ -99,8 +103,10 @@ Site → PlacementArea → Zone. See [placement-locations.md](../process/placeme
 | --- | --- |
 | `ensure_placement_layout` | Seed default tents/fridges/cabinets + 24 zones (idempotent) |
 | `set_batch_location` | Set `batches.zone_id` |
+| `set_culture_location` | Set `culture_lots.zone_id` (v8) |
+| `set_media_location` | Set `media_batches.zone_id` (v8) |
 
-Soft stage → area_kind hints only (no hard reject in MVP).
+Soft stage / form / media-status → area_kind hints only (no hard reject in MVP).
 
 ## Mix weigh-ins (`weight_events`)
 

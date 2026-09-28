@@ -40,6 +40,8 @@ from .const import (
     SERVICE_RECORD_WEIGHT,
     SERVICE_SET_BATCH_LOCATION,
     SERVICE_SET_CHECK_REMINDER,
+    SERVICE_SET_CULTURE_LOCATION,
+    SERVICE_SET_MEDIA_LOCATION,
     SERVICE_TRANSITION_BATCH,
     SIGNAL_WEIGH_SESSION_UPDATED,
     new_weigh_session_tracker,
@@ -129,6 +131,7 @@ CREATE_MEDIA_BATCH_SCHEMA = vol.Schema(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
         ),
         vol.Optional("vessel_count"): vol.All(vol.Coerce(int), vol.Range(min=1, max=500)),
+        vol.Optional("zone_id"): cv.string,
     }
 )
 
@@ -155,6 +158,7 @@ ACQUIRE_CULTURE_SCHEMA = vol.Schema(
         vol.Required("form"): vol.In(CULTURE_FORMS),
         vol.Optional("container"): vol.In(CULTURE_CONTAINERS),
         vol.Optional("strain_label", default=""): cv.string,
+        vol.Optional("zone_id"): cv.string,
     }
 )
 
@@ -163,6 +167,7 @@ INTRODUCE_CULTURE_SCHEMA = vol.Schema(
         vol.Required("culture_id"): cv.string,
         vol.Required("media_batch_id"): cv.string,
         vol.Optional("child_name"): cv.string,
+        vol.Optional("zone_id"): cv.string,
     }
 )
 
@@ -215,6 +220,20 @@ SET_BATCH_LOCATION_SCHEMA = vol.Schema(
     {
         vol.Required("zone_id"): cv.string,
         vol.Optional("batch_id"): cv.string,
+    }
+)
+
+SET_CULTURE_LOCATION_SCHEMA = vol.Schema(
+    {
+        vol.Required("culture_id"): cv.string,
+        vol.Required("zone_id"): cv.string,
+    }
+)
+
+SET_MEDIA_LOCATION_SCHEMA = vol.Schema(
+    {
+        vol.Required("media_batch_id"): cv.string,
+        vol.Required("zone_id"): cv.string,
     }
 )
 
@@ -332,6 +351,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             name=call.data.get("name"),
             recipe_scale=call.data.get("recipe_scale", 1.0),
             vessel_count=call.data.get("vessel_count"),
+            zone_id=call.data.get("zone_id"),
         )
 
     async def async_record_media_weight(call: ServiceCall) -> None:
@@ -361,6 +381,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             form=call.data["form"],
             container=call.data.get("container"),
             strain_label=call.data.get("strain_label", ""),
+            zone_id=call.data.get("zone_id"),
         )
 
     async def async_introduce_culture(call: ServiceCall) -> None:
@@ -370,6 +391,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             culture_id=call.data["culture_id"],
             media_batch_id=call.data["media_batch_id"],
             child_name=call.data.get("child_name"),
+            zone_id=call.data.get("zone_id"),
         )
 
     async def async_inoculate_batch(call: ServiceCall) -> None:
@@ -427,6 +449,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.entry_id,
             zone_id=call.data["zone_id"],
             batch_id=call.data.get("batch_id"),
+        )
+
+    async def async_set_culture_location(call: ServiceCall) -> None:
+        await culture_actions.async_set_culture_location(
+            hass,
+            entry.entry_id,
+            culture_id=call.data["culture_id"],
+            zone_id=call.data["zone_id"],
+        )
+
+    async def async_set_media_location(call: ServiceCall) -> None:
+        await culture_actions.async_set_media_location(
+            hass,
+            entry.entry_id,
+            media_batch_id=call.data["media_batch_id"],
+            zone_id=call.data["zone_id"],
         )
 
     if not hass.services.has_service(DOMAIN, SERVICE_TRANSITION_BATCH):
@@ -540,6 +578,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_SET_BATCH_LOCATION,
             async_set_batch_location,
             schema=SET_BATCH_LOCATION_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_CULTURE_LOCATION):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_CULTURE_LOCATION,
+            async_set_culture_location,
+            schema=SET_CULTURE_LOCATION_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_MEDIA_LOCATION):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_MEDIA_LOCATION,
+            async_set_media_location,
+            schema=SET_MEDIA_LOCATION_SCHEMA,
         )
 
     @callback
@@ -767,6 +819,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_SET_CHECK_REMINDER,
                 SERVICE_ENSURE_PLACEMENT_LAYOUT,
                 SERVICE_SET_BATCH_LOCATION,
+                SERVICE_SET_CULTURE_LOCATION,
+                SERVICE_SET_MEDIA_LOCATION,
             ):
                 if hass.services.has_service(DOMAIN, service):
                     hass.services.async_remove(DOMAIN, service)

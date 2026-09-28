@@ -76,8 +76,8 @@ class CultureRepository:
             INSERT INTO culture_lots (
               stable_id, site_id, environment_id, name, source_type, form, container,
               strain_label, parent_culture_id, status, acquired_at, created_at,
-              nfc_uid, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              nfc_uid, notes, zone_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lot.id,
@@ -94,6 +94,7 @@ class CultureRepository:
                 created,
                 lot.nfc_uid,
                 lot.notes,
+                lot.zone_id,
             ),
         )
         self._conn.commit()
@@ -133,8 +134,8 @@ class CultureRepository:
             INSERT INTO media_batches (
               stable_id, site_id, environment_id, name, recipe_key, media_form,
               vessel_type, recipe_scale, status, vessel_count, sterilized_at,
-              ready_at, created_at, nfc_uid, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ready_at, created_at, nfc_uid, notes, zone_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 batch.id,
@@ -152,6 +153,7 @@ class CultureRepository:
                 created,
                 batch.nfc_uid,
                 batch.notes,
+                batch.zone_id,
             ),
         )
         self._conn.commit()
@@ -213,6 +215,36 @@ class CultureRepository:
             WHERE stable_id = ?
             """,
             (status, sterilized_at, ready_at, media_batch_id),
+        )
+        self._conn.commit()
+
+    async def async_set_culture_zone(
+        self, culture_id: str, zone_id: str | None
+    ) -> None:
+        await self._hass.async_add_executor_job(
+            self._set_culture_zone_sync, culture_id, zone_id
+        )
+
+    def _set_culture_zone_sync(self, culture_id: str, zone_id: str | None) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE culture_lots SET zone_id = ? WHERE stable_id = ?",
+            (zone_id, culture_id),
+        )
+        self._conn.commit()
+
+    async def async_set_media_zone(
+        self, media_batch_id: str, zone_id: str | None
+    ) -> None:
+        await self._hass.async_add_executor_job(
+            self._set_media_zone_sync, media_batch_id, zone_id
+        )
+
+    def _set_media_zone_sync(self, media_batch_id: str, zone_id: str | None) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE media_batches SET zone_id = ? WHERE stable_id = ?",
+            (zone_id, media_batch_id),
         )
         self._conn.commit()
 
@@ -408,16 +440,19 @@ class CultureRepository:
     def _acquire_culture_sync(self, lot: CultureLot) -> CultureLot:
         lot = self._insert_culture_sync(lot)
         when = lot.acquired_at or datetime.now(tz=UTC).isoformat()
+        detail: dict[str, Any] = {
+            "source_type": lot.source_type,
+            "form": lot.form,
+            "container": lot.container,
+        }
+        if lot.zone_id:
+            detail["zone_id"] = lot.zone_id
         self._insert_culture_event_sync(
             CultureEvent(
                 event_type=EVENT_CULTURE_ACQUIRED,
                 culture_id=lot.id,
                 recorded_at=when,
-                detail={
-                    "source_type": lot.source_type,
-                    "form": lot.form,
-                    "container": lot.container,
-                },
+                detail=detail,
             )
         )
         return lot
@@ -428,16 +463,19 @@ class CultureRepository:
     def _create_media_batch_sync(self, batch: MediaBatch) -> MediaBatch:
         batch = self._insert_media_batch_sync(batch)
         when = batch.created_at or datetime.now(tz=UTC).isoformat()
+        detail: dict[str, Any] = {
+            "recipe_key": batch.recipe_key,
+            "media_form": batch.media_form,
+            "vessel_type": batch.vessel_type,
+        }
+        if batch.zone_id:
+            detail["zone_id"] = batch.zone_id
         self._insert_culture_event_sync(
             CultureEvent(
                 event_type=EVENT_MEDIA_BATCH_CREATED,
                 media_batch_id=batch.id,
                 recorded_at=when,
-                detail={
-                    "recipe_key": batch.recipe_key,
-                    "media_form": batch.media_form,
-                    "vessel_type": batch.vessel_type,
-                },
+                detail=detail,
             )
         )
         return batch
@@ -451,6 +489,7 @@ class CultureRepository:
         child_form: str | None = None,
         child_container: str | None = None,
         recorded_at: str | None = None,
+        zone_id: str | None = None,
     ) -> tuple[CultureLot, CultureEvent]:
         """Gate on media ready, create child lot, append CultureIntroduced."""
         return await self._hass.async_add_executor_job(
@@ -461,6 +500,7 @@ class CultureRepository:
             child_form,
             child_container,
             recorded_at,
+            zone_id,
         )
 
     def _introduce_culture_sync(
@@ -471,6 +511,7 @@ class CultureRepository:
         child_form: str | None,
         child_container: str | None,
         recorded_at: str | None,
+        zone_id: str | None,
     ) -> tuple[CultureLot, CultureEvent]:
         parent = self._get_culture_sync(parent_culture_id)
         if parent is None:
@@ -487,8 +528,16 @@ class CultureRepository:
             form=child_form,
             container=child_container,
             acquired_at=when,
+            zone_id=zone_id,
         )
         child = self._insert_culture_sync(child)
+        detail: dict[str, Any] = {
+            "parent_form": parent.form,
+            "child_form": child.form,
+            "media_recipe_key": media.recipe_key,
+        }
+        if zone_id:
+            detail["zone_id"] = zone_id
         event = self._insert_culture_event_sync(
             CultureEvent(
                 event_type=EVENT_CULTURE_INTRODUCED,
@@ -496,11 +545,7 @@ class CultureRepository:
                 child_culture_id=child.id,
                 media_batch_id=media.id,
                 recorded_at=when,
-                detail={
-                    "parent_form": parent.form,
-                    "child_form": child.form,
-                    "media_recipe_key": media.recipe_key,
-                },
+                detail=detail,
             )
         )
         if media.status == MEDIA_STATUS_READY:
@@ -520,6 +565,7 @@ class CultureRepository:
 
     @staticmethod
     def _row_to_culture(row: Any) -> CultureLot:
+        keys = row.keys()
         return CultureLot(
             id=row["stable_id"],
             site_id=row["site_id"],
@@ -534,10 +580,12 @@ class CultureRepository:
             acquired_at=row["acquired_at"],
             nfc_uid=row["nfc_uid"],
             notes=row["notes"],
+            zone_id=row["zone_id"] if "zone_id" in keys else None,
         )
 
     @staticmethod
     def _row_to_media(row: Any) -> MediaBatch:
+        keys = row.keys()
         return MediaBatch(
             id=row["stable_id"],
             site_id=row["site_id"],
@@ -554,6 +602,7 @@ class CultureRepository:
             nfc_uid=row["nfc_uid"],
             notes=row["notes"],
             created_at=row["created_at"],
+            zone_id=row["zone_id"] if "zone_id" in keys else None,
         )
 
     @staticmethod

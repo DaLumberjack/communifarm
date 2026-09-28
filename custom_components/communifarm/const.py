@@ -84,6 +84,8 @@ SERVICE_ADD_BATCH_NOTE = "add_batch_note"
 SERVICE_SET_CHECK_REMINDER = "set_check_reminder"
 SERVICE_ENSURE_PLACEMENT_LAYOUT = "ensure_placement_layout"
 SERVICE_SET_BATCH_LOCATION = "set_batch_location"
+SERVICE_SET_CULTURE_LOCATION = "set_culture_location"
+SERVICE_SET_MEDIA_LOCATION = "set_media_location"
 
 SIGNAL_WEIGH_SESSION_UPDATED = f"{DOMAIN}_weigh_session_updated"
 SIGNAL_BATCH_UPDATED = f"{DOMAIN}_batch_updated"

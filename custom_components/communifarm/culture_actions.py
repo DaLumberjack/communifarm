@@ -16,10 +16,13 @@ from .domain.culture import (
     CULTURE_CONTAINERS,
     CULTURE_FORMS,
     DEFAULT_AGAR_RECIPE_KEY,
+    EVENT_CULTURE_LOCATION_SET,
+    EVENT_MEDIA_LOCATION_SET,
     FORM_AGAR,
     FORM_SPORES,
     MEDIA_MILESTONES,
     SOURCE_TYPES,
+    CultureEvent,
     CultureLot,
     MediaWeightEvent,
     build_media_batch_from_recipe,
@@ -27,11 +30,16 @@ from .domain.culture import (
     target_for_media_ingredient,
     validate_media_amount,
 )
+from .domain.location import (
+    suggest_area_kind_for_culture_form,
+    suggest_area_kind_for_media_status,
+)
 from .domain.models import CommunifarmState
 from .domain.recipe import clamp_recipe_scale
 from .domain.validation import ValidationError, validate_ingredient_label, validate_readable_name
 from .domain.weight import ingredient_key_from_label
 from .storage.culture_repository import CultureRepository
+from .storage.location_repository import LocationRepository
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,8 +52,28 @@ def _repo(hass: HomeAssistant, entry_id: str) -> CultureRepository:
     return repo
 
 
+def _location_repo(hass: HomeAssistant, entry_id: str) -> LocationRepository:
+    repo = hass.data[DOMAIN][entry_id].get("location_repository")
+    if repo is None:
+        raise HomeAssistantError("Location repository is not available")
+    return repo
+
+
 def _state(hass: HomeAssistant, entry_id: str) -> CommunifarmState:
     return hass.data[DOMAIN][entry_id]["state"]
+
+
+async def _require_zone(
+    hass: HomeAssistant, entry_id: str, zone_id: str | None
+) -> str | None:
+    """Validate optional zone_id; return stripped id or None."""
+    if zone_id is None or not str(zone_id).strip():
+        return None
+    resolved = str(zone_id).strip()
+    zone = await _location_repo(hass, entry_id).async_get_zone(resolved)
+    if zone is None:
+        raise HomeAssistantError(f"unknown zone_id: {zone_id}")
+    return resolved
 
 
 async def async_create_media_batch(
@@ -56,9 +84,11 @@ async def async_create_media_batch(
     name: str | None = None,
     recipe_scale: float = 1.0,
     vessel_count: int | None = None,
+    zone_id: str | None = None,
 ) -> str:
     state = _state(hass, entry_id)
     repo = _repo(hass, entry_id)
+    resolved_zone = await _require_zone(hass, entry_id, zone_id)
     try:
         batch = build_media_batch_from_recipe(
             site_id=state.site.id,
@@ -67,9 +97,22 @@ async def async_create_media_batch(
             name=name,
             recipe_scale=recipe_scale,
             vessel_count=vessel_count,
+            zone_id=resolved_zone,
         )
     except ValidationError as err:
         raise HomeAssistantError(str(err)) from err
+    if resolved_zone:
+        loc_repo = _location_repo(hass, entry_id)
+        zone = await loc_repo.async_get_zone(resolved_zone)
+        area = await loc_repo.async_get_area(zone.area_id) if zone else None
+        suggested = suggest_area_kind_for_media_status(batch.status)
+        if suggested and area is not None and area.area_kind != suggested:
+            _LOGGER.warning(
+                "soft warning: media status %s usually uses %s; zone is in %s",
+                batch.status,
+                suggested,
+                area.area_kind,
+            )
     await repo.async_create_media_batch(batch)
     hass.data[DOMAIN][entry_id]["active_media_batch_id"] = batch.id
     _LOGGER.info("Created media batch %s recipe=%s", batch.id, batch.recipe_key)
@@ -158,6 +201,7 @@ async def async_acquire_culture(
     form: str,
     container: str | None = None,
     strain_label: str = "",
+    zone_id: str | None = None,
 ) -> str:
     state = _state(hass, entry_id)
     repo = _repo(hass, entry_id)
@@ -175,6 +219,7 @@ async def async_acquire_culture(
             resolved_container = CONTAINER_JAR
     if resolved_container not in CULTURE_CONTAINERS:
         raise HomeAssistantError(f"container must be one of {sorted(CULTURE_CONTAINERS)}")
+    resolved_zone = await _require_zone(hass, entry_id, zone_id)
     try:
         validate_readable_name(name, field_name="culture name")
         lot = CultureLot(
@@ -185,9 +230,22 @@ async def async_acquire_culture(
             form=form,
             container=resolved_container,
             strain_label=strain_label or "",
+            zone_id=resolved_zone,
         )
     except ValidationError as err:
         raise HomeAssistantError(str(err)) from err
+    if resolved_zone:
+        loc_repo = _location_repo(hass, entry_id)
+        zone = await loc_repo.async_get_zone(resolved_zone)
+        area = await loc_repo.async_get_area(zone.area_id) if zone else None
+        suggested = suggest_area_kind_for_culture_form(form)
+        if suggested and area is not None and area.area_kind != suggested:
+            _LOGGER.warning(
+                "soft warning: culture form %s usually uses %s; zone is in %s",
+                form,
+                suggested,
+                area.area_kind,
+            )
     await repo.async_acquire_culture(lot)
     hass.data[DOMAIN][entry_id]["active_culture_id"] = lot.id
     _LOGGER.info("Acquired culture %s source=%s form=%s", lot.id, source_type, form)
@@ -201,13 +259,16 @@ async def async_introduce_culture(
     culture_id: str,
     media_batch_id: str,
     child_name: str | None = None,
+    zone_id: str | None = None,
 ) -> str:
     repo = _repo(hass, entry_id)
+    resolved_zone = await _require_zone(hass, entry_id, zone_id)
     try:
         child, _event = await repo.async_introduce_culture(
             parent_culture_id=culture_id,
             media_batch_id=media_batch_id,
             child_name=child_name,
+            zone_id=resolved_zone,
         )
     except ValidationError as err:
         raise HomeAssistantError(str(err)) from err
@@ -220,6 +281,112 @@ async def async_introduce_culture(
         child.id,
     )
     return child.id
+
+
+async def async_set_culture_location(
+    hass: HomeAssistant,
+    entry_id: str,
+    *,
+    culture_id: str,
+    zone_id: str,
+) -> str:
+    repo = _repo(hass, entry_id)
+    if not zone_id or not str(zone_id).strip():
+        raise HomeAssistantError("zone_id is required")
+    resolved_zone = await _require_zone(hass, entry_id, zone_id)
+    assert resolved_zone is not None
+    lot = await repo.async_get_culture(culture_id)
+    if lot is None:
+        raise HomeAssistantError(f"unknown culture_id: {culture_id}")
+
+    loc_repo = _location_repo(hass, entry_id)
+    zone = await loc_repo.async_get_zone(resolved_zone)
+    area = await loc_repo.async_get_area(zone.area_id) if zone else None
+    suggested = suggest_area_kind_for_culture_form(lot.form)
+    if suggested and area is not None and area.area_kind != suggested:
+        _LOGGER.warning(
+            "soft warning: culture form %s usually uses %s; zone is in %s",
+            lot.form,
+            suggested,
+            area.area_kind,
+        )
+
+    when = datetime.now(tz=UTC).isoformat()
+    await repo.async_set_culture_zone(lot.id, resolved_zone)
+    await repo.async_insert_culture_event(
+        CultureEvent(
+            event_type=EVENT_CULTURE_LOCATION_SET,
+            culture_id=lot.id,
+            recorded_at=when,
+            detail={
+                "zone_id": resolved_zone,
+                "area_id": zone.area_id if zone else None,
+                "area_kind": area.area_kind if area else None,
+                "previous_zone_id": lot.zone_id,
+            },
+        )
+    )
+    _LOGGER.info(
+        "Culture %s placed in zone %s (%s / %s)",
+        lot.id,
+        resolved_zone,
+        area.name if area else (zone.area_id if zone else "?"),
+        zone.name if zone else "?",
+    )
+    return resolved_zone
+
+
+async def async_set_media_location(
+    hass: HomeAssistant,
+    entry_id: str,
+    *,
+    media_batch_id: str,
+    zone_id: str,
+) -> str:
+    repo = _repo(hass, entry_id)
+    if not zone_id or not str(zone_id).strip():
+        raise HomeAssistantError("zone_id is required")
+    resolved_zone = await _require_zone(hass, entry_id, zone_id)
+    assert resolved_zone is not None
+    media = await repo.async_get_media_batch(media_batch_id)
+    if media is None:
+        raise HomeAssistantError(f"unknown media_batch_id: {media_batch_id}")
+
+    loc_repo = _location_repo(hass, entry_id)
+    zone = await loc_repo.async_get_zone(resolved_zone)
+    area = await loc_repo.async_get_area(zone.area_id) if zone else None
+    suggested = suggest_area_kind_for_media_status(media.status)
+    if suggested and area is not None and area.area_kind != suggested:
+        _LOGGER.warning(
+            "soft warning: media status %s usually uses %s; zone is in %s",
+            media.status,
+            suggested,
+            area.area_kind,
+        )
+
+    when = datetime.now(tz=UTC).isoformat()
+    await repo.async_set_media_zone(media.id, resolved_zone)
+    await repo.async_insert_culture_event(
+        CultureEvent(
+            event_type=EVENT_MEDIA_LOCATION_SET,
+            media_batch_id=media.id,
+            recorded_at=when,
+            detail={
+                "zone_id": resolved_zone,
+                "area_id": zone.area_id if zone else None,
+                "area_kind": area.area_kind if area else None,
+                "previous_zone_id": media.zone_id,
+            },
+        )
+    )
+    _LOGGER.info(
+        "Media %s placed in zone %s (%s / %s)",
+        media.id,
+        resolved_zone,
+        area.name if area else (zone.area_id if zone else "?"),
+        zone.name if zone else "?",
+    )
+    return resolved_zone
 
 
 def media_recipe_summary(recipe_key: str = DEFAULT_AGAR_RECIPE_KEY) -> list[dict[str, str | float]]:

@@ -25,16 +25,18 @@ Recording scale weights (NFC-selected ingredient + mass) is the first Communifar
 6. **Culture media (schema v5)**: sibling hubs `media_batches` + `culture_lots` with `media_weight_events`, `media_milestones`, and `culture_events`. Expand/transfer always creates a new child culture lot; culture may enter media only when status is `media_ready` (or already `in_use`).
 7. **Production inoculate (schema v6)**: `batches` gains culture/container/substrate/flush columns; `harvest_events` append-only flush weights; `culture_events.batch_id` links culture → production inoculate (no child culture lot for substrate).
 8. **Placement locations (schema v7)**: `placement_areas` + `zones` under a site; `batches.zone_id` and optional `harvest_events.zone_id`; data-driven `area_kind` / `slot_kind` (default seed: fruiting/inoculation tents, culture/harvest fridges, still-air cabinet).
-9. Do **not** create custom tables inside Recorder’s database.
-10. Cloud later: replicate/migrate the same relational model to an open-source server DB (e.g. PostgreSQL); keep domain repositories abstract so backends can swap.
+9. **Culture / media placement (schema v8)**: `culture_lots.zone_id` + `media_batches.zone_id`; services `set_culture_location` / `set_media_location`; optional `zone_id` on `acquire_culture` / `create_media_batch` / `introduce_culture`; events `culture_location_set` / `media_location_set`.
+10. Do **not** create custom tables inside Recorder’s database.
+11. Cloud later: replicate/migrate the same relational model to an open-source server DB (e.g. PostgreSQL); keep domain repositories abstract so backends can swap.
 
 ## Consequences
 
 - Weigh “Record” persists via Communifarm (service + scale button hook), not only ESPHome `last_recorded` text.
 - SQLite I/O runs off the event loop (`async_add_executor_job`).
-- Schema versioned with tested migrations (current: **v7**).
+- Schema versioned with tested migrations (current: **v8**).
 - Env metric rollups remain a later table family; raw high-frequency sensor history stays Recorder’s job.
 - Selling / production statistics tables must FK `batches.stable_id` — do not invent parallel batch ids.
 - Culture media must not reuse production `batches` rows for agar/LC prep.
 - Harvest yield analysis uses `harvest_events` keyed by batch.
 - Physical placement uses `zones.stable_id`; do not treat mutable area display names as permanent IDs.
+- Culture lots and media batches share the same zone ID space as production batches.
