@@ -47,6 +47,9 @@ create_media_batch:
     vessel_count:
       name: Vessel count
       description: Number of plates or jars.
+    zone_id:
+      name: Zone ID
+      description: Optional placement zone (e.g. still-air cabinet shelf).
 
 record_media_weight:
   name: Record media weight
@@ -130,6 +133,9 @@ acquire_culture:
             - other
     strain_label:
       name: Strain label
+    zone_id:
+      name: Zone ID
+      description: Optional placement zone (e.g. culture fridge shelf).
 
 introduce_culture:
   name: Introduce culture
@@ -143,6 +149,9 @@ introduce_culture:
       required: true
     child_name:
       name: Child culture name
+    zone_id:
+      name: Zone ID
+      description: Optional storage zone for the child culture after intro.
 
 inoculate_batch:
   name: Inoculate batch
@@ -256,3 +265,25 @@ set_batch_location:
     batch_id:
       name: Batch ID
       description: Defaults to the active batch.
+
+set_culture_location:
+  name: Set culture location
+  description: Place a culture lot into a zone slot (culture fridge shelf).
+  fields:
+    culture_id:
+      name: Culture lot ID
+      required: true
+    zone_id:
+      name: Zone ID
+      required: true
+
+set_media_location:
+  name: Set media location
+  description: Place a media prep batch into a zone slot (SAB or culture fridge).
+  fields:
+    media_batch_id:
+      name: Media batch ID
+      required: true
+    zone_id:
+      name: Zone ID
+      required: true

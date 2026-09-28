@@ -388,8 +388,11 @@ class DashboardBuilder:
                         "3. Final harvest completes the batch\n\n"
                         "**Placement:** call `ensure_placement_layout` once, then "
                         "`set_batch_location` / pass `zone_id` on inoculate/advance/harvest.\n"
+                        "Culture/media: `set_culture_location`, `set_media_location`, "
+                        "or optional `zone_id` on acquire/create/introduce.\n"
                         "Soft hints: inoculated/incubating → inoculation tent; "
-                        "fruiting/harvesting → fruiting tent; pick → harvest fridge shelf.\n"
+                        "fruiting/harvesting → fruiting tent; pick → harvest fridge shelf; "
+                        "culture storage → culture fridge; media prep → still-air cabinet.\n"
                     ),
                 },
                 {

@@ -153,6 +153,8 @@ EVENT_CULTURE_TRANSFER = "culture_transfer"
 EVENT_CULTURE_INOCULATED_BATCH = "culture_inoculated_batch"
 EVENT_CULTURE_CONTAMINATED = "culture_contaminated"
 EVENT_CULTURE_RETIRED = "culture_retired"
+EVENT_CULTURE_LOCATION_SET = "culture_location_set"
+EVENT_MEDIA_LOCATION_SET = "media_location_set"
 
 # LC mason-jar lid expectations (documented on recipe meta; not separate columns yet).
 LC_LID_FEATURES = frozenset({"syringe_port", "breathability_port", "stir_bar"})
@@ -196,6 +198,7 @@ class CultureLot:
     acquired_at: str | None = None
     nfc_uid: str | None = None
     notes: str | None = None
+    zone_id: str | None = None
     id: str = ""
 
     def __post_init__(self) -> None:
@@ -225,6 +228,7 @@ class MediaBatch:
     nfc_uid: str | None = None
     notes: str | None = None
     created_at: str | None = None
+    zone_id: str | None = None
     id: str = ""
 
     def __post_init__(self) -> None:
@@ -332,6 +336,7 @@ def build_media_batch_from_recipe(
     vessel_count: int | None = None,
     nfc_uid: str | None = None,
     notes: str | None = None,
+    zone_id: str | None = None,
 ) -> MediaBatch:
     if recipe_key not in MEDIA_RECIPES:
         raise ValidationError(f"unknown media recipe_key: {recipe_key}")
@@ -347,6 +352,7 @@ def build_media_batch_from_recipe(
         vessel_count=vessel_count,
         nfc_uid=nfc_uid,
         notes=notes,
+        zone_id=zone_id,
     )
 
 
@@ -379,6 +385,7 @@ def child_culture_from_parent(
     form: str | None = None,
     container: str | None = None,
     acquired_at: str | None = None,
+    zone_id: str | None = None,
 ) -> CultureLot:
     """Always create a new child lot — never mutate parent identity."""
     return CultureLot(
@@ -394,6 +401,7 @@ def child_culture_from_parent(
         status=CULTURE_STATUS_ACTIVE,
         acquired_at=acquired_at,
         notes=f"expanded from {parent.id}",
+        zone_id=zone_id,
     )
 
 
