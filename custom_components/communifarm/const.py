@@ -82,6 +82,8 @@ SERVICE_ADVANCE_PRODUCTION_STAGE = "advance_production_stage"
 SERVICE_RECORD_HARVEST = "record_harvest"
 SERVICE_ADD_BATCH_NOTE = "add_batch_note"
 SERVICE_SET_CHECK_REMINDER = "set_check_reminder"
+SERVICE_ENSURE_PLACEMENT_LAYOUT = "ensure_placement_layout"
+SERVICE_SET_BATCH_LOCATION = "set_batch_location"
 
 SIGNAL_WEIGH_SESSION_UPDATED = f"{DOMAIN}_weigh_session_updated"
 SIGNAL_BATCH_UPDATED = f"{DOMAIN}_batch_updated"

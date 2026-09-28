@@ -14,7 +14,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
-from . import batch_actions, culture_actions, production_actions
+from . import batch_actions, culture_actions, location_actions, production_actions
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
     DOMAIN,
@@ -30,6 +30,7 @@ from .const import (
     SERVICE_ADVANCE_PRODUCTION_STAGE,
     SERVICE_COMPLETE_AND_NEW_BATCH,
     SERVICE_CREATE_MEDIA_BATCH,
+    SERVICE_ENSURE_PLACEMENT_LAYOUT,
     SERVICE_INOCULATE_BATCH,
     SERVICE_INTRODUCE_CULTURE,
     SERVICE_RECORD_BATCH_MILESTONE,
@@ -37,6 +38,7 @@ from .const import (
     SERVICE_RECORD_MEDIA_MILESTONE,
     SERVICE_RECORD_MEDIA_WEIGHT,
     SERVICE_RECORD_WEIGHT,
+    SERVICE_SET_BATCH_LOCATION,
     SERVICE_SET_CHECK_REMINDER,
     SERVICE_TRANSITION_BATCH,
     SIGNAL_WEIGH_SESSION_UPDATED,
@@ -79,6 +81,7 @@ from .domain.validation import (
 from .domain.weight import WeightEvent, ingredient_key_from_label
 from .storage.batch_repository import BatchRepository
 from .storage.culture_repository import CultureRepository
+from .storage.location_repository import LocationRepository
 from .storage.repository import CommunifarmRepository
 from .storage.weight_repository import WeightEventRepository
 
@@ -178,6 +181,7 @@ INOCULATE_BATCH_SCHEMA = vol.Schema(
         ),
         vol.Optional("expected_check_at"): cv.string,
         vol.Optional("notes"): cv.string,
+        vol.Optional("zone_id"): cv.string,
     }
 )
 
@@ -186,6 +190,7 @@ ADVANCE_PRODUCTION_SCHEMA = vol.Schema(
         vol.Optional("target_stage"): vol.In(
             {STAGE_INCUBATING, STAGE_FRUITING, STAGE_HARVESTING}
         ),
+        vol.Optional("zone_id"): cv.string,
     }
 )
 
@@ -194,6 +199,7 @@ RECORD_HARVEST_SCHEMA = vol.Schema(
         vol.Required("mass_g"): vol.Coerce(float),
         vol.Optional("is_final", default=False): cv.boolean,
         vol.Optional("notes"): cv.string,
+        vol.Optional("zone_id"): cv.string,
     }
 )
 
@@ -201,6 +207,15 @@ ADD_BATCH_NOTE_SCHEMA = vol.Schema({vol.Required("note"): cv.string})
 
 SET_CHECK_REMINDER_SCHEMA = vol.Schema(
     {vol.Required("expected_check_at"): cv.string}
+)
+
+ENSURE_PLACEMENT_LAYOUT_SCHEMA = vol.Schema({})
+
+SET_BATCH_LOCATION_SCHEMA = vol.Schema(
+    {
+        vol.Required("zone_id"): cv.string,
+        vol.Optional("batch_id"): cv.string,
+    }
 )
 
 _TARE_BUTTONS = frozenset(
@@ -235,6 +250,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await batch_repo.async_setup()
     culture_repo = CultureRepository(hass, path=weight_repo.path)
     await culture_repo.async_setup()
+    location_repo = LocationRepository(hass, path=weight_repo.path)
+    await location_repo.async_setup()
+    await location_repo.async_ensure_default_layout(state.site.id)
     await batch_repo.async_ensure_batch(
         batch_id=state.batch.id,
         site_id=state.site.id,
@@ -250,6 +268,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "weight_repository": weight_repo,
         "batch_repository": batch_repo,
         "culture_repository": culture_repo,
+        "location_repository": location_repo,
         "state": state,
         "weigh_session": new_weigh_session_tracker(),
         "container_count": 1,
@@ -366,6 +385,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             max_flushes=call.data.get("max_flushes", DEFAULT_MAX_FLUSHES),
             expected_check_at=call.data.get("expected_check_at"),
             notes=call.data.get("notes"),
+            zone_id=call.data.get("zone_id"),
         )
 
     async def async_advance_production(call: ServiceCall) -> None:
@@ -373,6 +393,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             entry.entry_id,
             target_stage=call.data.get("target_stage"),
+            zone_id=call.data.get("zone_id"),
         )
 
     async def async_record_harvest(call: ServiceCall) -> None:
@@ -382,6 +403,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             mass_g=call.data["mass_g"],
             is_final=bool(call.data.get("is_final", False)),
             notes=call.data.get("notes"),
+            zone_id=call.data.get("zone_id"),
         )
 
     async def async_add_batch_note(call: ServiceCall) -> None:
@@ -394,6 +416,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             entry.entry_id,
             expected_check_at=call.data["expected_check_at"],
+        )
+
+    async def async_ensure_placement_layout(call: ServiceCall) -> None:
+        await location_actions.async_ensure_default_layout(hass, entry.entry_id)
+
+    async def async_set_batch_location(call: ServiceCall) -> None:
+        await location_actions.async_set_batch_location(
+            hass,
+            entry.entry_id,
+            zone_id=call.data["zone_id"],
+            batch_id=call.data.get("batch_id"),
         )
 
     if not hass.services.has_service(DOMAIN, SERVICE_TRANSITION_BATCH):
@@ -493,6 +526,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_SET_CHECK_REMINDER,
             async_set_check_reminder,
             schema=SET_CHECK_REMINDER_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_ENSURE_PLACEMENT_LAYOUT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_ENSURE_PLACEMENT_LAYOUT,
+            async_ensure_placement_layout,
+            schema=ENSURE_PLACEMENT_LAYOUT_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_BATCH_LOCATION):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_BATCH_LOCATION,
+            async_set_batch_location,
+            schema=SET_BATCH_LOCATION_SCHEMA,
         )
 
     @callback
@@ -693,6 +740,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     culture_repo: CultureRepository | None = bucket.get("culture_repository")
     if culture_repo is not None:
         await culture_repo.async_close()
+    location_repo: LocationRepository | None = bucket.get("location_repository")
+    if location_repo is not None:
+        await location_repo.async_close()
 
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, [Platform(p) for p in PLATFORMS]
@@ -715,6 +765,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_RECORD_HARVEST,
                 SERVICE_ADD_BATCH_NOTE,
                 SERVICE_SET_CHECK_REMINDER,
+                SERVICE_ENSURE_PLACEMENT_LAYOUT,
+                SERVICE_SET_BATCH_LOCATION,
             ):
                 if hass.services.has_service(DOMAIN, service):
                     hass.services.async_remove(DOMAIN, service)

@@ -24,15 +24,17 @@ Recording scale weights (NFC-selected ingredient + mass) is the first Communifar
 5. **Milestones `batch_milestones`**: append-only process timeline keyed by `batch_id`.
 6. **Culture media (schema v5)**: sibling hubs `media_batches` + `culture_lots` with `media_weight_events`, `media_milestones`, and `culture_events`. Expand/transfer always creates a new child culture lot; culture may enter media only when status is `media_ready` (or already `in_use`).
 7. **Production inoculate (schema v6)**: `batches` gains culture/container/substrate/flush columns; `harvest_events` append-only flush weights; `culture_events.batch_id` links culture → production inoculate (no child culture lot for substrate).
-8. Do **not** create custom tables inside Recorder’s database.
-9. Cloud later: replicate/migrate the same relational model to an open-source server DB (e.g. PostgreSQL); keep domain repositories abstract so backends can swap.
+8. **Placement locations (schema v7)**: `placement_areas` + `zones` under a site; `batches.zone_id` and optional `harvest_events.zone_id`; data-driven `area_kind` / `slot_kind` (default seed: fruiting/inoculation tents, culture/harvest fridges, still-air cabinet).
+9. Do **not** create custom tables inside Recorder’s database.
+10. Cloud later: replicate/migrate the same relational model to an open-source server DB (e.g. PostgreSQL); keep domain repositories abstract so backends can swap.
 
 ## Consequences
 
 - Weigh “Record” persists via Communifarm (service + scale button hook), not only ESPHome `last_recorded` text.
 - SQLite I/O runs off the event loop (`async_add_executor_job`).
-- Schema versioned with tested migrations (current: **v6**).
+- Schema versioned with tested migrations (current: **v7**).
 - Env metric rollups remain a later table family; raw high-frequency sensor history stays Recorder’s job.
 - Selling / production statistics tables must FK `batches.stable_id` — do not invent parallel batch ids.
 - Culture media must not reuse production `batches` rows for agar/LC prep.
 - Harvest yield analysis uses `harvest_events` keyed by batch.
+- Physical placement uses `zones.stable_id`; do not treat mutable area display names as permanent IDs.

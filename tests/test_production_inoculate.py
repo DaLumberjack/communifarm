@@ -124,7 +124,7 @@ def test_sqlite_migration_v6_adds_production_columns(tmp_path: Path) -> None:
     conn = sqlite_db.connect(path)
     version = sqlite_db.apply_migrations(conn)
     assert version == sqlite_db.SCHEMA_VERSION
-    assert version == 6
+    assert version >= 6
     cols = {
         row[1]
         for row in conn.execute("PRAGMA table_info(batches)").fetchall()
@@ -139,6 +139,7 @@ def test_sqlite_migration_v6_adds_production_columns(tmp_path: Path) -> None:
         "flush_count",
         "max_flushes",
         "inoculated_at",
+        "zone_id",
     ):
         assert col in cols
     tables = {
@@ -167,6 +168,12 @@ def test_dashboard_includes_production_tab(sample_state) -> None:
     assert "Inoculate inputs" in titles
     assert "Lifecycle" in titles
     assert "Harvest" in titles
+    intro = production["cards"][0]["content"]
+    assert "Placement" in intro
+    assert "inoculation tent" in intro
+    status = next(card for card in production["cards"] if card.get("title") == "Status")
+    assert "zone_id" in status["content"]
+    assert "area_name" in status["content"]
     inoculate = next(
         card for card in production["cards"] if card.get("title") == "Inoculate inputs"
     )

@@ -4,10 +4,10 @@ Bridge from culture lots into substrate production batches: inoculate N identica
 
 | Item | Value |
 | --- | --- |
-| Schema | v6 |
-| Services | `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder` |
+| Schema | v7 (production columns from v6; placement from v7) |
+| Services | `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location` |
 | Dashboard | **Production** tab (`/communifarm/production`) |
-| Related | [culture media](../user/storage.md#culture-media-hub-media_batches--culture_lots), [storage](../user/storage.md) |
+| Related | [placement-locations.md](placement-locations.md), [culture media](../user/storage.md#culture-media-hub-media_batches--culture_lots), [storage](../user/storage.md) |
 
 ## Locked defaults
 
@@ -63,5 +63,5 @@ Culture intro into **media** stays on `media_batches`. Production inoculate link
 
 | Stage | Coverage |
 | --- | --- |
-| T0 | `tests/test_production_inoculate.py` — gates, schema v6, dashboard tab, happy path, unknown culture |
+| T0 | `tests/test_production_inoculate.py` + `tests/test_placement_locations.py` — gates, schema v7, dashboard tab, happy path, placement layout |
 | T1 / T2 | Pending |

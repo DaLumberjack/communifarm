@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -225,6 +225,46 @@ MIGRATIONS: dict[int, str] = {
 
     CREATE INDEX IF NOT EXISTS idx_culture_events_batch_time
       ON culture_events (batch_id, recorded_at);
+    """,
+    7: """
+    CREATE TABLE IF NOT EXISTS placement_areas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      area_kind TEXT NOT NULL,
+      slot_kind TEXT NOT NULL,
+      slot_count INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_placement_areas_site
+      ON placement_areas (site_id, area_kind);
+
+    CREATE TABLE IF NOT EXISTS zones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      area_id TEXT NOT NULL,
+      site_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      slot_kind TEXT NOT NULL,
+      slot_index INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_zones_area
+      ON zones (area_id, slot_index);
+    CREATE INDEX IF NOT EXISTS idx_zones_site
+      ON zones (site_id, area_id);
+
+    ALTER TABLE batches ADD COLUMN zone_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_batches_zone
+      ON batches (zone_id);
+
+    ALTER TABLE harvest_events ADD COLUMN zone_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_harvest_events_zone
+      ON harvest_events (zone_id);
     """,
 }
 

@@ -52,6 +52,7 @@ class BatchRecord:
     flush_count: int = 0
     max_flushes: int = DEFAULT_MAX_FLUSHES
     inoculated_at: str | None = None
+    zone_id: str | None = None
 
     def to_attr_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +78,7 @@ class BatchRecord:
             "flush_count": self.flush_count,
             "max_flushes": self.max_flushes,
             "inoculated_at": self.inoculated_at,
+            "zone_id": self.zone_id,
         }
 
 
@@ -433,6 +435,19 @@ class BatchRepository:
             )
         return out
 
+    async def async_set_zone(self, batch_id: str, zone_id: str | None) -> None:
+        await self._hass.async_add_executor_job(
+            self._set_zone_sync, batch_id, zone_id
+        )
+
+    def _set_zone_sync(self, batch_id: str, zone_id: str | None) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE batches SET zone_id = ? WHERE stable_id = ?",
+            (zone_id, batch_id),
+        )
+        self._conn.commit()
+
     async def async_apply_inoculate(
         self,
         *,
@@ -440,6 +455,7 @@ class BatchRepository:
         spec: InoculateSpec,
         inoculated_at: str,
         lifecycle_phase: str,
+        zone_id: str | None = None,
     ) -> BatchRecord:
         return await self._hass.async_add_executor_job(
             self._apply_inoculate_sync,
@@ -447,6 +463,7 @@ class BatchRepository:
             spec,
             inoculated_at,
             lifecycle_phase,
+            zone_id,
         )
 
     def _apply_inoculate_sync(
@@ -455,6 +472,7 @@ class BatchRepository:
         spec: InoculateSpec,
         inoculated_at: str,
         lifecycle_phase: str,
+        zone_id: str | None,
     ) -> BatchRecord:
         assert self._conn is not None
         self._conn.execute(
@@ -471,7 +489,8 @@ class BatchRepository:
                 max_flushes = ?,
                 inoculated_at = ?,
                 lifecycle_phase = ?,
-                notes = COALESCE(?, notes)
+                notes = COALESCE(?, notes),
+                zone_id = COALESCE(?, zone_id)
             WHERE stable_id = ?
             """,
             (
@@ -486,6 +505,7 @@ class BatchRepository:
                 inoculated_at,
                 lifecycle_phase,
                 spec.notes,
+                zone_id,
                 batch_id,
             ),
         )
@@ -508,8 +528,8 @@ class BatchRepository:
             """
             INSERT INTO harvest_events (
               stable_id, batch_id, flush_number, mass_g, is_final, notes,
-              recorded_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              recorded_at, created_at, zone_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.id,
@@ -520,6 +540,7 @@ class BatchRepository:
                 event.notes,
                 event.recorded_at,
                 created,
+                event.zone_id,
             ),
         )
         self._conn.execute(
@@ -542,7 +563,8 @@ class BatchRepository:
         assert self._conn is not None
         rows = self._conn.execute(
             """
-            SELECT stable_id, batch_id, flush_number, mass_g, is_final, notes, recorded_at
+            SELECT stable_id, batch_id, flush_number, mass_g, is_final, notes,
+                   recorded_at, zone_id
             FROM harvest_events
             WHERE batch_id = ?
             ORDER BY flush_number ASC, recorded_at ASC, id ASC
@@ -558,6 +580,7 @@ class BatchRepository:
                 is_final=bool(row["is_final"]),
                 notes=row["notes"],
                 recorded_at=row["recorded_at"],
+                zone_id=row["zone_id"] if "zone_id" in row.keys() else None,
             )
             for row in rows
         ]
@@ -634,6 +657,7 @@ class BatchRepository:
             if "max_flushes" in keys
             else DEFAULT_MAX_FLUSHES,
             inoculated_at=_opt("inoculated_at"),
+            zone_id=_opt("zone_id"),
         )
 
     @staticmethod

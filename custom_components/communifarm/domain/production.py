@@ -88,6 +88,7 @@ class HarvestEvent:
     flush_number: int
     is_final: bool = False
     notes: str | None = None
+    zone_id: str | None = None
     id: str = ""
 
     def __post_init__(self) -> None:
@@ -114,6 +115,12 @@ class ProductionSummary:
     max_flushes: int = DEFAULT_MAX_FLUSHES
     expected_check_at: str | None = None
     inoculated_at: str | None = None
+    zone_id: str | None = None
+    area_name: str | None = None
+    area_kind: str | None = None
+    zone_name: str | None = None
+    suggested_area_kind: str | None = None
+    location_warning: str | None = None
     total_harvest_g: float = 0.0
     harvests: list[dict[str, Any]] = field(default_factory=list)
 
@@ -282,7 +289,11 @@ def format_production_markdown(summary: ProductionSummary) -> str:
         f"| Total harvest (g) | {summary.total_harvest_g:g} |",
         f"| Next check | {summary.expected_check_at or '—'} |",
         f"| Inoculated at | {summary.inoculated_at or '—'} |",
+        f"| Location | {summary.area_name or '—'} / {summary.zone_name or '—'} |",
+        f"| Zone ID | `{summary.zone_id or '—'}` |",
     ]
+    if summary.location_warning:
+        lines.append(f"| Location note | {summary.location_warning} |")
     if summary.harvests:
         lines.extend(
             [

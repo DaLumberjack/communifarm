@@ -188,6 +188,9 @@ inoculate_batch:
       description: ISO timestamp for next operator check.
     notes:
       name: Notes
+    zone_id:
+      name: Zone ID
+      description: Optional placement zone (level/shelf slot).
 
 advance_production_stage:
   name: Advance production stage
@@ -201,6 +204,9 @@ advance_production_stage:
             - incubating
             - fruiting
             - harvesting
+    zone_id:
+      name: Zone ID
+      description: Optional — set batch location when advancing (e.g. fruiting tent level).
 
 record_harvest:
   name: Record harvest
@@ -215,6 +221,9 @@ record_harvest:
         boolean:
     notes:
       name: Notes
+    zone_id:
+      name: Zone ID
+      description: Optional harvest fridge shelf after pick.
 
 add_batch_note:
   name: Add batch note
@@ -232,3 +241,18 @@ set_check_reminder:
       name: Expected check at
       required: true
       description: ISO timestamp.
+
+ensure_placement_layout:
+  name: Ensure placement layout
+  description: Seed default tents/fridges/cabinets and slot zones for the site (idempotent).
+
+set_batch_location:
+  name: Set batch location
+  description: Place the active (or specified) production batch into a zone slot.
+  fields:
+    zone_id:
+      name: Zone ID
+      required: true
+    batch_id:
+      name: Batch ID
+      description: Defaults to the active batch.

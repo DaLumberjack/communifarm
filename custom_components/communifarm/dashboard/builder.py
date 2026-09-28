@@ -385,14 +385,22 @@ class DashboardBuilder:
                         f"Batch: **{state.batch.name}** (`{state.batch.id}`)\n\n"
                         "1. Acquire culture (service) → set container type + substrate g\n"
                         "2. **Inoculate** → incubation → fruiting → harvest\n"
-                        "3. Final harvest completes the batch\n"
+                        "3. Final harvest completes the batch\n\n"
+                        "**Placement:** call `ensure_placement_layout` once, then "
+                        "`set_batch_location` / pass `zone_id` on inoculate/advance/harvest.\n"
+                        "Soft hints: inoculated/incubating → inoculation tent; "
+                        "fruiting/harvesting → fruiting tent; pick → harvest fridge shelf.\n"
                     ),
                 },
                 {
                     "type": "markdown",
                     "title": "Status",
                     "content": (
-                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'progress_text') }}}}"
+                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'progress_text') }}}}\n\n"
+                        f"**Location:** "
+                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'area_name') }}}} / "
+                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_name') }}}} "
+                        f"(`{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_id') }}}}`)"
                     ),
                 },
                 {
