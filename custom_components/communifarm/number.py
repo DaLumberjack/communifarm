@@ -29,6 +29,8 @@ async def async_setup_entry(
             CommunifarmHumidityTarget(entry, state, repo),
             CommunifarmRecipeScale(entry, state, repo),
             CommunifarmContainerCount(entry.entry_id),
+            CommunifarmSubstrateGPerContainer(entry.entry_id),
+            CommunifarmHarvestMassG(entry.entry_id),
         ]
     )
 
@@ -192,4 +194,74 @@ class CommunifarmContainerCount(NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         count = max(1, int(value))
         self.hass.data[DOMAIN][self._entry_id]["container_count"] = count
+        self.async_write_ha_state()
+
+
+class CommunifarmSubstrateGPerContainer(NumberEntity):
+    """Substrate mass (g) per production container (Production tab)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Substrate g per container"
+    _attr_unique_id = "communifarm_substrate_g_per_container"
+    _attr_icon = "mdi:weight-gram"
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = 1.0
+    _attr_native_max_value = 50000.0
+    _attr_native_step = 1.0
+    _attr_native_unit_of_measurement = "g"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "number.communifarm_substrate_g_per_container"
+        self._value = 1000.0
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["substrate_g_per_container"] = self._value
+
+    @property
+    def native_value(self) -> float:
+        return float(
+            self.hass.data[DOMAIN][self._entry_id].get(
+                "substrate_g_per_container", self._value
+            )
+        )
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._value = max(1.0, float(value))
+        self.hass.data[DOMAIN][self._entry_id][
+            "substrate_g_per_container"
+        ] = self._value
+        self.async_write_ha_state()
+
+
+class CommunifarmHarvestMassG(NumberEntity):
+    """Harvest flush mass (g) for the next record/final harvest press."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Harvest mass"
+    _attr_unique_id = "communifarm_harvest_mass_g"
+    _attr_icon = "mdi:scale"
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = 0.1
+    _attr_native_max_value = 100000.0
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = "g"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "number.communifarm_harvest_mass_g"
+        self._value = 100.0
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["harvest_mass_g"] = self._value
+
+    @property
+    def native_value(self) -> float:
+        return float(
+            self.hass.data[DOMAIN][self._entry_id].get("harvest_mass_g", self._value)
+        )
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._value = max(0.1, float(value))
+        self.hass.data[DOMAIN][self._entry_id]["harvest_mass_g"] = self._value
         self.async_write_ha_state()

@@ -273,6 +273,7 @@ class CultureEvent:
     culture_id: str | None = None
     child_culture_id: str | None = None
     media_batch_id: str | None = None
+    batch_id: str | None = None
     detail: dict[str, Any] = field(default_factory=dict)
     id: str = ""
 

@@ -360,8 +360,8 @@ class CultureRepository:
             """
             INSERT INTO culture_events (
               stable_id, event_type, culture_id, child_culture_id, media_batch_id,
-              detail, recorded_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              batch_id, detail, recorded_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.id,
@@ -369,6 +369,7 @@ class CultureRepository:
                 event.culture_id,
                 event.child_culture_id,
                 event.media_batch_id,
+                event.batch_id,
                 json.dumps(event.detail) if event.detail else None,
                 event.recorded_at,
                 created,
@@ -584,6 +585,7 @@ class CultureRepository:
             culture_id=row["culture_id"],
             child_culture_id=row["child_culture_id"],
             media_batch_id=row["media_batch_id"],
+            batch_id=row["batch_id"] if "batch_id" in row.keys() else None,
             detail=detail,
             recorded_at=row["recorded_at"],
         )

@@ -5,9 +5,9 @@ Long-term Communifarm events live in a Communifarm-owned SQLite file — not Hom
 | Item | Value |
 | --- | --- |
 | Path | `<HA config>/communifarm/communifarm.db` |
-| Schema | v6 |
+| Schema | v7 |
 | ADR | [0003-communifarm-sqlite.md](../adr/0003-communifarm-sqlite.md) |
-| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder` |
+| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location` |
 
 ## Why not Recorder?
 
@@ -21,8 +21,12 @@ Recorder is for entity history. Grow analysis needs Communifarm stable IDs (site
 batches (master)
   ├── weight_events.batch_id          # mix weigh-ins (scale + target per ingredient)
   ├── batch_milestones.batch_id       # process timeline
-  ├── harvest_events.batch_id         # flush harvest weights
+  ├── harvest_events.batch_id         # flush harvest weights (+ optional zone_id)
+  ├── batches.zone_id                 # placement slot (v7)
   └── sales_lots.batch_id             # future sell-through stats
+
+placement_areas (site tents / fridges / cabinets)
+  └── zones.area_id                   # level / shelf slots
 
 media_batches (culture media hub)
   ├── media_weight_events.media_batch_id
@@ -49,6 +53,7 @@ culture_lots (culture inventory)
 | `substrate_g_per_container` | Substrate mass per container (g) |
 | `flush_count` / `max_flushes` | Harvest flush tracking (default max 3) |
 | `expected_check_at` | Next operator check reminder |
+| `zone_id` | Placement zone slot (v7; FK → `zones.stable_id`) |
 | `nfc_uid` | Tag that follows the bag until container split |
 
 Lifecycle phase advances when milestones are recorded (and on complete).
@@ -73,18 +78,29 @@ Bound stir plate: role `lc_stir_plate` → CF proxy `switch.communifarm_lc_stir_
 
 Default recipes: `mea_agar_500`, `honey_lc_500` (see workspace `docs/intake/mushroom data/culture-recipes.md`).
 
-## Production inoculate (schema v6)
+## Production inoculate (schema v6+)
 
 Culture → substrate containers (independent of mix recipe). See [production-inoculate.md](../process/production-inoculate.md).
 
 | Service | Purpose |
 | --- | --- |
-| `inoculate_batch` | Link active culture lot; set container type/count + substrate g/container |
-| `advance_production_stage` | `incubating` → `fruiting` → `harvesting` |
-| `record_harvest` | Flush mass (g); `is_final` completes batch |
+| `inoculate_batch` | Link active culture lot; set container type/count + substrate g/container; optional `zone_id` |
+| `advance_production_stage` | `incubating` → `fruiting` → `harvesting`; optional `zone_id` |
+| `record_harvest` | Flush mass (g); `is_final` completes batch; optional harvest `zone_id` |
 | `add_batch_note` / `set_check_reminder` | Notes + HA notification |
 
 `harvest_events` rows FK `batches.stable_id`. Dashboard **Production** tab drives the flow.
+
+## Placement locations (schema v7)
+
+Site → PlacementArea → Zone. See [placement-locations.md](../process/placement-locations.md).
+
+| Service | Purpose |
+| --- | --- |
+| `ensure_placement_layout` | Seed default tents/fridges/cabinets + 24 zones (idempotent) |
+| `set_batch_location` | Set `batches.zone_id` |
+
+Soft stage → area_kind hints only (no hard reject in MVP).
 
 ## Mix weigh-ins (`weight_events`)
 

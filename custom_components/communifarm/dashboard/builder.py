@@ -8,6 +8,7 @@ from ..const import (
     DASHBOARD_TITLE,
     DASHBOARD_VIEW_BATCHES,
     DASHBOARD_VIEW_OVERVIEW,
+    DASHBOARD_VIEW_PRODUCTION,
     DASHBOARD_VIEW_WEIGH,
     ENTITY_ALLOWLISTED_SWITCH,
     ENTITY_BATCH_LIST,
@@ -18,17 +19,27 @@ from ..const import (
     ENTITY_BTN_COMPLETELY_MIXED,
     ENTITY_BTN_DRY_WET_MIX,
     ENTITY_BTN_FIELD_CAPACITY,
+    ENTITY_BTN_FINAL_HARVEST,
     ENTITY_BTN_HEAT_TREATED,
+    ENTITY_BTN_INOCULATE,
+    ENTITY_BTN_MOVE_FRUITING,
+    ENTITY_BTN_MOVE_HARVEST,
+    ENTITY_BTN_MOVE_INCUBATION,
     ENTITY_BTN_PRODUCTION_START,
+    ENTITY_BTN_RECORD_HARVEST,
     ENTITY_BTN_SEPARATE_CONTAINERS,
     ENTITY_BTN_SETTLING,
     ENTITY_BTN_STORED_COOLING,
     ENTITY_BTN_WATER_ADDED,
     ENTITY_CONTAINER_COUNT,
+    ENTITY_CONTAINER_TYPE,
+    ENTITY_HARVEST_MASS_G,
     ENTITY_HEAT_TREATMENT,
     ENTITY_HUMIDITY_TARGET,
     ENTITY_LC_STIR_PLATE,
+    ENTITY_PRODUCTION_STATUS,
     ENTITY_RECIPE_SCALE,
+    ENTITY_SUBSTRATE_G,
     ENTITY_TEMPERATURE_TARGET,
     ENTITY_WEIGH_SESSION,
     ROLE_FAN,
@@ -63,6 +74,7 @@ class DashboardBuilder:
                 self._overview_view(state, resolved),
                 self._weigh_view(state),
                 self._batches_view(state),
+                self._production_view(state),
             ],
         }
 
@@ -76,7 +88,8 @@ class DashboardBuilder:
                     f"## {state.environment.name}\n"
                     f"Site: **{state.site.name}**\n"
                     f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
-                    "Weighing? **Weigh** tab · Batch history? **Batches** tab."
+                    "Weighing? **Weigh** · Mix history? **Batches** · "
+                    "Inoculate / harvest? **Production**."
                 ),
             },
             {
@@ -290,7 +303,8 @@ class DashboardBuilder:
                     "content": (
                         f"## Batches\n"
                         f"Active: **{state.batch.name}** (`{state.batch.id}`)\n\n"
-                        "Complete the current mix batch and start a new NFC UID when ready."
+                        "Complete mix process here. After cooling, use the "
+                        "**Production** tab to inoculate culture into containers."
                     ),
                 },
                 {
@@ -351,7 +365,102 @@ class DashboardBuilder:
                         },
                         {
                             "entity": ENTITY_BTN_PRODUCTION_START,
-                            "name": "Production cycle start (stub)",
+                            "name": "Production cycle start (legacy stub)",
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def _production_view(self, state: CommunifarmState) -> dict[str, Any]:
+        return {
+            "title": "Production",
+            "path": DASHBOARD_VIEW_PRODUCTION,
+            "icon": "mdi:mushroom",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "content": (
+                        f"## Production\n"
+                        f"Batch: **{state.batch.name}** (`{state.batch.id}`)\n\n"
+                        "1. Acquire culture (service) → set container type + substrate g\n"
+                        "2. **Inoculate** → incubation → fruiting → harvest\n"
+                        "3. Final harvest completes the batch\n\n"
+                        "**Placement:** call `ensure_placement_layout` once, then "
+                        "`set_batch_location` / pass `zone_id` on inoculate/advance/harvest.\n"
+                        "Soft hints: inoculated/incubating → inoculation tent; "
+                        "fruiting/harvesting → fruiting tent; pick → harvest fridge shelf.\n"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Status",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'progress_text') }}}}\n\n"
+                        f"**Location:** "
+                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'area_name') }}}} / "
+                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_name') }}}} "
+                        f"(`{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_id') }}}}`)"
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Inoculate inputs",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_CONTAINER_TYPE,
+                            "name": "Container type",
+                        },
+                        {
+                            "entity": ENTITY_CONTAINER_COUNT,
+                            "name": "Container count",
+                        },
+                        {
+                            "entity": ENTITY_SUBSTRATE_G,
+                            "name": "Substrate g / container",
+                        },
+                        {
+                            "entity": ENTITY_BTN_INOCULATE,
+                            "name": "Inoculate batch",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Lifecycle",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_BTN_MOVE_INCUBATION,
+                            "name": "Move to incubation",
+                        },
+                        {
+                            "entity": ENTITY_BTN_MOVE_FRUITING,
+                            "name": "Move to fruiting",
+                        },
+                        {
+                            "entity": ENTITY_BTN_MOVE_HARVEST,
+                            "name": "Move to harvest",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Harvest",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_HARVEST_MASS_G,
+                            "name": "Harvest mass (g)",
+                        },
+                        {
+                            "entity": ENTITY_BTN_RECORD_HARVEST,
+                            "name": "Record harvest",
+                        },
+                        {
+                            "entity": ENTITY_BTN_FINAL_HARVEST,
+                            "name": "Final harvest",
                         },
                     ],
                 },
