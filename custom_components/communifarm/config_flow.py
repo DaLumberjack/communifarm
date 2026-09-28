@@ -18,6 +18,7 @@ from .const import (
     CONF_HUMIDITY_ENTITY,
     CONF_HUMIDITY_TARGET,
     CONF_SITE_NAME,
+    CONF_STIR_PLATE_ENTITY,
     CONF_SWITCH_ENTITY,
     CONF_TEMPERATURE_ENTITY,
     CONF_TEMPERATURE_TARGET,
@@ -26,6 +27,7 @@ from .const import (
     DOMAIN,
     ROLE_FAN,
     ROLE_HUMIDITY,
+    ROLE_LC_STIR_PLATE,
     ROLE_SWITCH,
     ROLE_TEMPERATURE,
 )
@@ -65,10 +67,13 @@ def _suggest_entities(hass: HomeAssistant) -> dict[str, str | None]:
         ROLE_HUMIDITY: None,
         ROLE_FAN: None,
         ROLE_SWITCH: None,
+        ROLE_LC_STIR_PLATE: None,
     }
     for entity_id in hass.states.async_entity_ids():
         domain, device_class, unit = _entity_meta(hass, entity_id)
-        role = suggest_role_from_entity(domain, device_class, unit)
+        role = suggest_role_from_entity(
+            domain, device_class, unit, entity_id=entity_id
+        )
         if role and suggestions.get(role) is None:
             suggestions[role] = entity_id
     return suggestions
@@ -87,6 +92,7 @@ class CommunifarmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._humidity_entity: str | None = None
         self._fan_entity: str | None = None
         self._switch_entity: str | None = None
+        self._stir_plate_entity: str | None = None
         self._temperature_target: float = DEFAULT_TEMPERATURE_TARGET
         self._humidity_target: float = DEFAULT_HUMIDITY_TARGET
 
@@ -120,6 +126,7 @@ class CommunifarmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._humidity_entity = user_input.get(CONF_HUMIDITY_ENTITY)
             self._fan_entity = user_input.get(CONF_FAN_ENTITY)
             self._switch_entity = user_input.get(CONF_SWITCH_ENTITY)
+            self._stir_plate_entity = user_input.get(CONF_STIR_PLATE_ENTITY)
             return await self.async_step_profile()
 
         fields: dict[Any, Any] = {}
@@ -128,6 +135,7 @@ class CommunifarmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             (CONF_HUMIDITY_ENTITY, ROLE_HUMIDITY, "sensor"),
             (CONF_FAN_ENTITY, ROLE_FAN, "fan"),
             (CONF_SWITCH_ENTITY, ROLE_SWITCH, "switch"),
+            (CONF_STIR_PLATE_ENTITY, ROLE_LC_STIR_PLATE, "switch"),
         ):
             suggested = suggestions.get(role)
             entity_selector = selector.EntitySelector(
@@ -180,6 +188,7 @@ class CommunifarmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ROLE_HUMIDITY: self._humidity_entity,
             ROLE_FAN: self._fan_entity,
             ROLE_SWITCH: self._switch_entity,
+            ROLE_LC_STIR_PLATE: self._stir_plate_entity,
         }
         for role, entity_id in role_map.items():
             if not entity_id:
@@ -238,6 +247,7 @@ class CommunifarmOptionsFlow(config_entries.OptionsFlow):
                 ROLE_HUMIDITY: user_input.get(CONF_HUMIDITY_ENTITY),
                 ROLE_FAN: user_input.get(CONF_FAN_ENTITY),
                 ROLE_SWITCH: user_input.get(CONF_SWITCH_ENTITY),
+                ROLE_LC_STIR_PLATE: user_input.get(CONF_STIR_PLATE_ENTITY),
             }
             for role, entity_id in role_map.items():
                 if not entity_id:
@@ -273,6 +283,7 @@ class CommunifarmOptionsFlow(config_entries.OptionsFlow):
             (CONF_HUMIDITY_ENTITY, ROLE_HUMIDITY, "sensor"),
             (CONF_FAN_ENTITY, ROLE_FAN, "fan"),
             (CONF_SWITCH_ENTITY, ROLE_SWITCH, "switch"),
+            (CONF_STIR_PLATE_ENTITY, ROLE_LC_STIR_PLATE, "switch"),
         ):
             suggested = resolved.get(role)
             entity_selector = selector.EntitySelector(

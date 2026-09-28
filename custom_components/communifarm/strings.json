@@ -16,7 +16,8 @@
           "temperature_entity": "Temperature sensor",
           "humidity_entity": "Humidity sensor",
           "fan_entity": "Fan",
-          "switch_entity": "Allowlisted switch"
+          "switch_entity": "Allowlisted switch",
+          "stir_plate_entity": "LC magnetic stir plate"
         }
       },
       "profile": {
@@ -43,7 +44,8 @@
           "temperature_entity": "Temperature sensor",
           "humidity_entity": "Humidity sensor",
           "fan_entity": "Fan",
-          "switch_entity": "Allowlisted switch"
+          "switch_entity": "Allowlisted switch",
+          "stir_plate_entity": "LC magnetic stir plate"
         }
       }
     }

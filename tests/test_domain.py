@@ -35,6 +35,12 @@ def test_suggest_role_from_device_class() -> None:
     assert suggest_role_from_entity("sensor", "humidity", "%") == "humidity_source"
     assert suggest_role_from_entity("fan", None, None) == "fan_actuator"
     assert suggest_role_from_entity("switch", None, None) == "switch_actuator"
+    assert (
+        suggest_role_from_entity(
+            "switch", None, None, entity_id="switch.mock_lc_stir_plate"
+        )
+        == "lc_stir_plate"
+    )
     assert suggest_role_from_entity("light", None, None) is None
 
 
@@ -42,4 +48,4 @@ def test_state_roundtrip(sample_state) -> None:
     restored = type(sample_state).from_dict(sample_state.to_dict())
     assert restored.site.name == sample_state.site.name
     assert restored.batch.id == sample_state.batch.id
-    assert len(restored.bindings) == 3
+    assert len(restored.bindings) == 4

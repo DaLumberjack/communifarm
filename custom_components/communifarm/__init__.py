@@ -14,7 +14,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
-from . import batch_actions
+from . import batch_actions, culture_actions
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
     DOMAIN,
@@ -25,8 +25,13 @@ from .const import (
     ENTITY_SCALE_SELECTED_INGREDIENT,
     ENTITY_SCALE_TARE_BUTTON,
     PLATFORMS,
+    SERVICE_ACQUIRE_CULTURE,
     SERVICE_COMPLETE_AND_NEW_BATCH,
+    SERVICE_CREATE_MEDIA_BATCH,
+    SERVICE_INTRODUCE_CULTURE,
     SERVICE_RECORD_BATCH_MILESTONE,
+    SERVICE_RECORD_MEDIA_MILESTONE,
+    SERVICE_RECORD_MEDIA_WEIGHT,
     SERVICE_RECORD_WEIGHT,
     SERVICE_TRANSITION_BATCH,
     SIGNAL_WEIGH_SESSION_UPDATED,
@@ -38,6 +43,14 @@ from .domain.batch_milestones import (
     DEFAULT_RECIPE_KEY,
     HEAT_METHODS,
     WEIGH_MILESTONES,
+)
+from .domain.culture import (
+    CULTURE_CONTAINERS,
+    CULTURE_FORMS,
+    DEFAULT_AGAR_RECIPE_KEY,
+    MEDIA_MILESTONES,
+    MEDIA_RECIPES,
+    SOURCE_TYPES,
 )
 from .domain.models import CommunifarmState
 from .domain.recipe import WOOD_LOVER_RECIPE, clamp_recipe_scale
@@ -52,6 +65,7 @@ from .domain.validation import (
 )
 from .domain.weight import WeightEvent, ingredient_key_from_label
 from .storage.batch_repository import BatchRepository
+from .storage.culture_repository import CultureRepository
 from .storage.repository import CommunifarmRepository
 from .storage.weight_repository import WeightEventRepository
 
@@ -89,6 +103,53 @@ COMPLETE_NEW_BATCH_SCHEMA = vol.Schema(
     {vol.Optional("name"): cv.string}
 )
 
+CREATE_MEDIA_BATCH_SCHEMA = vol.Schema(
+    {
+        vol.Optional("recipe_key", default=DEFAULT_AGAR_RECIPE_KEY): vol.In(
+            set(MEDIA_RECIPES)
+        ),
+        vol.Optional("name"): cv.string,
+        vol.Optional("recipe_scale", default=1.0): vol.All(
+            vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+        ),
+        vol.Optional("vessel_count"): vol.All(vol.Coerce(int), vol.Range(min=1, max=500)),
+    }
+)
+
+RECORD_MEDIA_WEIGHT_SCHEMA = vol.Schema(
+    {
+        vol.Required("media_batch_id"): cv.string,
+        vol.Required("amount"): vol.Coerce(float),
+        vol.Required("unit"): vol.In({"g", "ml"}),
+        vol.Required("ingredient"): cv.string,
+    }
+)
+
+RECORD_MEDIA_MILESTONE_SCHEMA = vol.Schema(
+    {
+        vol.Required("media_batch_id"): cv.string,
+        vol.Required("event_type"): vol.In(MEDIA_MILESTONES),
+    }
+)
+
+ACQUIRE_CULTURE_SCHEMA = vol.Schema(
+    {
+        vol.Required("name"): cv.string,
+        vol.Required("source_type"): vol.In(SOURCE_TYPES),
+        vol.Required("form"): vol.In(CULTURE_FORMS),
+        vol.Optional("container"): vol.In(CULTURE_CONTAINERS),
+        vol.Optional("strain_label", default=""): cv.string,
+    }
+)
+
+INTRODUCE_CULTURE_SCHEMA = vol.Schema(
+    {
+        vol.Required("culture_id"): cv.string,
+        vol.Required("media_batch_id"): cv.string,
+        vol.Optional("child_name"): cv.string,
+    }
+)
+
 _TARE_BUTTONS = frozenset(
     {ENTITY_SCALE_TARE_BUTTON, ENTITY_SCALE_LOCATION_TARE_BUTTON}
 )
@@ -119,6 +180,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await weight_repo.async_setup()
     batch_repo = BatchRepository(hass, path=weight_repo.path)
     await batch_repo.async_setup()
+    culture_repo = CultureRepository(hass, path=weight_repo.path)
+    await culture_repo.async_setup()
     await batch_repo.async_ensure_batch(
         batch_id=state.batch.id,
         site_id=state.site.id,
@@ -133,10 +196,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "repository": repo,
         "weight_repository": weight_repo,
         "batch_repository": batch_repo,
+        "culture_repository": culture_repo,
         "state": state,
         "weigh_session": new_weigh_session_tracker(),
         "container_count": 1,
         "heat_treatment": "pasteurized",
+        "active_media_batch_id": None,
     }
 
     dashboard_url = await async_provision_dashboard(hass, state)
@@ -183,6 +248,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass, entry.entry_id, new_name=call.data.get("name")
         )
 
+    async def async_create_media(call: ServiceCall) -> None:
+        await culture_actions.async_create_media_batch(
+            hass,
+            entry.entry_id,
+            recipe_key=call.data.get("recipe_key", DEFAULT_AGAR_RECIPE_KEY),
+            name=call.data.get("name"),
+            recipe_scale=call.data.get("recipe_scale", 1.0),
+            vessel_count=call.data.get("vessel_count"),
+        )
+
+    async def async_record_media_weight(call: ServiceCall) -> None:
+        await culture_actions.async_record_media_weight(
+            hass,
+            entry.entry_id,
+            media_batch_id=call.data["media_batch_id"],
+            amount=call.data["amount"],
+            unit=call.data["unit"],
+            ingredient=call.data["ingredient"],
+        )
+
+    async def async_record_media_milestone(call: ServiceCall) -> None:
+        await culture_actions.async_record_media_milestone(
+            hass,
+            entry.entry_id,
+            media_batch_id=call.data["media_batch_id"],
+            event_type=call.data["event_type"],
+        )
+
+    async def async_acquire_culture(call: ServiceCall) -> None:
+        await culture_actions.async_acquire_culture(
+            hass,
+            entry.entry_id,
+            name=call.data["name"],
+            source_type=call.data["source_type"],
+            form=call.data["form"],
+            container=call.data.get("container"),
+            strain_label=call.data.get("strain_label", ""),
+        )
+
+    async def async_introduce_culture(call: ServiceCall) -> None:
+        await culture_actions.async_introduce_culture(
+            hass,
+            entry.entry_id,
+            culture_id=call.data["culture_id"],
+            media_batch_id=call.data["media_batch_id"],
+            child_name=call.data.get("child_name"),
+        )
+
     if not hass.services.has_service(DOMAIN, SERVICE_TRANSITION_BATCH):
         hass.services.async_register(
             DOMAIN,
@@ -210,6 +323,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_COMPLETE_AND_NEW_BATCH,
             async_complete_new,
             schema=COMPLETE_NEW_BATCH_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_CREATE_MEDIA_BATCH):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CREATE_MEDIA_BATCH,
+            async_create_media,
+            schema=CREATE_MEDIA_BATCH_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_MEDIA_WEIGHT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_MEDIA_WEIGHT,
+            async_record_media_weight,
+            schema=RECORD_MEDIA_WEIGHT_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_MEDIA_MILESTONE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_MEDIA_MILESTONE,
+            async_record_media_milestone,
+            schema=RECORD_MEDIA_MILESTONE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_ACQUIRE_CULTURE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_ACQUIRE_CULTURE,
+            async_acquire_culture,
+            schema=ACQUIRE_CULTURE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_INTRODUCE_CULTURE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_INTRODUCE_CULTURE,
+            async_introduce_culture,
+            schema=INTRODUCE_CULTURE_SCHEMA,
         )
 
     @callback
@@ -407,6 +555,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     batch_repo: BatchRepository | None = bucket.get("batch_repository")
     if batch_repo is not None:
         await batch_repo.async_close()
+    culture_repo: CultureRepository | None = bucket.get("culture_repository")
+    if culture_repo is not None:
+        await culture_repo.async_close()
 
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, [Platform(p) for p in PLATFORMS]
@@ -419,6 +570,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_RECORD_WEIGHT,
                 SERVICE_RECORD_BATCH_MILESTONE,
                 SERVICE_COMPLETE_AND_NEW_BATCH,
+                SERVICE_CREATE_MEDIA_BATCH,
+                SERVICE_RECORD_MEDIA_WEIGHT,
+                SERVICE_RECORD_MEDIA_MILESTONE,
+                SERVICE_ACQUIRE_CULTURE,
+                SERVICE_INTRODUCE_CULTURE,
             ):
                 if hass.services.has_service(DOMAIN, service):
                     hass.services.async_remove(DOMAIN, service)
