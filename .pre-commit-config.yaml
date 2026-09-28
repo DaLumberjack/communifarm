@@ -1,0 +1,13 @@
+# Run before every commit: https://pre-commit.com
+# Install once:  py -m pip install pre-commit && pre-commit install
+# Manual:       pre-commit run --all-files
+# Or:           ./scripts/lint.sh
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+        types_or: [python, pyi]
+      - id: ruff-format
+        types_or: [python, pyi]

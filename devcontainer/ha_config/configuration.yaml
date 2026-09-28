@@ -2,12 +2,15 @@
 
 default_config:
 
+homeassistant:
+  packages: !include_dir_named packages
+
 logger:
   default: info
   logs:
     custom_components.communifarm: debug
 
-# Local mock ESP / template devices for T1
+# Local mock ESP / template devices for T1 (environment + exhaust)
 template:
   - sensor:
       - name: "Mock Temperature"
@@ -27,11 +30,11 @@ template:
         unique_id: communifarm_mock_fan
         state: "{{ is_state('input_boolean.mock_fan', 'on') }}"
         turn_on:
-          - service: input_boolean.turn_on
+          - action: input_boolean.turn_on
             target:
               entity_id: input_boolean.mock_fan
         turn_off:
-          - service: input_boolean.turn_off
+          - action: input_boolean.turn_off
             target:
               entity_id: input_boolean.mock_fan
 
@@ -67,10 +70,10 @@ switch:
         friendly_name: "Mock Exhaust"
         value_template: "{{ is_state('input_boolean.mock_exhaust', 'on') }}"
         turn_on:
-          service: input_boolean.turn_on
+          action: input_boolean.turn_on
           target:
             entity_id: input_boolean.mock_exhaust
         turn_off:
-          service: input_boolean.turn_off
+          action: input_boolean.turn_off
           target:
             entity_id: input_boolean.mock_exhaust

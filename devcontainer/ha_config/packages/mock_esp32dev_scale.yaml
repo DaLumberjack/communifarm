@@ -1,0 +1,321 @@
+# Mock of live ESPHome scale "esp32dev" for Communifarm T1/T2.
+# Public entity IDs match the live device (sensor/button/number.esp32dev_*).
+# Intake source (pins/secrets stay out of git): workspace docs/intake/esp devices/scale.yaml
+# NFC stub: input_select + Simulate NFC Scan; real readers later.
+
+input_number:
+  esp32dev_inject_calibrated_sensor:
+    name: "esp32dev Inject Calibrated Sensor (mock only)"
+    min: -5000
+    max: 100000
+    step: 0.1
+    initial: 47.8
+    unit_of_measurement: "g"
+    mode: box
+  esp32dev_tare_offset:
+    name: "esp32dev Tare Offset (mock only)"
+    min: -5000
+    max: 100000
+    step: 0.1
+    initial: 0
+    unit_of_measurement: "g"
+    mode: box
+  esp32dev_inject_raw:
+    name: "esp32dev Inject Raw (mock only)"
+    min: -2000000
+    max: 2000000
+    step: 1
+    initial: -382994
+    mode: box
+  esp32dev_inject_base_weight:
+    name: "esp32dev Inject Base weight (mock only)"
+    min: 0
+    max: 1500
+    step: 0.001
+    initial: 735
+    unit_of_measurement: "g"
+    mode: box
+  esp32dev_inject_weightless_cal:
+    name: "esp32dev Inject weightless cal (mock only)"
+    min: -400000
+    max: 400000
+    step: 1
+    initial: 0
+    mode: box
+  esp32dev_inject_temperature:
+    name: "esp32dev Inject Temperature (mock only)"
+    min: -20
+    max: 60
+    step: 0.1
+    initial: 26.5
+    unit_of_measurement: "°C"
+    mode: box
+  esp32dev_inject_humidity:
+    name: "esp32dev Inject Humidity (mock only)"
+    min: 0
+    max: 100
+    step: 0.1
+    initial: 34.8
+    unit_of_measurement: "%"
+    mode: box
+  esp32dev_inject_pressure:
+    name: "esp32dev Inject Pressure (mock only)"
+    min: 800
+    max: 1200
+    step: 0.1
+    initial: 1012.7
+    unit_of_measurement: "hPa"
+    mode: box
+
+input_text:
+  esp32dev_last_recorded:
+    name: "esp32dev Last Recorded Text (mock only)"
+    initial: "0.0 g"
+    max: 120
+  esp32dev_last_nfc_uid:
+    name: "esp32dev Last NFC UID (mock only)"
+    initial: ""
+    max: 64
+
+# Mimics NFC scan → dropdown (Simpler Wood Lover Recipe).
+input_select:
+  esp32dev_selected_ingredient:
+    name: "esp32dev Selected Ingredient"
+    options:
+      - "(none)"
+      - "hardwood pellets"
+      - "hardwood shavings"
+      - "shredded organic wheat straw"
+      - "organic worm castings"
+      - "organic wheat bran"
+      - "vermiculite"
+      - "coco coir"
+      - "gypsum"
+      - "potash"
+    initial: "(none)"
+
+input_button:
+  esp32dev_simulate_nfc_scan:
+    name: "esp32dev Simulate NFC Scan"
+
+template:
+  - sensor:
+      - name: "esp32dev Calibrated Sensor"
+        unique_id: esp32dev_calibrated_sensor
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        state: "{{ states('input_number.esp32dev_inject_calibrated_sensor') | float(0) }}"
+      - name: "esp32dev Calibrated g"
+        unique_id: esp32dev_calibrated_g
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.esp32dev_inject_calibrated_sensor') | float(0))
+             - (states('input_number.esp32dev_tare_offset') | float(0)) }}
+      - name: "esp32dev g"
+        unique_id: esp32dev_g
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.esp32dev_inject_calibrated_sensor') | float(0))
+             - (states('input_number.esp32dev_tare_offset') | float(0)) }}
+      - name: "esp32dev Calibration value"
+        unique_id: esp32dev_calibration_value
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.esp32dev_inject_calibrated_sensor') | float(0))
+             - (states('input_number.esp32dev_tare_offset') | float(0)) }}
+      - name: "esp32dev kg"
+        unique_id: esp32dev_kg
+        unit_of_measurement: "kg"
+        device_class: weight
+        state_class: measurement
+        state: >-
+          {{ ((states('input_number.esp32dev_inject_calibrated_sensor') | float(0))
+              - (states('input_number.esp32dev_tare_offset') | float(0))) / 1000 }}
+      - name: "esp32dev Raw"
+        unique_id: esp32dev_raw
+        state_class: measurement
+        state: "{{ states('input_number.esp32dev_inject_raw') | float(0) }}"
+      - name: "esp32dev Raw scale value"
+        unique_id: esp32dev_raw_scale_value
+        state_class: measurement
+        state: "{{ states('input_number.esp32dev_inject_raw') | float(0) }}"
+      - name: "esp32dev Tared mass on scale"
+        unique_id: esp32dev_tared_mass_on_scale
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        state: "{{ states('input_number.esp32dev_tare_offset') | float(0) }}"
+      - name: "esp32dev Temperature"
+        unique_id: esp32dev_temperature
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: "{{ states('input_number.esp32dev_inject_temperature') | float(0) }}"
+      - name: "esp32dev Humidity"
+        unique_id: esp32dev_humidity
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+        state: "{{ states('input_number.esp32dev_inject_humidity') | float(0) }}"
+      - name: "esp32dev Pressure"
+        unique_id: esp32dev_pressure
+        unit_of_measurement: "hPa"
+        device_class: atmospheric_pressure
+        state_class: measurement
+        state: "{{ states('input_number.esp32dev_inject_pressure') | float(0) }}"
+      - name: "esp32dev Last Recorded"
+        unique_id: esp32dev_last_recorded_sensor
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        state: >-
+          {% set t = states('input_text.esp32dev_last_recorded') %}
+          {% set n = t.split(' ')[0] %}
+          {{ n | float(0) }}
+
+  - number:
+      - name: "esp32dev Scale Base weight"
+        unique_id: esp32dev_scale_base_weight
+        unit_of_measurement: "g"
+        min: 0
+        max: 1500
+        step: 0.001
+        state: "{{ states('input_number.esp32dev_inject_base_weight') | float(0) }}"
+        set_value:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.esp32dev_inject_base_weight
+            data:
+              value: "{{ value }}"
+      - name: "esp32dev Scale weightless calibration"
+        unique_id: esp32dev_scale_weightless_calibration
+        min: -400000
+        max: 400000
+        step: 1
+        state: "{{ states('input_number.esp32dev_inject_weightless_cal') | float(0) }}"
+        set_value:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.esp32dev_inject_weightless_cal
+            data:
+              value: "{{ value }}"
+
+  - button:
+      - name: "esp32dev Tare"
+        unique_id: esp32dev_tare
+        icon: mdi:scale-balance
+        press:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.esp32dev_tare_offset
+            data:
+              value: "{{ states('input_number.esp32dev_inject_calibrated_sensor') | float(0) }}"
+      - name: "esp32dev Location Tare"
+        unique_id: esp32dev_location_tare
+        icon: mdi:scale-balance
+        press:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.esp32dev_tare_offset
+            data:
+              value: "{{ states('input_number.esp32dev_inject_calibrated_sensor') | float(0) }}"
+      - name: "esp32dev Record Weight"
+        unique_id: esp32dev_record_weight
+        icon: mdi:playlist-check
+        press:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.esp32dev_last_recorded
+            data:
+              value: >-
+                {% set g = (states('input_number.esp32dev_inject_calibrated_sensor') | float(0))
+                           - (states('input_number.esp32dev_tare_offset') | float(0)) %}
+                {% set item = states('input_select.esp32dev_selected_ingredient') %}
+                {{ '%.1f g' | format(g) }}{% if item not in ['unknown', 'unavailable', '(none)', ''] %} | {{ item }}{% endif %}
+
+automation:
+  - id: esp32dev_mock_nfc_scan_sets_ingredient
+    alias: "esp32dev mock NFC scan applies mapped ingredient"
+    description: >-
+      Stub for hardware NFC: set Last NFC UID, press Simulate NFC Scan.
+      Or set Selected Ingredient directly in tests/UI.
+    trigger:
+      - platform: state
+        entity_id: input_button.esp32dev_simulate_nfc_scan
+    action:
+      - choose:
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-hardwood-pellets' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "hardwood pellets"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-hardwood-shavings' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "hardwood shavings"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-wheat-straw' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "shredded organic wheat straw"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-worm-castings' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "organic worm castings"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-wheat-bran' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "organic wheat bran"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-vermiculite' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "vermiculite"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-coco-coir' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "coco coir"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-gypsum' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "gypsum"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-potash' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "potash"
+        default:
+          - action: persistent_notification.create
+            data:
+              title: "esp32dev mock NFC"
+              message: "No ingredient map for this NFC UID. Set Selected Ingredient directly or use a mapped UID."

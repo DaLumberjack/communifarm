@@ -63,7 +63,7 @@ export class CommunifarmPage {
     await this.clickSubmit();
   }
 
-  /** Navigate to the managed Communifarm dashboard (sidebar when present). */
+  /** Navigate to the managed Communifarm dashboard overview. */
   async openCommunifarmDashboard(): Promise<void> {
     const sidebarLink = this.page.locator('a[href*="communifarm"]').first();
     if (await sidebarLink.isVisible().catch(() => false)) {
@@ -74,6 +74,24 @@ export class CommunifarmPage {
       });
     }
     await expect(this.page).toHaveURL(/communifarm/, { timeout: 30000 });
+  }
+
+  /** Open the Weigh activity tab (scale + NFC select). */
+  async openWeighStation(): Promise<void> {
+    await this.page.goto("/communifarm/weigh", { waitUntil: "domcontentloaded" });
+    await expect(this.page).toHaveURL(/communifarm\/weigh/, { timeout: 30000 });
+    await expect(this.page.getByText(/weigh station|ingredient|current mass/i).first()).toBeVisible({
+      timeout: 30000,
+    });
+  }
+
+  /** Open the Batches tab (list + complete/new + post-weigh milestones). */
+  async openBatches(): Promise<void> {
+    await this.page.goto("/communifarm/batches", { waitUntil: "domcontentloaded" });
+    await expect(this.page).toHaveURL(/communifarm\/batches/, { timeout: 30000 });
+    await expect(this.page.getByText(/batches|complete batch|batch list/i).first()).toBeVisible({
+      timeout: 30000,
+    });
   }
 
   private async fillIfPresent(label: RegExp, value: string): Promise<void> {

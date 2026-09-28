@@ -1,0 +1,77 @@
+transition_batch:
+  name: Transition batch
+  description: Move the starter production batch to the next lifecycle stage.
+  fields:
+    stage:
+      name: Stage
+      description: Target stage (active or complete).
+
+record_weight:
+  name: Record weight
+  description: >-
+    Persist a weigh-in to Communifarm SQLite (weight_events) for the active batch.
+    Defaults mass and ingredient from the esp32dev scale entities when omitted.
+    First successful record auto-starts dry mixing for the batch.
+  fields:
+    mass_g:
+      name: Mass (g)
+      description: Optional override; otherwise uses sensor.esp32dev_calibrated_g. Negative values are rejected.
+      selector:
+        number:
+          min: 0
+          max: 250000
+          step: 0.1
+          unit_of_measurement: g
+    ingredient:
+      name: Ingredient
+      description: Optional override; otherwise uses the NFC/select ingredient.
+      example: hardwood pellets
+    nfc_uid:
+      name: NFC UID
+      description: Optional tag id snapshot for analysis.
+
+record_batch_milestone:
+  name: Record batch milestone
+  description: Append a mix / process milestone for the active batch.
+  fields:
+    event_type:
+      name: Event type
+      required: true
+      selector:
+        select:
+          options:
+            - water_added
+            - dry_wet_mix_started
+            - settling_started
+            - field_capacity_reached
+            - completely_mixed
+            - containers_separated
+            - heat_treated
+            - stored_for_cooling
+            - production_cycle_started
+    heat_method:
+      name: Heat method
+      description: Required when event_type is heat_treated.
+      selector:
+        select:
+          options:
+            - pasteurized
+            - sterilized
+    container_count:
+      name: Container count
+      description: Used when separating into containers.
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+    notes:
+      name: Notes
+
+complete_and_new_batch:
+  name: Complete batch and start new
+  description: Mark the active batch complete in SQLite and create a new active batch (new NFC UID).
+  fields:
+    name:
+      name: New batch name
+      description: Optional; defaults to incrementing the current name.

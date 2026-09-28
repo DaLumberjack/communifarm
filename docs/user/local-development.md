@@ -79,3 +79,5 @@ T1 Playwright needs HA credentials from OpenBao (`kv/ha-test` → `username_dev_
 yarn test:e2e:dashboard
 ```
 
+Scale mock + NFC stub: [mock-scale.md](mock-scale.md) (`yarn test:e2e:scale` when `TEST_HA_TOKEN` is present).
+
