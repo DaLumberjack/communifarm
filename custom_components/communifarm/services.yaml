@@ -5,3 +5,141 @@ transition_batch:
     stage:
       name: Stage
       description: Target stage (active or complete).
+      required: true
+      selector:
+        select:
+          options:
+            - active
+            - complete
+
+record_weight:
+  name: Record weight
+  description: Persist a mix weigh-in for the active production batch.
+
+record_batch_milestone:
+  name: Record batch milestone
+  description: Append a mix/production milestone for the active batch.
+
+complete_and_new_batch:
+  name: Complete and new batch
+  description: Complete the active batch and start a new one.
+
+create_media_batch:
+  name: Create media batch
+  description: Start an agar or liquid-culture media prep batch (before introducing culture).
+  fields:
+    recipe_key:
+      name: Recipe
+      description: Media recipe key (mea_agar_500, honey_lc_500, karo_lc_500).
+      example: mea_agar_500
+      selector:
+        select:
+          options:
+            - mea_agar_500
+            - honey_lc_500
+            - karo_lc_500
+    name:
+      name: Name
+      description: Optional label for this media prep.
+    recipe_scale:
+      name: Recipe scale
+      description: Scale factor 0.1–10 (default 1.0).
+    vessel_count:
+      name: Vessel count
+      description: Number of plates or jars.
+
+record_media_weight:
+  name: Record media weight
+  description: Record one media recipe ingredient amount for a media batch.
+  fields:
+    media_batch_id:
+      name: Media batch ID
+      required: true
+    amount:
+      name: Amount
+      required: true
+    unit:
+      name: Unit
+      required: true
+      selector:
+        select:
+          options:
+            - g
+            - ml
+    ingredient:
+      name: Ingredient
+      required: true
+
+record_media_milestone:
+  name: Record media milestone
+  description: Advance media prep (portion → sterilize → media_ready). LC also supports lc_stir_started / lc_stir_stopped.
+  fields:
+    media_batch_id:
+      name: Media batch ID
+      required: true
+    event_type:
+      name: Milestone
+      required: true
+      selector:
+        select:
+          options:
+            - weighing_started
+            - media_dissolved
+            - media_portioned
+            - media_sterilized
+            - media_ready
+            - media_failed
+            - lc_stir_started
+            - lc_stir_stopped
+
+acquire_culture:
+  name: Acquire culture
+  description: Register a culture lot (wild, acquaintance, or purchased).
+  fields:
+    name:
+      name: Name
+      required: true
+    source_type:
+      name: Source
+      required: true
+      selector:
+        select:
+          options:
+            - wild
+            - acquaintance
+            - purchased
+    form:
+      name: Form
+      required: true
+      selector:
+        select:
+          options:
+            - liquid_culture
+            - agar
+            - spores
+    container:
+      name: Container
+      selector:
+        select:
+          options:
+            - syringe
+            - sterile_bag
+            - plate
+            - jar
+            - slant
+            - other
+    strain_label:
+      name: Strain label
+
+introduce_culture:
+  name: Introduce culture
+  description: Introduce a culture into ready media; always creates a new child culture lot.
+  fields:
+    culture_id:
+      name: Parent culture ID
+      required: true
+    media_batch_id:
+      name: Media batch ID
+      required: true
+    child_name:
+      name: Child culture name

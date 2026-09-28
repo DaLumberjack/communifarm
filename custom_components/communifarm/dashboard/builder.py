@@ -27,11 +27,13 @@ from ..const import (
     ENTITY_CONTAINER_COUNT,
     ENTITY_HEAT_TREATMENT,
     ENTITY_HUMIDITY_TARGET,
+    ENTITY_LC_STIR_PLATE,
     ENTITY_RECIPE_SCALE,
     ENTITY_TEMPERATURE_TARGET,
     ENTITY_WEIGH_SESSION,
     ROLE_FAN,
     ROLE_HUMIDITY,
+    ROLE_LC_STIR_PLATE,
     ROLE_SWITCH,
     ROLE_TEMPERATURE,
 )
@@ -126,12 +128,14 @@ class DashboardBuilder:
         control_entities: list[str] = []
         if resolved.get(ROLE_SWITCH):
             control_entities.append(ENTITY_ALLOWLISTED_SWITCH)
+        if resolved.get(ROLE_LC_STIR_PLATE):
+            control_entities.append(ENTITY_LC_STIR_PLATE)
         if resolved.get(ROLE_FAN):
             control_entities.append(resolved[ROLE_FAN])  # type: ignore[arg-type]
         if not control_entities:
             actuator_entities = [
                 entity_id
-                for role in (ROLE_FAN, ROLE_SWITCH)
+                for role in (ROLE_FAN, ROLE_SWITCH, ROLE_LC_STIR_PLATE)
                 if (entity_id := resolved.get(role))
             ]
             control_entities = actuator_entities

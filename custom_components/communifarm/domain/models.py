@@ -13,6 +13,7 @@ from ..const import (
     DEFAULT_TEMPERATURE_TARGET,
     ROLE_FAN,
     ROLE_HUMIDITY,
+    ROLE_LC_STIR_PLATE,
     ROLE_SWITCH,
     ROLE_TEMPERATURE,
 )
@@ -236,10 +237,16 @@ def suggest_role_from_entity(
     domain: str,
     device_class: str | None,
     unit: str | None,
+    *,
+    entity_id: str | None = None,
 ) -> str | None:
-    """Suggest a Communifarm role from HA entity metadata (no name matching)."""
+    """Suggest a Communifarm role from HA entity metadata.
+
+    Optional entity_id enables stir-plate name hints without inventing device classes.
+    """
     device_class = (device_class or "").lower()
     unit = (unit or "").lower()
+    eid = (entity_id or "").lower()
     if domain == "sensor":
         if device_class == "temperature" or unit in {"°c", "c", "°f", "f"}:
             return ROLE_TEMPERATURE
@@ -248,5 +255,7 @@ def suggest_role_from_entity(
     if domain == "fan":
         return ROLE_FAN
     if domain == "switch":
+        if "stir" in eid:
+            return ROLE_LC_STIR_PLATE
         return ROLE_SWITCH
     return None

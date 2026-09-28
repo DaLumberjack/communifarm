@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -85,6 +85,110 @@ MIGRATIONS: dict[int, str] = {
       ON batches (lifecycle_phase, created_at);
     CREATE INDEX IF NOT EXISTS idx_weight_events_batch_ingredient
       ON weight_events (batch_id, ingredient_key, recorded_at);
+    """,
+    5: """
+    CREATE TABLE IF NOT EXISTS culture_lots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      form TEXT NOT NULL,
+      container TEXT NOT NULL,
+      strain_label TEXT,
+      parent_culture_id TEXT,
+      status TEXT NOT NULL,
+      acquired_at TEXT,
+      created_at TEXT NOT NULL,
+      nfc_uid TEXT,
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_status
+      ON culture_lots (status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_parent
+      ON culture_lots (parent_culture_id);
+
+    CREATE TABLE IF NOT EXISTS media_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      recipe_key TEXT NOT NULL,
+      media_form TEXT NOT NULL,
+      vessel_type TEXT NOT NULL,
+      recipe_scale REAL NOT NULL DEFAULT 1.0,
+      status TEXT NOT NULL,
+      vessel_count INTEGER,
+      sterilized_at TEXT,
+      ready_at TEXT,
+      created_at TEXT NOT NULL,
+      nfc_uid TEXT,
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_batches_status
+      ON media_batches (status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_media_batches_recipe
+      ON media_batches (recipe_key, created_at);
+
+    CREATE TABLE IF NOT EXISTS media_weight_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      media_batch_id TEXT NOT NULL,
+      ingredient_key TEXT,
+      ingredient_label TEXT,
+      amount REAL NOT NULL,
+      unit TEXT NOT NULL,
+      recipe_scale REAL,
+      target_amount REAL,
+      source_entity_id TEXT,
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_weight_batch_time
+      ON media_weight_events (media_batch_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_media_weight_ingredient
+      ON media_weight_events (ingredient_key, recorded_at);
+
+    CREATE TABLE IF NOT EXISTS media_milestones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      media_batch_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      detail TEXT,
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_milestones_batch_time
+      ON media_milestones (media_batch_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_media_milestones_type
+      ON media_milestones (event_type, recorded_at);
+
+    CREATE TABLE IF NOT EXISTS culture_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      culture_id TEXT,
+      child_culture_id TEXT,
+      media_batch_id TEXT,
+      detail TEXT,
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_culture_events_culture_time
+      ON culture_events (culture_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_culture_events_media_time
+      ON culture_events (media_batch_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_culture_events_type
+      ON culture_events (event_type, recorded_at);
     """,
 }
 

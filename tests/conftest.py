@@ -60,6 +60,11 @@ def sample_state() -> CommunifarmState:
             entity_entry_id="entry_switch",
             entity_id="switch.mock_exhaust",
         ),
+        EntityBinding(
+            role="lc_stir_plate",
+            entity_entry_id="entry_stir",
+            entity_id="switch.mock_lc_stir_plate",
+        ),
     ]
     return CommunifarmState(
         site=site,

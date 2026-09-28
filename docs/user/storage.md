@@ -5,9 +5,9 @@ Long-term Communifarm events live in a Communifarm-owned SQLite file — not Hom
 | Item | Value |
 | --- | --- |
 | Path | `<HA config>/communifarm/communifarm.db` |
-| Schema | v4 |
+| Schema | v6 |
 | ADR | [0003-communifarm-sqlite.md](../adr/0003-communifarm-sqlite.md) |
-| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch` |
+| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder` |
 
 ## Why not Recorder?
 
@@ -21,22 +21,70 @@ Recorder is for entity history. Grow analysis needs Communifarm stable IDs (site
 batches (master)
   ├── weight_events.batch_id          # mix weigh-ins (scale + target per ingredient)
   ├── batch_milestones.batch_id       # process timeline
-  ├── production_cycles.batch_id      # future grow stats
+  ├── harvest_events.batch_id         # flush harvest weights
   └── sales_lots.batch_id             # future sell-through stats
+
+media_batches (culture media hub)
+  ├── media_weight_events.media_batch_id
+  ├── media_milestones.media_batch_id
+  └── culture_events.media_batch_id
+
+culture_lots (culture inventory)
+  ├── culture_events.culture_id
+  ├── culture_events.batch_id         # production inoculate link
+  └── culture_lots.parent_culture_id  # lineage; expand always creates a child
 ```
 
 | Column | Purpose |
 | --- | --- |
 | `stable_id` | Public batch id (`batch_…`) — FK target |
 | `status` | `active` \| `complete` |
-| `lifecycle_phase` | Category: `planned` → `dry_mixing` → … → `in_production` → `complete` |
+| `lifecycle_phase` | Mix + production: `planned` → … → `cooling` → `inoculated` → `incubating` → `fruiting` → `harvesting` → `complete` |
 | `recipe_scale` | Batch-level scale factor (0.1–10) used for this mix |
 | `recipe_key` | Recipe id (`wood_lover`, …) |
 | `mixing_started_at` / `mixing_finished_at` | Mix window |
-| `container_count` | Split count (MVP) |
+| `container_count` | Split / production container count |
+| `culture_id` | Culture lot that inoculated this batch (v6) |
+| `container_type` | `block` \| `tub` \| `bag` \| `jar` \| `other` |
+| `substrate_g_per_container` | Substrate mass per container (g) |
+| `flush_count` / `max_flushes` | Harvest flush tracking (default max 3) |
+| `expected_check_at` | Next operator check reminder |
 | `nfc_uid` | Tag that follows the bag until container split |
 
 Lifecycle phase advances when milestones are recorded (and on complete).
+
+## Culture media hub (`media_batches` + `culture_lots`)
+
+Sibling process family for agar / liquid culture prep. **Do not overload production `batches`.**
+
+| Service | Purpose |
+| --- | --- |
+| `create_media_batch` | Start MEA agar (default) or honey/Karo LC prep |
+| `record_media_weight` | Recipe line amount (`g` / `ml`) with scale + target |
+| `record_media_milestone` | `media_portioned` → `media_sterilized` → `media_ready` (pour plates **before** sterilize) |
+| `acquire_culture` | Register lot (`wild` / `acquaintance` / `purchased`) |
+| `introduce_culture` | Requires `media_ready` or `in_use`; **always** creates a new child `culture_lot` |
+
+Hard gate: introducing culture into a planned/weighing/sterilizing media batch is rejected.
+
+LC mason jars: lid expects syringe port + breathability port; stir bar in jar; milestones `lc_stir_started` / `lc_stir_stopped` after inoculate. Drawing LC into a separate container creates a new child culture lot.
+
+Bound stir plate: role `lc_stir_plate` → CF proxy `switch.communifarm_lc_stir_plate`. Toggling the proxy forwards to the bound HA switch and appends `lc_stir_*` milestones on `active_media_batch_id` (set when `create_media_batch` runs).
+
+Default recipes: `mea_agar_500`, `honey_lc_500` (see workspace `docs/intake/mushroom data/culture-recipes.md`).
+
+## Production inoculate (schema v6)
+
+Culture → substrate containers (independent of mix recipe). See [production-inoculate.md](../process/production-inoculate.md).
+
+| Service | Purpose |
+| --- | --- |
+| `inoculate_batch` | Link active culture lot; set container type/count + substrate g/container |
+| `advance_production_stage` | `incubating` → `fruiting` → `harvesting` |
+| `record_harvest` | Flush mass (g); `is_final` completes batch |
+| `add_batch_note` / `set_check_reminder` | Notes + HA notification |
+
+`harvest_events` rows FK `batches.stable_id`. Dashboard **Production** tab drives the flow.
 
 ## Mix weigh-ins (`weight_events`)
 
