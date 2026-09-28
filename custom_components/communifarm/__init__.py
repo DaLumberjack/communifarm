@@ -14,7 +14,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
-from . import batch_actions, culture_actions
+from . import batch_actions, culture_actions, production_actions
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
     DOMAIN,
@@ -26,13 +26,18 @@ from .const import (
     ENTITY_SCALE_TARE_BUTTON,
     PLATFORMS,
     SERVICE_ACQUIRE_CULTURE,
+    SERVICE_ADD_BATCH_NOTE,
+    SERVICE_ADVANCE_PRODUCTION_STAGE,
     SERVICE_COMPLETE_AND_NEW_BATCH,
     SERVICE_CREATE_MEDIA_BATCH,
+    SERVICE_INOCULATE_BATCH,
     SERVICE_INTRODUCE_CULTURE,
     SERVICE_RECORD_BATCH_MILESTONE,
+    SERVICE_RECORD_HARVEST,
     SERVICE_RECORD_MEDIA_MILESTONE,
     SERVICE_RECORD_MEDIA_WEIGHT,
     SERVICE_RECORD_WEIGHT,
+    SERVICE_SET_CHECK_REMINDER,
     SERVICE_TRANSITION_BATCH,
     SIGNAL_WEIGH_SESSION_UPDATED,
     new_weigh_session_tracker,
@@ -53,6 +58,14 @@ from .domain.culture import (
     SOURCE_TYPES,
 )
 from .domain.models import CommunifarmState
+from .domain.production import (
+    DEFAULT_MAX_FLUSHES,
+    INOCULUM_UNITS,
+    PRODUCTION_CONTAINERS,
+    STAGE_FRUITING,
+    STAGE_HARVESTING,
+    STAGE_INCUBATING,
+)
 from .domain.recipe import WOOD_LOVER_RECIPE, clamp_recipe_scale
 from .domain.validation import (
     WARNING_MISSING_NFC,
@@ -150,6 +163,46 @@ INTRODUCE_CULTURE_SCHEMA = vol.Schema(
     }
 )
 
+INOCULATE_BATCH_SCHEMA = vol.Schema(
+    {
+        vol.Required("culture_id"): cv.string,
+        vol.Required("container_type"): vol.In(PRODUCTION_CONTAINERS),
+        vol.Required("container_count"): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=500)
+        ),
+        vol.Required("substrate_g_per_container"): vol.Coerce(float),
+        vol.Optional("inoculum_amount"): vol.Coerce(float),
+        vol.Optional("inoculum_unit"): vol.In(INOCULUM_UNITS),
+        vol.Optional("max_flushes", default=DEFAULT_MAX_FLUSHES): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=20)
+        ),
+        vol.Optional("expected_check_at"): cv.string,
+        vol.Optional("notes"): cv.string,
+    }
+)
+
+ADVANCE_PRODUCTION_SCHEMA = vol.Schema(
+    {
+        vol.Optional("target_stage"): vol.In(
+            {STAGE_INCUBATING, STAGE_FRUITING, STAGE_HARVESTING}
+        ),
+    }
+)
+
+RECORD_HARVEST_SCHEMA = vol.Schema(
+    {
+        vol.Required("mass_g"): vol.Coerce(float),
+        vol.Optional("is_final", default=False): cv.boolean,
+        vol.Optional("notes"): cv.string,
+    }
+)
+
+ADD_BATCH_NOTE_SCHEMA = vol.Schema({vol.Required("note"): cv.string})
+
+SET_CHECK_REMINDER_SCHEMA = vol.Schema(
+    {vol.Required("expected_check_at"): cv.string}
+)
+
 _TARE_BUTTONS = frozenset(
     {ENTITY_SCALE_TARE_BUTTON, ENTITY_SCALE_LOCATION_TARE_BUTTON}
 )
@@ -202,6 +255,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "container_count": 1,
         "heat_treatment": "pasteurized",
         "active_media_batch_id": None,
+        "active_culture_id": None,
+        "container_type": "bag",
+        "substrate_g_per_container": 1000.0,
+        "harvest_mass_g": 100.0,
     }
 
     dashboard_url = await async_provision_dashboard(hass, state)
@@ -296,6 +353,49 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             child_name=call.data.get("child_name"),
         )
 
+    async def async_inoculate_batch(call: ServiceCall) -> None:
+        await production_actions.async_inoculate_batch(
+            hass,
+            entry.entry_id,
+            culture_id=call.data["culture_id"],
+            container_type=call.data["container_type"],
+            container_count=call.data["container_count"],
+            substrate_g_per_container=call.data["substrate_g_per_container"],
+            inoculum_amount=call.data.get("inoculum_amount"),
+            inoculum_unit=call.data.get("inoculum_unit"),
+            max_flushes=call.data.get("max_flushes", DEFAULT_MAX_FLUSHES),
+            expected_check_at=call.data.get("expected_check_at"),
+            notes=call.data.get("notes"),
+        )
+
+    async def async_advance_production(call: ServiceCall) -> None:
+        await production_actions.async_advance_production_stage(
+            hass,
+            entry.entry_id,
+            target_stage=call.data.get("target_stage"),
+        )
+
+    async def async_record_harvest(call: ServiceCall) -> None:
+        await production_actions.async_record_harvest(
+            hass,
+            entry.entry_id,
+            mass_g=call.data["mass_g"],
+            is_final=bool(call.data.get("is_final", False)),
+            notes=call.data.get("notes"),
+        )
+
+    async def async_add_batch_note(call: ServiceCall) -> None:
+        await production_actions.async_add_batch_note(
+            hass, entry.entry_id, note=call.data["note"]
+        )
+
+    async def async_set_check_reminder(call: ServiceCall) -> None:
+        await production_actions.async_set_check_reminder(
+            hass,
+            entry.entry_id,
+            expected_check_at=call.data["expected_check_at"],
+        )
+
     if not hass.services.has_service(DOMAIN, SERVICE_TRANSITION_BATCH):
         hass.services.async_register(
             DOMAIN,
@@ -358,6 +458,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_INTRODUCE_CULTURE,
             async_introduce_culture,
             schema=INTRODUCE_CULTURE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_INOCULATE_BATCH):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_INOCULATE_BATCH,
+            async_inoculate_batch,
+            schema=INOCULATE_BATCH_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_ADVANCE_PRODUCTION_STAGE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_ADVANCE_PRODUCTION_STAGE,
+            async_advance_production,
+            schema=ADVANCE_PRODUCTION_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_HARVEST):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_HARVEST,
+            async_record_harvest,
+            schema=RECORD_HARVEST_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_ADD_BATCH_NOTE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_ADD_BATCH_NOTE,
+            async_add_batch_note,
+            schema=ADD_BATCH_NOTE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_CHECK_REMINDER):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_CHECK_REMINDER,
+            async_set_check_reminder,
+            schema=SET_CHECK_REMINDER_SCHEMA,
         )
 
     @callback
@@ -575,6 +710,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_RECORD_MEDIA_MILESTONE,
                 SERVICE_ACQUIRE_CULTURE,
                 SERVICE_INTRODUCE_CULTURE,
+                SERVICE_INOCULATE_BATCH,
+                SERVICE_ADVANCE_PRODUCTION_STAGE,
+                SERVICE_RECORD_HARVEST,
+                SERVICE_ADD_BATCH_NOTE,
+                SERVICE_SET_CHECK_REMINDER,
             ):
                 if hass.services.has_service(DOMAIN, service):
                     hass.services.async_remove(DOMAIN, service)

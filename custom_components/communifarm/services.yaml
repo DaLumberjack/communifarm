@@ -143,3 +143,92 @@ introduce_culture:
       required: true
     child_name:
       name: Child culture name
+
+inoculate_batch:
+  name: Inoculate batch
+  description: Link an active culture lot into the substrate production batch (N identical containers).
+  fields:
+    culture_id:
+      name: Culture lot ID
+      required: true
+    container_type:
+      name: Container type
+      required: true
+      selector:
+        select:
+          options:
+            - block
+            - tub
+            - bag
+            - jar
+            - other
+    container_count:
+      name: Container count
+      required: true
+    substrate_g_per_container:
+      name: Substrate g per container
+      required: true
+    inoculum_amount:
+      name: Inoculum amount
+    inoculum_unit:
+      name: Inoculum unit
+      selector:
+        select:
+          options:
+            - ml
+            - g
+            - cc
+            - wedge
+            - other
+    max_flushes:
+      name: Max flushes
+      description: Default 3.
+    expected_check_at:
+      name: Expected check at
+      description: ISO timestamp for next operator check.
+    notes:
+      name: Notes
+
+advance_production_stage:
+  name: Advance production stage
+  description: Move inoculated → incubating → fruiting → harvesting.
+  fields:
+    target_stage:
+      name: Target stage
+      selector:
+        select:
+          options:
+            - incubating
+            - fruiting
+            - harvesting
+
+record_harvest:
+  name: Record harvest
+  description: Record flush harvest mass (g). Set is_final to complete the batch.
+  fields:
+    mass_g:
+      name: Mass (g)
+      required: true
+    is_final:
+      name: Final harvest
+      selector:
+        boolean:
+    notes:
+      name: Notes
+
+add_batch_note:
+  name: Add batch note
+  description: Append a free-text batch_note milestone on the active batch.
+  fields:
+    note:
+      name: Note
+      required: true
+
+set_check_reminder:
+  name: Set check reminder
+  description: Store expected_check_at and create a persistent notification.
+  fields:
+    expected_check_at:
+      name: Expected check at
+      required: true
+      description: ISO timestamp.

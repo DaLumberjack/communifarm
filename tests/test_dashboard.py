@@ -17,7 +17,7 @@ def test_dashboard_includes_bound_sensors_and_batch(sample_state) -> None:
     }
     config = DashboardBuilder().build(sample_state, resolved)
     assert config["title"] == "Communifarm"
-    assert len(config["views"]) == 3
+    assert len(config["views"]) == 4
     cards = config["views"][0]["cards"]
     titles = [card.get("title") for card in cards]
     assert "Current settings" in titles

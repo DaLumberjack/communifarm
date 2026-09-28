@@ -189,6 +189,7 @@ async def async_acquire_culture(
     except ValidationError as err:
         raise HomeAssistantError(str(err)) from err
     await repo.async_acquire_culture(lot)
+    hass.data[DOMAIN][entry_id]["active_culture_id"] = lot.id
     _LOGGER.info("Acquired culture %s source=%s form=%s", lot.id, source_type, form)
     return lot.id
 

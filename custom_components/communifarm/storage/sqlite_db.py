@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -189,6 +189,42 @@ MIGRATIONS: dict[int, str] = {
       ON culture_events (media_batch_id, recorded_at);
     CREATE INDEX IF NOT EXISTS idx_culture_events_type
       ON culture_events (event_type, recorded_at);
+    """,
+    6: """
+    ALTER TABLE batches ADD COLUMN culture_id TEXT;
+    ALTER TABLE batches ADD COLUMN container_type TEXT;
+    ALTER TABLE batches ADD COLUMN substrate_g_per_container REAL;
+    ALTER TABLE batches ADD COLUMN inoculum_amount REAL;
+    ALTER TABLE batches ADD COLUMN inoculum_unit TEXT;
+    ALTER TABLE batches ADD COLUMN expected_check_at TEXT;
+    ALTER TABLE batches ADD COLUMN flush_count INTEGER DEFAULT 0;
+    ALTER TABLE batches ADD COLUMN max_flushes INTEGER DEFAULT 3;
+    ALTER TABLE batches ADD COLUMN inoculated_at TEXT;
+
+    CREATE INDEX IF NOT EXISTS idx_batches_culture
+      ON batches (culture_id, inoculated_at);
+
+    CREATE TABLE IF NOT EXISTS harvest_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      batch_id TEXT NOT NULL,
+      flush_number INTEGER NOT NULL,
+      mass_g REAL NOT NULL,
+      is_final INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_harvest_events_batch_time
+      ON harvest_events (batch_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_harvest_events_flush
+      ON harvest_events (batch_id, flush_number);
+
+    ALTER TABLE culture_events ADD COLUMN batch_id TEXT;
+
+    CREATE INDEX IF NOT EXISTS idx_culture_events_batch_time
+      ON culture_events (batch_id, recorded_at);
     """,
 }
 

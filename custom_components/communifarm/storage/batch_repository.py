@@ -18,6 +18,7 @@ from ..domain.batch_milestones import (
     PHASE_PLANNED,
 )
 from ..domain.models import new_id
+from ..domain.production import DEFAULT_MAX_FLUSHES, HarvestEvent, InoculateSpec
 from . import sqlite_db
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,6 +43,15 @@ class BatchRecord:
     recipe_scale: float = 1.0
     lifecycle_phase: str = PHASE_PLANNED
     recipe_key: str = DEFAULT_RECIPE_KEY
+    culture_id: str | None = None
+    container_type: str | None = None
+    substrate_g_per_container: float | None = None
+    inoculum_amount: float | None = None
+    inoculum_unit: str | None = None
+    expected_check_at: str | None = None
+    flush_count: int = 0
+    max_flushes: int = DEFAULT_MAX_FLUSHES
+    inoculated_at: str | None = None
 
     def to_attr_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +68,15 @@ class BatchRecord:
             "mixing_finished_at": self.mixing_finished_at,
             "container_count": self.container_count,
             "notes": self.notes,
+            "culture_id": self.culture_id,
+            "container_type": self.container_type,
+            "substrate_g_per_container": self.substrate_g_per_container,
+            "inoculum_amount": self.inoculum_amount,
+            "inoculum_unit": self.inoculum_unit,
+            "expected_check_at": self.expected_check_at,
+            "flush_count": self.flush_count,
+            "max_flushes": self.max_flushes,
+            "inoculated_at": self.inoculated_at,
         }
 
 
@@ -414,9 +433,159 @@ class BatchRepository:
             )
         return out
 
+    async def async_apply_inoculate(
+        self,
+        *,
+        batch_id: str,
+        spec: InoculateSpec,
+        inoculated_at: str,
+        lifecycle_phase: str,
+    ) -> BatchRecord:
+        return await self._hass.async_add_executor_job(
+            self._apply_inoculate_sync,
+            batch_id,
+            spec,
+            inoculated_at,
+            lifecycle_phase,
+        )
+
+    def _apply_inoculate_sync(
+        self,
+        batch_id: str,
+        spec: InoculateSpec,
+        inoculated_at: str,
+        lifecycle_phase: str,
+    ) -> BatchRecord:
+        assert self._conn is not None
+        self._conn.execute(
+            """
+            UPDATE batches
+            SET culture_id = ?,
+                container_type = ?,
+                container_count = ?,
+                substrate_g_per_container = ?,
+                inoculum_amount = ?,
+                inoculum_unit = ?,
+                expected_check_at = COALESCE(?, expected_check_at),
+                flush_count = 0,
+                max_flushes = ?,
+                inoculated_at = ?,
+                lifecycle_phase = ?,
+                notes = COALESCE(?, notes)
+            WHERE stable_id = ?
+            """,
+            (
+                spec.culture_id,
+                spec.container_type,
+                spec.container_count,
+                spec.substrate_g_per_container,
+                spec.inoculum_amount,
+                spec.inoculum_unit,
+                spec.expected_check_at,
+                spec.max_flushes,
+                inoculated_at,
+                lifecycle_phase,
+                spec.notes,
+                batch_id,
+            ),
+        )
+        self._conn.commit()
+        row = self._conn.execute(
+            "SELECT * FROM batches WHERE stable_id = ?", (batch_id,)
+        ).fetchone()
+        assert row is not None
+        return self._row_to_batch(row)
+
+    async def async_insert_harvest(self, event: HarvestEvent) -> HarvestEvent:
+        return await self._hass.async_add_executor_job(
+            self._insert_harvest_sync, event
+        )
+
+    def _insert_harvest_sync(self, event: HarvestEvent) -> HarvestEvent:
+        assert self._conn is not None
+        created = datetime.now(tz=UTC).isoformat()
+        self._conn.execute(
+            """
+            INSERT INTO harvest_events (
+              stable_id, batch_id, flush_number, mass_g, is_final, notes,
+              recorded_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.id,
+                event.batch_id,
+                event.flush_number,
+                event.mass_g,
+                1 if event.is_final else 0,
+                event.notes,
+                event.recorded_at,
+                created,
+            ),
+        )
+        self._conn.execute(
+            """
+            UPDATE batches
+            SET flush_count = ?
+            WHERE stable_id = ?
+            """,
+            (event.flush_number, event.batch_id),
+        )
+        self._conn.commit()
+        return event
+
+    async def async_list_harvests(self, batch_id: str) -> list[HarvestEvent]:
+        return await self._hass.async_add_executor_job(
+            self._list_harvests_sync, batch_id
+        )
+
+    def _list_harvests_sync(self, batch_id: str) -> list[HarvestEvent]:
+        assert self._conn is not None
+        rows = self._conn.execute(
+            """
+            SELECT stable_id, batch_id, flush_number, mass_g, is_final, notes, recorded_at
+            FROM harvest_events
+            WHERE batch_id = ?
+            ORDER BY flush_number ASC, recorded_at ASC, id ASC
+            """,
+            (batch_id,),
+        ).fetchall()
+        return [
+            HarvestEvent(
+                id=row["stable_id"],
+                batch_id=row["batch_id"],
+                flush_number=int(row["flush_number"]),
+                mass_g=float(row["mass_g"]),
+                is_final=bool(row["is_final"]),
+                notes=row["notes"],
+                recorded_at=row["recorded_at"],
+            )
+            for row in rows
+        ]
+
+    async def async_set_expected_check_at(
+        self, batch_id: str, expected_check_at: str | None
+    ) -> None:
+        await self._hass.async_add_executor_job(
+            self._set_expected_check_at_sync, batch_id, expected_check_at
+        )
+
+    def _set_expected_check_at_sync(
+        self, batch_id: str, expected_check_at: str | None
+    ) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE batches SET expected_check_at = ? WHERE stable_id = ?",
+            (expected_check_at, batch_id),
+        )
+        self._conn.commit()
+
     @staticmethod
     def _row_to_batch(row: Any) -> BatchRecord:
         keys = row.keys() if hasattr(row, "keys") else []
+
+        def _opt(col: str) -> Any:
+            return row[col] if col in keys else None
+
         return BatchRecord(
             id=row["stable_id"],
             site_id=row["site_id"],
@@ -443,6 +612,28 @@ class BatchRepository:
                 if "recipe_key" in keys and row["recipe_key"]
                 else DEFAULT_RECIPE_KEY
             ),
+            culture_id=_opt("culture_id"),
+            container_type=_opt("container_type"),
+            substrate_g_per_container=(
+                float(row["substrate_g_per_container"])
+                if "substrate_g_per_container" in keys
+                and row["substrate_g_per_container"] is not None
+                else None
+            ),
+            inoculum_amount=(
+                float(row["inoculum_amount"])
+                if "inoculum_amount" in keys and row["inoculum_amount"] is not None
+                else None
+            ),
+            inoculum_unit=_opt("inoculum_unit"),
+            expected_check_at=_opt("expected_check_at"),
+            flush_count=int(row["flush_count"] or 0)
+            if "flush_count" in keys
+            else 0,
+            max_flushes=int(row["max_flushes"] or DEFAULT_MAX_FLUSHES)
+            if "max_flushes" in keys
+            else DEFAULT_MAX_FLUSHES,
+            inoculated_at=_opt("inoculated_at"),
         )
 
     @staticmethod

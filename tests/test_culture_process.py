@@ -197,7 +197,7 @@ def test_sqlite_migration_v5_creates_culture_tables(tmp_path: Path) -> None:
     conn = sqlite_db.connect(path)
     version = sqlite_db.apply_migrations(conn)
     assert version == sqlite_db.SCHEMA_VERSION
-    assert version == 5
+    assert version == 6
     tables = {
         row[0]
         for row in conn.execute(
@@ -212,6 +212,7 @@ def test_sqlite_migration_v5_creates_culture_tables(tmp_path: Path) -> None:
         "culture_events",
         "batches",
         "weight_events",
+        "harvest_events",
     ):
         assert name in tables
     conn.close()

@@ -37,6 +37,7 @@ async def async_setup_entry(
             CommunifarmWeighSessionSensor(entry.entry_id, state),
             CommunifarmBatchListSensor(entry.entry_id),
             CommunifarmBatchMilestonesSensor(entry.entry_id),
+            CommunifarmProductionStatusSensor(entry.entry_id),
         ]
     )
 
@@ -332,6 +333,56 @@ class CommunifarmBatchMilestonesSensor(SensorEntity):
             "event_types": types,
             "milestones": [m.to_attr_dict() for m in milestones],
             "progress_text": "\n".join(lines) if milestones else "_No milestones yet._",
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmProductionStatusSensor(SensorEntity):
+    """Production inoculate / harvest status for the active batch."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Production status"
+    _attr_unique_id = "communifarm_production_status"
+    _attr_icon = "mdi:mushroom"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "sensor.communifarm_production_status"
+        self._value = "planned"
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
+            )
+        )
+
+    @callback
+    def _on_update(self, entry_id: str) -> None:
+        if entry_id != self._entry_id:
+            return
+        self.hass.async_create_task(self.async_refresh())
+
+    async def async_refresh(self) -> None:
+        from . import production_actions
+
+        summary = await production_actions.async_production_summary(
+            self.hass, self._entry_id
+        )
+        self._value = summary.lifecycle_phase
+        self._attrs = {
+            **summary.to_dict(),
+            "progress_text": production_actions.production_summary_markdown(summary),
         }
         self.async_write_ha_state()
 
