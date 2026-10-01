@@ -160,7 +160,7 @@ async def test_nfc_resolve_checkin_container_harvest(
 ) -> None:
     db_path = tmp_path / "communifarm_nfc.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)

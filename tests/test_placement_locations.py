@@ -113,7 +113,7 @@ async def test_ensure_default_layout_persists(
 ) -> None:
     db_path = tmp_path / "communifarm_layout.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -150,7 +150,7 @@ async def test_set_batch_location_persists(
 ) -> None:
     db_path = tmp_path / "communifarm_set_zone.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -191,7 +191,7 @@ async def test_inoculate_with_zone_id(
 ) -> None:
     db_path = tmp_path / "communifarm_inoc_zone.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -257,7 +257,7 @@ async def test_harvest_with_zone_id(
 ) -> None:
     db_path = tmp_path / "communifarm_harv_zone.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)

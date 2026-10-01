@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
-
-from homeassistant.core import HomeAssistant
 
 from ..domain.culture import (
     EVENT_CULTURE_ACQUIRED,
@@ -34,32 +30,16 @@ from ..domain.culture import (
     slugify_variety_name,
 )
 from ..domain.models import new_id
-from . import sqlite_db
-
-_LOGGER = logging.getLogger(__name__)
+from .sqlite_repository import SqliteRepository
 
 
-class CultureRepository:
+class CultureRepository(SqliteRepository):
     """Culture inventory + media prep hubs and append-only events."""
 
-    def __init__(self, hass: HomeAssistant, path: Path | None = None) -> None:
-        self._hass = hass
-        self._path = path or sqlite_db.db_path_for_config_dir(hass.config.config_dir)
-        self._conn = None
+    _ready_label = "Communifarm culture SQLite"
 
-    @property
-    def path(self) -> Path:
-        return self._path
-
-    async def async_setup(self) -> None:
-        await self._hass.async_add_executor_job(self._setup_sync)
-
-    def _setup_sync(self) -> None:
-        with sqlite_db.DB_LOCK:
-            self._conn = sqlite_db.connect(self._path)
-            version = sqlite_db.apply_migrations(self._conn)
-            self._ensure_seed_varieties_sync()
-        _LOGGER.info("Communifarm culture SQLite ready at %s (schema v%s)", self._path, version)
+    def _after_open_sync(self) -> None:
+        self._ensure_seed_varieties_sync()
 
     def _ensure_seed_varieties_sync(self) -> None:
         assert self._conn is not None
@@ -94,20 +74,6 @@ class CultureRepository:
                 ),
             )
         self._conn.commit()
-
-    async def async_close(self) -> None:
-        await self._hass.async_add_executor_job(self._close_sync)
-
-    def _close_sync(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-
-    def _locked(self, fn, /, *args):
-        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
-        with sqlite_db.DB_LOCK:
-            return fn(*args)
-
 
     # --- Culture lots ---
 

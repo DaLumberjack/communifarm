@@ -211,7 +211,7 @@ async def test_happy_path_inoculate_to_final_harvest(
 ) -> None:
     db_path = tmp_path / "communifarm_prod.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -306,7 +306,7 @@ async def test_inoculate_rejects_unknown_culture(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_unknown.db",
     )
     mock_config_entry.add_to_hass(hass)

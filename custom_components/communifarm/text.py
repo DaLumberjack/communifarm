@@ -7,7 +7,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import ENTITY_VARIETY_NAME
+from .entity import CommunifarmEntity
+
+
+class CommunifarmText(CommunifarmEntity, TextEntity):
+    """Text identity and entry bucket."""
 
 
 async def async_setup_entry(
@@ -18,8 +23,7 @@ async def async_setup_entry(
     async_add_entities([CommunifarmVarietyNameText(entry.entry_id)])
 
 
-class CommunifarmVarietyNameText(TextEntity):
-    _attr_has_entity_name = True
+class CommunifarmVarietyNameText(CommunifarmText):
     _attr_name = "New variety name"
     _attr_unique_id = "communifarm_variety_name"
     _attr_icon = "mdi:mushroom"
@@ -28,12 +32,11 @@ class CommunifarmVarietyNameText(TextEntity):
     _attr_mode = "text"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "text.communifarm_variety_name"
+        super().__init__(entry_id, entity_id=ENTITY_VARIETY_NAME)
         self._value = ""
 
     async def async_added_to_hass(self) -> None:
-        self.hass.data[DOMAIN][self._entry_id]["variety_name_draft"] = self._value
+        self.bucket()["variety_name_draft"] = self._value
 
     @property
     def native_value(self) -> str | None:
@@ -41,5 +44,5 @@ class CommunifarmVarietyNameText(TextEntity):
 
     async def async_set_value(self, value: str) -> None:
         self._value = value or ""
-        self.hass.data[DOMAIN][self._entry_id]["variety_name_draft"] = self._value
+        self.bucket()["variety_name_draft"] = self._value
         self.async_write_ha_state()

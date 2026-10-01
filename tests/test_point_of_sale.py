@@ -144,7 +144,7 @@ async def test_record_sale_weigh_at_sale_updates_db_and_sensor(
 ) -> None:
     db_path = tmp_path / "communifarm_pos.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -215,7 +215,7 @@ async def test_record_sale_prepacked_pack(
 ) -> None:
     db_path = tmp_path / "communifarm_pos_pack.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -280,7 +280,7 @@ async def test_record_sale_requires_confirm(
 ) -> None:
     db_path = tmp_path / "communifarm_pos_confirm.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -315,7 +315,7 @@ async def test_record_sale_cleanup(
 ) -> None:
     db_path = tmp_path / "communifarm_pos_cleanup.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)

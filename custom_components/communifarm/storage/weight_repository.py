@@ -2,51 +2,16 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
-from pathlib import Path
-
-from homeassistant.core import HomeAssistant
 
 from ..domain.weight import WeightEvent
-from . import sqlite_db
-
-_LOGGER = logging.getLogger(__name__)
+from .sqlite_repository import SqliteRepository
 
 
-class WeightEventRepository:
+class WeightEventRepository(SqliteRepository):
     """Append-only weight events for local analysis and future cloud sync."""
 
-    def __init__(self, hass: HomeAssistant, path: Path | None = None) -> None:
-        self._hass = hass
-        self._path = path or sqlite_db.db_path_for_config_dir(hass.config.config_dir)
-        self._conn = None
-
-    @property
-    def path(self) -> Path:
-        return self._path
-
-    async def async_setup(self) -> None:
-        await self._hass.async_add_executor_job(self._setup_sync)
-
-    def _setup_sync(self) -> None:
-        with sqlite_db.DB_LOCK:
-            self._conn = sqlite_db.connect(self._path)
-            version = sqlite_db.apply_migrations(self._conn)
-        _LOGGER.info("Communifarm SQLite ready at %s (schema v%s)", self._path, version)
-
-    async def async_close(self) -> None:
-        await self._hass.async_add_executor_job(self._close_sync)
-
-    def _close_sync(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-
-    def _locked(self, fn, /, *args):
-        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
-        with sqlite_db.DB_LOCK:
-            return fn(*args)
+    _ready_label = "Communifarm SQLite"
 
 
     async def async_insert(self, event: WeightEvent) -> WeightEvent:

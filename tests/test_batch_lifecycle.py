@@ -30,7 +30,7 @@ async def test_first_weight_auto_starts_dry_mixing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_batch.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -70,7 +70,7 @@ async def test_weigh_milestone_and_complete_new_batch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_batch2.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -127,7 +127,7 @@ async def test_batch_list_sensor_shows_latest_ten_only(
     from custom_components.communifarm.const import BATCH_LIST_WIDGET_LIMIT
 
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_batch_limit.db",
     )
     mock_config_entry.add_to_hass(hass)
@@ -163,7 +163,7 @@ async def test_active_inoculum_select_registers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_inoculum_select.db",
     )
     mock_config_entry.add_to_hass(hass)

@@ -16,12 +16,18 @@ from ..domain.nfc import (
     NfcCheckin,
     NfcResolution,
 )
-from . import sqlite_db
 from .container_repository import ContainerRepository
+from .sqlite_repository import SqliteRepository
 
 
-class NfcRepository:
-    """Resolve NFC UIDs across Communifarm objects and append check-ins."""
+class NfcRepository(SqliteRepository):
+    """Resolve NFC UIDs across Communifarm objects and append check-ins.
+
+    Does not open its own connection. ``bind_connection`` attaches the
+    shared database handle owned by another repository.
+    """
+
+    _eager_path = False
 
     def __init__(
         self,
@@ -31,19 +37,13 @@ class NfcRepository:
         batch_repo: Any,
         culture_repo: Any,
     ) -> None:
-        self._hass = hass
+        super().__init__(hass)
         self._containers = container_repo
         self._batches = batch_repo
         self._cultures = culture_repo
-        self._conn = None
 
     def bind_connection(self, conn: Any) -> None:
         self._conn = conn
-
-    def _locked(self, fn, /, *args):
-        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
-        with sqlite_db.DB_LOCK:
-            return fn(*args)
 
 
     async def async_resolve(self, nfc_uid: str) -> NfcResolution:

@@ -13,6 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    ENTITY_ALLOWLISTED_SWITCH,
     ENTITY_LC_STIR_PLATE,
     ROLE_LC_STIR_PLATE,
     ROLE_SWITCH,
@@ -23,39 +24,19 @@ from .domain.culture import (
     MILESTONE_LC_STIR_STOPPED,
 )
 from .domain.models import CommunifarmState
+from .entity import CommunifarmEntity
 from .storage.culture_repository import CultureRepository
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """Set up Communifarm switch proxies."""
-    state: CommunifarmState = hass.data[DOMAIN][entry.entry_id]["state"]
-    entities: list[SwitchEntity] = []
-    if state.binding_for(ROLE_SWITCH) is not None:
-        entities.append(CommunifarmAllowlistedSwitch(entry.entry_id))
-    if state.binding_for(ROLE_LC_STIR_PLATE) is not None:
-        entities.append(CommunifarmLcStirPlateSwitch(entry.entry_id))
-    if entities:
-        async_add_entities(entities)
+class CommunifarmSwitch(CommunifarmEntity, SwitchEntity):
+    """Proxy that forwards on/off to a role-bound underlying switch."""
 
-
-class _BoundSwitchProxy(SwitchEntity):
-    """Shared proxy that forwards to a role-bound underlying switch."""
-
-    _attr_has_entity_name = True
     _role: str
 
-    def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-
     def _target_entity_id(self) -> str | None:
-        state: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
-        resolved = resolve_bindings(self.hass, state)
+        resolved = resolve_bindings(self.hass, self.runtime_state())
         return resolved.get(self._role)
 
     @property
@@ -106,7 +87,23 @@ class _BoundSwitchProxy(SwitchEntity):
         return None
 
 
-class CommunifarmAllowlistedSwitch(_BoundSwitchProxy):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Communifarm switch proxies."""
+    state: CommunifarmState = hass.data[DOMAIN][entry.entry_id]["state"]
+    entities: list[SwitchEntity] = []
+    if state.binding_for(ROLE_SWITCH) is not None:
+        entities.append(CommunifarmAllowlistedSwitch(entry.entry_id))
+    if state.binding_for(ROLE_LC_STIR_PLATE) is not None:
+        entities.append(CommunifarmLcStirPlateSwitch(entry.entry_id))
+    if entities:
+        async_add_entities(entities)
+
+
+class CommunifarmAllowlistedSwitch(CommunifarmSwitch):
     """Proxy switch that only forwards to the configured safe underlying entity."""
 
     _attr_name = "Allowlisted switch"
@@ -114,11 +111,10 @@ class CommunifarmAllowlistedSwitch(_BoundSwitchProxy):
     _role = ROLE_SWITCH
 
     def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id)
-        self.entity_id = "switch.communifarm_allowlisted_switch"
+        super().__init__(entry_id, entity_id=ENTITY_ALLOWLISTED_SWITCH)
 
 
-class CommunifarmLcStirPlateSwitch(_BoundSwitchProxy):
+class CommunifarmLcStirPlateSwitch(CommunifarmSwitch):
     """Bound LC magnetic stir plate — records CF media milestones when toggled."""
 
     _attr_name = "LC stir plate"
@@ -127,11 +123,10 @@ class CommunifarmLcStirPlateSwitch(_BoundSwitchProxy):
     _role = ROLE_LC_STIR_PLATE
 
     def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id)
-        self.entity_id = ENTITY_LC_STIR_PLATE
+        super().__init__(entry_id, entity_id=ENTITY_LC_STIR_PLATE)
 
     async def _async_after_toggle(self, turned_on: bool, target_entity_id: str) -> None:
-        bucket = self.hass.data[DOMAIN][self._entry_id]
+        bucket = self.bucket()
         media_batch_id = bucket.get("active_media_batch_id")
         repo: CultureRepository | None = bucket.get("culture_repository")
         if not media_batch_id or repo is None:

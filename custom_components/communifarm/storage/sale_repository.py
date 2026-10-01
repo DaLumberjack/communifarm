@@ -2,54 +2,16 @@
 
 from __future__ import annotations
 
-import logging
-from pathlib import Path
 from typing import Any
 
-from homeassistant.core import HomeAssistant
-
 from ..domain.sale import Sale, SaleCleanupEvent, SaleLineItem
-from . import sqlite_db
-
-_LOGGER = logging.getLogger(__name__)
+from .sqlite_repository import SqliteRepository
 
 
-class SaleRepository:
+class SaleRepository(SqliteRepository):
     """CRUD for POS sales tables (schema v10+)."""
 
-    def __init__(self, hass: HomeAssistant, path: Path | None = None) -> None:
-        self._hass = hass
-        self._path = path
-        self._conn: Any = None
-
-    async def async_setup(self) -> Path:
-        return await self._hass.async_add_executor_job(self._setup_sync)
-
-    def _setup_sync(self) -> Path:
-        if self._path is None:
-            self._path = sqlite_db.db_path_for_config_dir(self._hass.config.path(""))
-        with sqlite_db.DB_LOCK:
-            self._conn = sqlite_db.connect(self._path)
-            sqlite_db.apply_migrations(self._conn)
-        return self._path
-
-    @property
-    def path(self) -> Path:
-        assert self._path is not None
-        return self._path
-
-    async def async_close(self) -> None:
-        await self._hass.async_add_executor_job(self._close_sync)
-
-    def _close_sync(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-
-    def _locked(self, fn, /, *args):
-        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
-        with sqlite_db.DB_LOCK:
-            return fn(*args)
+    _eager_path = False
 
 
     async def async_insert_sale(
