@@ -5,11 +5,22 @@ from __future__ import annotations
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    BATCH_LIST_WIDGET_LIMIT,
     DOMAIN,
+    ENTITY_ACTIVE_CULTURE_ID,
+    ENTITY_BATCH_LIST,
+    ENTITY_BATCH_MILESTONES,
+    ENTITY_BATCH_NFC_UID,
+    ENTITY_BATCH_STAGE,
+    ENTITY_CULTURE_INVENTORY,
+    ENTITY_NFC_CHECKIN,
+    ENTITY_PRODUCTION_STATUS,
+    ENTITY_SALES_STATUS,
+    ENTITY_VARIETY_LIST,
+    ENTITY_WEIGH_SESSION,
     ROLE_HUMIDITY,
     ROLE_TEMPERATURE,
     SIGNAL_BATCH_UPDATED,
@@ -21,9 +32,24 @@ from .const import (
 from .domain.models import CommunifarmState
 from .domain.recipe import build_weigh_session_progress
 from .domain.validation import assess_environment_readings
+from .entity import CommunifarmEntity
 from .storage.batch_repository import BatchRepository
 from .storage.culture_repository import CultureRepository
 from .storage.weight_repository import WeightEventRepository
+
+
+class CommunifarmSensor(CommunifarmEntity, SensorEntity):
+    """Sensor identity, entry bucket, and optional cached domain state."""
+
+    def __init__(
+        self,
+        entry_id: str,
+        state: CommunifarmState | None = None,
+        *,
+        entity_id: str,
+    ) -> None:
+        super().__init__(entry_id, entity_id=entity_id)
+        self._state = state
 
 
 async def async_setup_entry(
@@ -33,20 +59,21 @@ async def async_setup_entry(
 ) -> None:
     """Set up Communifarm sensors."""
     state: CommunifarmState = hass.data[DOMAIN][entry.entry_id]["state"]
+    entry_id = entry.entry_id
     async_add_entities(
         [
-            CommunifarmBatchStageSensor(entry.entry_id, state),
-            CommunifarmEnvironmentStatusSensor(entry.entry_id, state),
-            CommunifarmBatchNfcUidSensor(entry.entry_id, state),
-            CommunifarmWeighSessionSensor(entry.entry_id, state),
-            CommunifarmBatchListSensor(entry.entry_id),
-            CommunifarmBatchMilestonesSensor(entry.entry_id),
-            CommunifarmProductionStatusSensor(entry.entry_id),
-            CommunifarmActiveCultureIdSensor(entry.entry_id),
-            CommunifarmVarietyListSensor(entry.entry_id),
-            CommunifarmCultureInventorySensor(entry.entry_id),
-            CommunifarmNfcCheckinSensor(entry.entry_id),
-            CommunifarmSalesStatusSensor(entry.entry_id),
+            CommunifarmBatchStageSensor(entry_id, state),
+            CommunifarmEnvironmentStatusSensor(entry_id, state),
+            CommunifarmBatchNfcUidSensor(entry_id, state),
+            CommunifarmWeighSessionSensor(entry_id, state),
+            CommunifarmBatchListSensor(entry_id),
+            CommunifarmBatchMilestonesSensor(entry_id),
+            CommunifarmProductionStatusSensor(entry_id),
+            CommunifarmActiveCultureIdSensor(entry_id),
+            CommunifarmVarietyListSensor(entry_id),
+            CommunifarmCultureInventorySensor(entry_id),
+            CommunifarmNfcCheckinSensor(entry_id),
+            CommunifarmSalesStatusSensor(entry_id),
         ]
     )
 
@@ -63,26 +90,22 @@ def _parse_float_state(hass: HomeAssistant, entity_id: str | None) -> float | No
         return None
 
 
-class CommunifarmBatchStageSensor(SensorEntity):
+class CommunifarmBatchStageSensor(CommunifarmSensor):
     """Expose the current production batch stage."""
 
-    _attr_has_entity_name = True
     _attr_name = "Batch stage"
     _attr_unique_id = "communifarm_batch_stage"
 
     def __init__(self, entry_id: str, state: CommunifarmState) -> None:
-        self._entry_id = entry_id
-        self._state = state
-        self.entity_id = "sensor.communifarm_batch_stage"
+        super().__init__(entry_id, state, entity_id=ENTITY_BATCH_STAGE)
 
     @property
     def native_value(self) -> str:
-        runtime = self.hass.data[DOMAIN][self._entry_id]["state"]
-        return runtime.batch.stage
+        return self.runtime_state().batch.stage
 
     @property
     def extra_state_attributes(self) -> dict[str, str]:
-        runtime = self.hass.data[DOMAIN][self._entry_id]["state"]
+        runtime = self.runtime_state()
         return {
             "batch_id": runtime.batch.id,
             "batch_nfc_uid": runtime.batch.nfc_uid,
@@ -91,20 +114,17 @@ class CommunifarmBatchStageSensor(SensorEntity):
         }
 
 
-class CommunifarmEnvironmentStatusSensor(SensorEntity):
+class CommunifarmEnvironmentStatusSensor(CommunifarmSensor):
     """Environment health from bound sensors (absolute range checks)."""
 
-    _attr_has_entity_name = True
     _attr_name = "Environment status"
     _attr_unique_id = "communifarm_environment_status"
 
     def __init__(self, entry_id: str, state: CommunifarmState) -> None:
-        self._entry_id = entry_id
-        self._state = state
-        self.entity_id = "sensor.communifarm_environment_status"
+        super().__init__(entry_id, state, entity_id="sensor.communifarm_environment_status")
 
     def _assessment(self):
-        runtime: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
+        runtime = self.runtime_state()
         temp_binding = runtime.binding_for(ROLE_TEMPERATURE)
         hum_binding = runtime.binding_for(ROLE_HUMIDITY)
         temp = _parse_float_state(
@@ -122,7 +142,7 @@ class CommunifarmEnvironmentStatusSensor(SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        runtime = self.hass.data[DOMAIN][self._entry_id]["state"]
+        runtime = self.runtime_state()
         assessment = self._assessment()
         return {
             "site": runtime.site.name,
@@ -133,62 +153,43 @@ class CommunifarmEnvironmentStatusSensor(SensorEntity):
         }
 
 
-class CommunifarmBatchNfcUidSensor(SensorEntity):
+class CommunifarmBatchNfcUidSensor(CommunifarmSensor):
     """Batch UID written to NFC and followed until container split."""
 
-    _attr_has_entity_name = True
     _attr_name = "Batch NFC UID"
     _attr_unique_id = "communifarm_batch_nfc_uid"
     _attr_icon = "mdi:nfc-variant"
 
     def __init__(self, entry_id: str, state: CommunifarmState) -> None:
-        self._entry_id = entry_id
-        self._state = state
-        self.entity_id = "sensor.communifarm_batch_nfc_uid"
+        super().__init__(entry_id, state, entity_id=ENTITY_BATCH_NFC_UID)
 
     @property
     def native_value(self) -> str:
-        runtime = self.hass.data[DOMAIN][self._entry_id]["state"]
-        return runtime.batch.nfc_uid
+        return self.runtime_state().batch.nfc_uid
 
 
-class CommunifarmWeighSessionSensor(SensorEntity):
+class CommunifarmWeighSessionSensor(CommunifarmSensor):
     """Publish current weigh-session progress from SQLite + scaled recipe."""
 
-    _attr_has_entity_name = True
     _attr_name = "Weigh session"
     _attr_unique_id = "communifarm_weigh_session"
     _attr_icon = "mdi:clipboard-list"
 
     def __init__(self, entry_id: str, state: CommunifarmState) -> None:
-        self._entry_id = entry_id
-        self._state = state
-        self.entity_id = "sensor.communifarm_weigh_session"
+        super().__init__(entry_id, state, entity_id=ENTITY_WEIGH_SESSION)
         self._progress_text = "Loading…"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await self.async_refresh_from_db()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                SIGNAL_WEIGH_SESSION_UPDATED,
-                self._handle_session_updated,
-            )
+        self.listen_entry_signals(
+            SIGNAL_WEIGH_SESSION_UPDATED, method="async_refresh_from_db"
         )
 
-    @callback
-    def _handle_session_updated(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self.hass.async_create_task(self.async_refresh_from_db())
-
     async def async_refresh_from_db(self) -> None:
-        runtime: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
-        weight_repo: WeightEventRepository = self.hass.data[DOMAIN][self._entry_id][
-            "weight_repository"
-        ]
-        session = self.hass.data[DOMAIN][self._entry_id].get("weigh_session", {})
+        runtime = self.runtime_state()
+        weight_repo: WeightEventRepository = self.bucket()["weight_repository"]
+        session = self.bucket().get("weigh_session", {})
         events = await weight_repo.async_list_for_batch(runtime.batch.id)
         progress = build_weigh_session_progress(
             batch_id=runtime.batch.id,
@@ -231,46 +232,29 @@ class CommunifarmWeighSessionSensor(SensorEntity):
         return self._attrs
 
 
-class CommunifarmBatchListSensor(SensorEntity):
+class CommunifarmBatchListSensor(CommunifarmSensor):
     """Historical + active batches with mix start/finish times."""
 
-    _attr_has_entity_name = True
     _attr_name = "Batch list"
     _attr_unique_id = "communifarm_batch_list"
     _attr_icon = "mdi:format-list-bulleted"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_batch_list"
+        super().__init__(entry_id, entity_id=ENTITY_BATCH_LIST)
         self._value = "0 batches"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await self.async_refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
-            )
+        self.listen_entry_signals(
+            SIGNAL_BATCH_UPDATED,
+            SIGNAL_WEIGH_SESSION_UPDATED,
+            method="async_refresh",
         )
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self.hass.async_create_task(self.async_refresh())
 
     async def async_refresh(self) -> None:
-        from .const import BATCH_LIST_WIDGET_LIMIT
-
-        runtime: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
-        batch_repo: BatchRepository = self.hass.data[DOMAIN][self._entry_id][
-            "batch_repository"
-        ]
+        runtime = self.runtime_state()
+        batch_repo: BatchRepository = self.bucket()["batch_repository"]
         # async_list_batches is newest-first; widget shows a fixed recent window.
         all_batches = await batch_repo.async_list_batches()
         batches = all_batches[:BATCH_LIST_WIDGET_LIMIT]
@@ -298,44 +282,29 @@ class CommunifarmBatchListSensor(SensorEntity):
         return self._attrs
 
 
-class CommunifarmBatchMilestonesSensor(SensorEntity):
+class CommunifarmBatchMilestonesSensor(CommunifarmSensor):
     """Milestones for the active batch."""
 
-    _attr_has_entity_name = True
     _attr_name = "Batch milestones"
     _attr_unique_id = "communifarm_batch_milestones"
     _attr_icon = "mdi:timeline-clock"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_batch_milestones"
+        super().__init__(entry_id, entity_id=ENTITY_BATCH_MILESTONES)
         self._value = "0 milestones"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await self.async_refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
-            )
+        self.listen_entry_signals(
+            SIGNAL_BATCH_UPDATED,
+            SIGNAL_WEIGH_SESSION_UPDATED,
+            method="async_refresh",
         )
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self.hass.async_create_task(self.async_refresh())
 
     async def async_refresh(self) -> None:
-        runtime: CommunifarmState = self.hass.data[DOMAIN][self._entry_id]["state"]
-        batch_repo: BatchRepository = self.hass.data[DOMAIN][self._entry_id][
-            "batch_repository"
-        ]
+        runtime = self.runtime_state()
+        batch_repo: BatchRepository = self.bucket()["batch_repository"]
         milestones = await batch_repo.async_list_milestones(runtime.batch.id)
         types = [m.event_type for m in milestones]
         self._value = f"{len(milestones)} milestones"
@@ -364,33 +333,21 @@ class CommunifarmBatchMilestonesSensor(SensorEntity):
         return self._attrs
 
 
-class CommunifarmProductionStatusSensor(SensorEntity):
+class CommunifarmProductionStatusSensor(CommunifarmSensor):
     """Production inoculate / harvest status for the active batch."""
 
-    _attr_has_entity_name = True
     _attr_name = "Production status"
     _attr_unique_id = "communifarm_production_status"
     _attr_icon = "mdi:mushroom"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_production_status"
+        super().__init__(entry_id, entity_id=ENTITY_PRODUCTION_STATUS)
         self._value = "planned"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await self.async_refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self.hass.async_create_task(self.async_refresh())
+        self.listen_entry_signals(SIGNAL_BATCH_UPDATED, method="async_refresh")
 
     async def async_refresh(self) -> None:
         from . import production_actions
@@ -414,71 +371,45 @@ class CommunifarmProductionStatusSensor(SensorEntity):
         return self._attrs
 
 
-class CommunifarmActiveCultureIdSensor(SensorEntity):
+class CommunifarmActiveCultureIdSensor(CommunifarmSensor):
     """Stable id of the culture lot selected for inoculation."""
 
-    _attr_has_entity_name = True
     _attr_name = "Active culture id"
     _attr_unique_id = "communifarm_active_culture_id"
     _attr_icon = "mdi:identifier"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_active_culture_id"
+        super().__init__(entry_id, entity_id=ENTITY_ACTIVE_CULTURE_ID)
 
     async def async_added_to_hass(self) -> None:
         self._refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_CULTURE_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self._refresh()
+        self.listen_entry_signals(SIGNAL_CULTURE_UPDATED, method="_refresh")
 
     @callback
     def _refresh(self) -> None:
-        active = self.hass.data[DOMAIN][self._entry_id].get("active_culture_id")
+        active = self.bucket().get("active_culture_id")
         self._attr_native_value = active or "none"
         self.async_write_ha_state()
 
 
-class CommunifarmVarietyListSensor(SensorEntity):
+class CommunifarmVarietyListSensor(CommunifarmSensor):
     """Mushroom variety catalog (seed + custom)."""
 
-    _attr_has_entity_name = True
     _attr_name = "Variety catalog"
     _attr_unique_id = "communifarm_variety_list"
     _attr_icon = "mdi:mushroom"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_variety_list"
+        super().__init__(entry_id, entity_id=ENTITY_VARIETY_LIST)
         self._value = "0 varieties"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await self.async_refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_CULTURE_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self.hass.async_create_task(self.async_refresh())
+        self.listen_entry_signals(SIGNAL_CULTURE_UPDATED, method="async_refresh")
 
     async def async_refresh(self) -> None:
-        repo: CultureRepository = self.hass.data[DOMAIN][self._entry_id][
-            "culture_repository"
-        ]
+        repo: CultureRepository = self.bucket()["culture_repository"]
         varieties = await repo.async_list_varieties(include_retired=True)
         active = [v for v in varieties if v.status == "active"]
         self._value = f"{len(active)} varieties"
@@ -497,38 +428,24 @@ class CommunifarmVarietyListSensor(SensorEntity):
         return self._attrs
 
 
-class CommunifarmCultureInventorySensor(SensorEntity):
+class CommunifarmCultureInventorySensor(CommunifarmSensor):
     """Physical culture vessels (one UID per jar/vial)."""
 
-    _attr_has_entity_name = True
     _attr_name = "Culture inventory"
     _attr_unique_id = "communifarm_culture_inventory"
     _attr_icon = "mdi:flask-outline"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_culture_inventory"
+        super().__init__(entry_id, entity_id=ENTITY_CULTURE_INVENTORY)
         self._value = "0 vessels"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await self.async_refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_CULTURE_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self.hass.async_create_task(self.async_refresh())
+        self.listen_entry_signals(SIGNAL_CULTURE_UPDATED, method="async_refresh")
 
     async def async_refresh(self) -> None:
-        repo: CultureRepository = self.hass.data[DOMAIN][self._entry_id][
-            "culture_repository"
-        ]
+        repo: CultureRepository = self.bucket()["culture_repository"]
         lots = await repo.async_list_cultures()
         self._value = f"{len(lots)} vessels"
         self._attrs = {
@@ -546,41 +463,28 @@ class CommunifarmCultureInventorySensor(SensorEntity):
         return self._attrs
 
 
-class CommunifarmNfcCheckinSensor(SensorEntity):
+class CommunifarmNfcCheckinSensor(CommunifarmSensor):
     """Last handheld NFC resolve / check-in context for harvest."""
 
-    _attr_has_entity_name = True
     _attr_name = "NFC check-in"
     _attr_unique_id = "communifarm_nfc_checkin"
     _attr_icon = "mdi:nfc"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_nfc_checkin"
+        super().__init__(entry_id, entity_id=ENTITY_NFC_CHECKIN)
         self._value = "idle"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         self._refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_NFC_CHECKIN_UPDATED, self._on_update
-            )
+        self.listen_entry_signals(
+            SIGNAL_NFC_CHECKIN_UPDATED,
+            SIGNAL_BATCH_UPDATED,
+            method="_refresh",
         )
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self._refresh()
 
     def _refresh(self) -> None:
-        session = self.hass.data[DOMAIN][self._entry_id].get("nfc_session") or {}
+        session = self.bucket().get("nfc_session") or {}
         if session.get("found"):
             self._value = f"{session.get('object_type')}:{session.get('object_id')}"
         elif session.get("nfc_uid"):
@@ -615,33 +519,21 @@ class CommunifarmNfcCheckinSensor(SensorEntity):
         return self._attrs
 
 
-class CommunifarmSalesStatusSensor(SensorEntity):
+class CommunifarmSalesStatusSensor(CommunifarmSensor):
     """POS sales snapshot — updates when sales or cleanup are recorded."""
 
-    _attr_has_entity_name = True
     _attr_name = "Sales status"
     _attr_unique_id = "communifarm_sales_status"
     _attr_icon = "mdi:point-of-sale"
 
     def __init__(self, entry_id: str) -> None:
-        self._entry_id = entry_id
-        self.entity_id = "sensor.communifarm_sales_status"
+        super().__init__(entry_id, entity_id=ENTITY_SALES_STATUS)
         self._value = "idle"
         self._attrs: dict = {}
 
     async def async_added_to_hass(self) -> None:
         await self.async_refresh()
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_SALES_UPDATED, self._on_update
-            )
-        )
-
-    @callback
-    def _on_update(self, entry_id: str) -> None:
-        if entry_id != self._entry_id:
-            return
-        self.hass.async_create_task(self.async_refresh())
+        self.listen_entry_signals(SIGNAL_SALES_UPDATED, method="async_refresh")
 
     async def async_refresh(self) -> None:
         from . import sale_actions

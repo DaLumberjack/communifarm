@@ -83,7 +83,7 @@ def test_sqlite_migration_v8_culture_media_zones(tmp_path: Path) -> None:
 
 def _patch_db(monkeypatch: pytest.MonkeyPatch, db_path: Path) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
 

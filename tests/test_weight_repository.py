@@ -74,7 +74,7 @@ async def test_record_weight_service_persists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -148,7 +148,7 @@ async def test_record_weight_rejects_negative_mass(
     from homeassistant.exceptions import HomeAssistantError
 
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_neg.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -189,7 +189,7 @@ async def test_record_weight_warns_over_capacity(
     )
 
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_cap.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -229,7 +229,7 @@ async def test_record_weight_warns_missing_nfc(
     from custom_components.communifarm.domain.validation import WARNING_MISSING_NFC
 
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_nfc.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -259,7 +259,7 @@ async def test_environment_status_degraded_on_bad_sensor(
     from custom_components.communifarm.domain.validation import WARNING_TEMP_OUT_OF_RANGE
 
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_env.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")

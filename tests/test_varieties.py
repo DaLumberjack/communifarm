@@ -69,7 +69,7 @@ async def test_seed_varieties_and_custom_crud(
 ) -> None:
     db_path = tmp_path / "communifarm_varieties.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)
@@ -128,7 +128,7 @@ async def test_acquire_lc_and_grain_with_variety_and_status(
 ) -> None:
     db_path = tmp_path / "communifarm_vessels.db"
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: db_path,
     )
     mock_config_entry.add_to_hass(hass)

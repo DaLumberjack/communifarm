@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
-
-from homeassistant.core import HomeAssistant
 
 from ..domain.batch_milestones import (
     BATCH_STATUS_ACTIVE,
@@ -19,9 +15,7 @@ from ..domain.batch_milestones import (
 )
 from ..domain.models import new_id
 from ..domain.production import DEFAULT_MAX_FLUSHES, HarvestEvent, InoculateSpec
-from . import sqlite_db
-
-_LOGGER = logging.getLogger(__name__)
+from .sqlite_repository import SqliteRepository
 
 
 @dataclass(slots=True)
@@ -100,35 +94,10 @@ class BatchMilestone:
         }
 
 
-class BatchRepository:
+class BatchRepository(SqliteRepository):
     """Active + historical batches and append-only milestones."""
 
-    def __init__(self, hass: HomeAssistant, path: Path | None = None) -> None:
-        self._hass = hass
-        self._path = path or sqlite_db.db_path_for_config_dir(hass.config.config_dir)
-        self._conn = None
-
-    async def async_setup(self) -> None:
-        await self._hass.async_add_executor_job(self._setup_sync)
-
-    def _setup_sync(self) -> None:
-        with sqlite_db.DB_LOCK:
-            self._conn = sqlite_db.connect(self._path)
-            version = sqlite_db.apply_migrations(self._conn)
-        _LOGGER.info("Communifarm batch SQLite ready at %s (schema v%s)", self._path, version)
-
-    async def async_close(self) -> None:
-        await self._hass.async_add_executor_job(self._close_sync)
-
-    def _close_sync(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-
-    def _locked(self, fn, /, *args):
-        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
-        with sqlite_db.DB_LOCK:
-            return fn(*args)
+    _ready_label = "Communifarm batch SQLite"
 
 
     async def async_ensure_batch(

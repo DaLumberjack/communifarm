@@ -94,7 +94,7 @@ async def test_bound_stir_plate_records_cf_milestone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_stir_bind.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -323,7 +323,7 @@ async def test_culture_services_happy_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_culture_svc.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
@@ -415,7 +415,7 @@ async def test_introduce_service_rejects_unready_media(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
         lambda _config_dir: tmp_path / "communifarm_culture_reject.db",
     )
     hass.states.async_set("switch.mock_exhaust", "off")
