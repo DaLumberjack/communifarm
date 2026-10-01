@@ -7,7 +7,9 @@ Bridge from culture lots into substrate production batches: inoculate N identica
 | Schema | v7 (production columns from v6; placement from v7) |
 | Services | `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location` |
 | Dashboard | **Production** tab (`/communifarm/production`) |
-| Related | [placement-locations.md](placement-locations.md), [culture media](../user/storage.md#culture-media-hub-media_batches--culture_lots), [storage](../user/storage.md) |
+| UI inoculum | `select.communifarm_active_inoculum` (must register with default options), `button.communifarm_select_inoculum_from_nfc`, `sensor.communifarm_active_culture_id` |
+| Mock NFC | Set `input_text.esp32dev_last_nfc_uid` to culture tag (defaults to culture id; optional `nfc_uid` on `acquire_culture`) |
+| Related | [varieties-culture-vessels.md](varieties-culture-vessels.md), [placement-locations.md](placement-locations.md), [culture media](../user/storage.md#culture-media-hub-media_batches--culture_lots), [storage](../user/storage.md) |
 
 ## Locked defaults
 
@@ -25,9 +27,9 @@ Bridge from culture lots into substrate production batches: inoculate N identica
 ## Flow
 
 ```text
-acquire_culture (culture_lots)
+acquire_culture (culture_lots) → Active inoculum dropdown and/or NFC scan
         ↓
-inoculate_batch  → batches.culture_id + container_* + substrate_g
+inoculate_batch / Inoculate batch button  → batches.culture_id + container_* + substrate_g
         ↓
 advance → incubating → fruiting → harvesting
         ↓

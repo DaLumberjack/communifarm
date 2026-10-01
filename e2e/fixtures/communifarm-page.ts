@@ -105,6 +105,41 @@ export class CommunifarmPage {
     });
   }
 
+  /** Open the Production tab (inoculate / stage / harvest). */
+  async openProduction(): Promise<void> {
+    await this.page.goto("/communifarm/production", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(this.page).toHaveURL(/communifarm\/production/, {
+      timeout: INITIAL_LOAD_MS,
+    });
+    await expect(
+      this.page.getByText(/production|inoculate|harvest/i).first()
+    ).toBeVisible({ timeout: STEP_MS });
+  }
+
+  /** Open the Harvest tab (NFC check-in + container confirm). */
+  async openHarvest(): Promise<void> {
+    await this.page.goto("/communifarm/harvest", { waitUntil: "domcontentloaded" });
+    await expect(this.page).toHaveURL(/communifarm\/harvest/, {
+      timeout: INITIAL_LOAD_MS,
+    });
+    await expect(
+      this.page.getByText(/harvest|nfc|check-?in/i).first()
+    ).toBeVisible({ timeout: STEP_MS });
+  }
+
+  /** Open the POS tab (venue / sale / cleanup). */
+  async openPos(): Promise<void> {
+    await this.page.goto("/communifarm/pos", { waitUntil: "domcontentloaded" });
+    await expect(this.page).toHaveURL(/communifarm\/pos/, {
+      timeout: INITIAL_LOAD_MS,
+    });
+    await expect(
+      this.page.getByText(/point of sale|sales|confirm sale|venue/i).first()
+    ).toBeVisible({ timeout: STEP_MS });
+  }
+
   private async fillIfPresent(label: RegExp, value: string): Promise<void> {
     const field = this.page.getByLabel(label).first();
     if (await field.count()) {

@@ -6,7 +6,7 @@ Per-container harvest with handheld NFC. Tags hold **stable IDs only**; Communif
 | --- | --- |
 | Schema | v9 |
 | Services | `resolve_nfc`, `check_in`, `bind_nfc`, `record_container_harvest` |
-| Dashboard | **Harvest** tab |
+| Dashboard | **Harvest** tab (batch harvest UI now; NFC buttons deferred — use services) |
 | Scanner entity | `input_text.esp32dev_last_nfc_uid` |
 
 ## Flow

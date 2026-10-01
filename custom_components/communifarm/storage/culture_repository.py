@@ -21,12 +21,17 @@ from ..domain.culture import (
     MILESTONE_MEDIA_STERILIZED,
     MILESTONE_TO_MEDIA_STATUS,
     MILESTONE_WEIGHING_STARTED,
+    SEED_VARIETIES,
+    VARIETY_STATUS_ACTIVE,
+    VARIETY_STATUS_RETIRED,
     CultureEvent,
     CultureLot,
     MediaBatch,
     MediaWeightEvent,
+    Variety,
     assert_media_accepts_culture,
     child_culture_from_parent,
+    slugify_variety_name,
 )
 from ..domain.models import new_id
 from . import sqlite_db
@@ -53,7 +58,42 @@ class CultureRepository:
         with sqlite_db.DB_LOCK:
             self._conn = sqlite_db.connect(self._path)
             version = sqlite_db.apply_migrations(self._conn)
+            self._ensure_seed_varieties_sync()
         _LOGGER.info("Communifarm culture SQLite ready at %s (schema v%s)", self._path, version)
+
+    def _ensure_seed_varieties_sync(self) -> None:
+        assert self._conn is not None
+        created = datetime.now(tz=UTC).isoformat()
+        for name, slug in SEED_VARIETIES:
+            existing = self._conn.execute(
+                "SELECT stable_id FROM varieties WHERE slug = ? OR name = ? COLLATE NOCASE",
+                (slug, name),
+            ).fetchone()
+            if existing:
+                continue
+            variety = Variety(
+                name=name,
+                slug=slug,
+                is_seed=True,
+                status=VARIETY_STATUS_ACTIVE,
+                created_at=created,
+                id=f"variety_{slug}",
+            )
+            self._conn.execute(
+                """
+                INSERT INTO varieties (
+                  stable_id, name, slug, is_seed, status, notes, created_at
+                ) VALUES (?, ?, ?, 1, ?, NULL, ?)
+                """,
+                (
+                    variety.id,
+                    variety.name,
+                    variety.slug,
+                    variety.status,
+                    created,
+                ),
+            )
+        self._conn.commit()
 
     async def async_close(self) -> None:
         await self._hass.async_add_executor_job(self._close_sync)
@@ -83,8 +123,8 @@ class CultureRepository:
             INSERT INTO culture_lots (
               stable_id, site_id, environment_id, name, source_type, form, container,
               strain_label, parent_culture_id, status, acquired_at, created_at,
-              nfc_uid, notes, zone_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              nfc_uid, notes, zone_id, variety_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lot.id,
@@ -102,6 +142,7 @@ class CultureRepository:
                 lot.nfc_uid,
                 lot.notes,
                 lot.zone_id,
+                lot.variety_id,
             ),
         )
         self._conn.commit()
@@ -109,7 +150,9 @@ class CultureRepository:
         return lot
 
     async def async_get_culture(self, culture_id: str) -> CultureLot | None:
-        return await self._hass.async_add_executor_job(self._locked, self._get_culture_sync, culture_id)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._get_culture_sync, culture_id
+        )
 
     def _get_culture_sync(self, culture_id: str) -> CultureLot | None:
         assert self._conn is not None
@@ -131,7 +174,9 @@ class CultureRepository:
     # --- Media batches ---
 
     async def async_insert_media_batch(self, batch: MediaBatch) -> MediaBatch:
-        return await self._hass.async_add_executor_job(self._locked, self._insert_media_batch_sync, batch)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_media_batch_sync, batch
+        )
 
     def _insert_media_batch_sync(self, batch: MediaBatch) -> MediaBatch:
         assert self._conn is not None
@@ -240,6 +285,140 @@ class CultureRepository:
         )
         self._conn.commit()
 
+    async def async_set_culture_status(self, culture_id: str, status: str) -> None:
+        await self._hass.async_add_executor_job(
+            self._locked, self._set_culture_status_sync, culture_id, status
+        )
+
+    def _set_culture_status_sync(self, culture_id: str, status: str) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE culture_lots SET status = ? WHERE stable_id = ?",
+            (status, culture_id),
+        )
+        self._conn.commit()
+
+    # --- Varieties ---
+
+    async def async_list_varieties(
+        self, *, include_retired: bool = False
+    ) -> list[Variety]:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._list_varieties_sync, include_retired
+        )
+
+    def _list_varieties_sync(self, include_retired: bool) -> list[Variety]:
+        assert self._conn is not None
+        if include_retired:
+            rows = self._conn.execute(
+                "SELECT * FROM varieties ORDER BY name COLLATE NOCASE ASC"
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM varieties
+                WHERE status = ?
+                ORDER BY name COLLATE NOCASE ASC
+                """,
+                (VARIETY_STATUS_ACTIVE,),
+            ).fetchall()
+        return [self._row_to_variety(row) for row in rows]
+
+    async def async_get_variety(self, variety_id: str) -> Variety | None:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._get_variety_sync, variety_id
+        )
+
+    def _get_variety_sync(self, variety_id: str) -> Variety | None:
+        assert self._conn is not None
+        row = self._conn.execute(
+            "SELECT * FROM varieties WHERE stable_id = ?", (variety_id,)
+        ).fetchone()
+        return self._row_to_variety(row) if row else None
+
+    async def async_get_variety_by_name(self, name: str) -> Variety | None:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._get_variety_by_name_sync, name
+        )
+
+    def _get_variety_by_name_sync(self, name: str) -> Variety | None:
+        assert self._conn is not None
+        row = self._conn.execute(
+            "SELECT * FROM varieties WHERE name = ? COLLATE NOCASE",
+            (name.strip(),),
+        ).fetchone()
+        return self._row_to_variety(row) if row else None
+
+    async def async_insert_variety(self, variety: Variety) -> Variety:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_variety_sync, variety
+        )
+
+    def _insert_variety_sync(self, variety: Variety) -> Variety:
+        assert self._conn is not None
+        created = variety.created_at or datetime.now(tz=UTC).isoformat()
+        self._conn.execute(
+            """
+            INSERT INTO varieties (
+              stable_id, name, slug, is_seed, status, notes, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                variety.id,
+                variety.name,
+                variety.slug or slugify_variety_name(variety.name),
+                1 if variety.is_seed else 0,
+                variety.status,
+                variety.notes,
+                created,
+            ),
+        )
+        self._conn.commit()
+        variety.created_at = created
+        return variety
+
+    async def async_retire_variety(self, variety_id: str) -> None:
+        await self._hass.async_add_executor_job(
+            self._locked, self._retire_variety_sync, variety_id
+        )
+
+    def _retire_variety_sync(self, variety_id: str) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE varieties SET status = ? WHERE stable_id = ?",
+            (VARIETY_STATUS_RETIRED, variety_id),
+        )
+        self._conn.commit()
+
+    @staticmethod
+    def format_variety_list_text(varieties: list[Variety]) -> str:
+        if not varieties:
+            return "_No varieties yet._"
+        lines = [
+            "| Variety | Source | Status | ID |",
+            "| --- | --- | --- | --- |",
+        ]
+        for variety in varieties:
+            source = "seed" if variety.is_seed else "custom"
+            lines.append(
+                f"| {variety.name} | {source} | {variety.status} | `{variety.id}` |"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_culture_inventory_text(lots: list[CultureLot]) -> str:
+        if not lots:
+            return "_No culture vessels yet._"
+        lines = [
+            "| Variety | Form | Status | UID |",
+            "| --- | --- | --- | --- |",
+        ]
+        for lot in lots[:40]:
+            lines.append(
+                f"| {lot.name} | {lot.form} | {lot.status} | `{lot.nfc_uid or lot.id}` |"
+            )
+        return "\n".join(lines)
+
     async def async_set_media_zone(
         self, media_batch_id: str, zone_id: str | None
     ) -> None:
@@ -258,7 +437,9 @@ class CultureRepository:
     # --- Media weights ---
 
     async def async_insert_media_weight(self, event: MediaWeightEvent) -> MediaWeightEvent:
-        return await self._hass.async_add_executor_job(self._locked, self._insert_media_weight_sync, event)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_media_weight_sync, event
+        )
 
     def _insert_media_weight_sync(self, event: MediaWeightEvent) -> MediaWeightEvent:
         assert self._conn is not None
@@ -442,7 +623,9 @@ class CultureRepository:
 
     async def async_acquire_culture(self, lot: CultureLot) -> CultureLot:
         """Persist a new culture lot and CultureAcquired event."""
-        return await self._hass.async_add_executor_job(self._locked, self._acquire_culture_sync, lot)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._acquire_culture_sync, lot
+        )
 
     def _acquire_culture_sync(self, lot: CultureLot) -> CultureLot:
         lot = self._insert_culture_sync(lot)
@@ -465,7 +648,9 @@ class CultureRepository:
         return lot
 
     async def async_create_media_batch(self, batch: MediaBatch) -> MediaBatch:
-        return await self._hass.async_add_executor_job(self._locked, self._create_media_batch_sync, batch)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._create_media_batch_sync, batch
+        )
 
     def _create_media_batch_sync(self, batch: MediaBatch) -> MediaBatch:
         batch = self._insert_media_batch_sync(batch)
@@ -588,6 +773,19 @@ class CultureRepository:
             nfc_uid=row["nfc_uid"],
             notes=row["notes"],
             zone_id=row["zone_id"] if "zone_id" in keys else None,
+            variety_id=row["variety_id"] if "variety_id" in keys else None,
+        )
+
+    @staticmethod
+    def _row_to_variety(row: Any) -> Variety:
+        return Variety(
+            id=row["stable_id"],
+            name=row["name"],
+            slug=row["slug"],
+            is_seed=bool(row["is_seed"]),
+            status=row["status"],
+            notes=row["notes"],
+            created_at=row["created_at"],
         )
 
     @staticmethod

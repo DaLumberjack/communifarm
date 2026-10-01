@@ -94,6 +94,7 @@ async def async_setup_entry(
                 "mdi:sprout",
             ),
             CommunifarmCompleteAndNewBatchButton(entry.entry_id),
+            CommunifarmSelectInoculumFromNfcButton(entry.entry_id),
             CommunifarmInoculateButton(entry.entry_id),
             CommunifarmAdvanceStageButton(
                 entry.entry_id,
@@ -124,6 +125,10 @@ async def async_setup_entry(
             CommunifarmNfcCheckinHarvestButton(entry.entry_id),
             CommunifarmConfirmContainerHarvestButton(entry.entry_id, is_final=False),
             CommunifarmConfirmContainerHarvestButton(entry.entry_id, is_final=True),
+            CommunifarmCreateVarietyButton(entry.entry_id),
+            CommunifarmRetireVarietyButton(entry.entry_id),
+            CommunifarmAcquireCultureButton(entry.entry_id),
+            CommunifarmSetCultureStatusButton(entry.entry_id),
             CommunifarmRecordSaleButton(entry.entry_id),
             CommunifarmRecordSaleCleanupButton(entry.entry_id),
         ]
@@ -217,6 +222,26 @@ class CommunifarmCompleteAndNewBatchButton(ButtonEntity):
         from . import batch_actions
 
         await batch_actions.async_complete_and_new_batch(self.hass, self._entry_id)
+
+
+class CommunifarmSelectInoculumFromNfcButton(ButtonEntity):
+    """Load active inoculum from input_text.esp32dev_last_nfc_uid (culture tag)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Select inoculum from NFC scan"
+    _attr_unique_id = "communifarm_select_inoculum_from_nfc"
+    _attr_icon = "mdi:nfc-variant"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_select_inoculum_from_nfc"
+
+    async def async_press(self) -> None:
+        from . import culture_actions
+
+        await culture_actions.async_select_inoculum_from_nfc_scan(
+            self.hass, self._entry_id
+        )
 
 
 class CommunifarmInoculateButton(ButtonEntity):
@@ -355,6 +380,104 @@ class CommunifarmConfirmContainerHarvestButton(ButtonEntity):
             confirm=True,
             is_final=self._is_final,
             return_to_fruiting=not self._is_final,
+        )
+
+
+class CommunifarmCreateVarietyButton(ButtonEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Create variety"
+    _attr_unique_id = "communifarm_create_variety"
+    _attr_icon = "mdi:plus-box"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_create_variety"
+
+    async def async_press(self) -> None:
+        from homeassistant.exceptions import HomeAssistantError
+
+        from . import culture_actions
+
+        draft = str(
+            self.hass.data[DOMAIN][self._entry_id].get("variety_name_draft") or ""
+        ).strip()
+        if not draft:
+            raise HomeAssistantError("Enter a name in New variety name first")
+        await culture_actions.async_create_variety(
+            self.hass, self._entry_id, name=draft
+        )
+
+
+class CommunifarmRetireVarietyButton(ButtonEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Retire custom variety"
+    _attr_unique_id = "communifarm_retire_variety"
+    _attr_icon = "mdi:archive"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_retire_variety"
+
+    async def async_press(self) -> None:
+        from homeassistant.exceptions import HomeAssistantError
+
+        from . import culture_actions
+
+        variety_id = self.hass.data[DOMAIN][self._entry_id].get("catalog_variety_id")
+        if not variety_id:
+            raise HomeAssistantError("Pick a Catalog variety first")
+        await culture_actions.async_retire_variety(
+            self.hass, self._entry_id, variety_id=str(variety_id)
+        )
+
+
+class CommunifarmAcquireCultureButton(ButtonEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Acquire culture vessel"
+    _attr_unique_id = "communifarm_acquire_culture"
+    _attr_icon = "mdi:needle"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_acquire_culture"
+
+    async def async_press(self) -> None:
+        from homeassistant.exceptions import HomeAssistantError
+
+        from . import culture_actions
+        from .domain.culture import FORM_LIQUID_CULTURE, SOURCE_PURCHASED
+
+        bucket = self.hass.data[DOMAIN][self._entry_id]
+        variety_id = bucket.get("catalog_variety_id")
+        if not variety_id:
+            raise HomeAssistantError("Pick a Catalog variety first")
+        await culture_actions.async_acquire_culture(
+            self.hass,
+            self._entry_id,
+            source_type=str(bucket.get("acquire_source") or SOURCE_PURCHASED),
+            form=str(bucket.get("acquire_form") or FORM_LIQUID_CULTURE),
+            variety_id=str(variety_id),
+        )
+
+
+class CommunifarmSetCultureStatusButton(ButtonEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Set culture vessel status"
+    _attr_unique_id = "communifarm_set_culture_status"
+    _attr_icon = "mdi:check-decagram"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_set_culture_status"
+
+    async def async_press(self) -> None:
+        from . import culture_actions
+        from .domain.culture import CULTURE_STATUS_READY
+
+        bucket = self.hass.data[DOMAIN][self._entry_id]
+        status = str(bucket.get("culture_vessel_status") or CULTURE_STATUS_READY)
+        await culture_actions.async_set_culture_status(
+            self.hass, self._entry_id, status=status
         )
 
 

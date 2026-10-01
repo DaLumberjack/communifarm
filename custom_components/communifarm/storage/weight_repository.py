@@ -85,7 +85,9 @@ class WeightEventRepository:
         self._conn.commit()
 
     async def async_list_for_batch(self, batch_id: str) -> list[WeightEvent]:
-        return await self._hass.async_add_executor_job(self._locked, self._list_for_batch_sync, batch_id)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._list_for_batch_sync, batch_id
+        )
 
     def _list_for_batch_sync(self, batch_id: str) -> list[WeightEvent]:
         assert self._conn is not None

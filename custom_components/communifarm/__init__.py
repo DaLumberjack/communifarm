@@ -39,6 +39,7 @@ from .const import (
     SERVICE_CHECK_IN,
     SERVICE_COMPLETE_AND_NEW_BATCH,
     SERVICE_CREATE_MEDIA_BATCH,
+    SERVICE_CREATE_VARIETY,
     SERVICE_ENSURE_PLACEMENT_LAYOUT,
     SERVICE_INOCULATE_BATCH,
     SERVICE_INTRODUCE_CULTURE,
@@ -51,9 +52,11 @@ from .const import (
     SERVICE_RECORD_SALE_CLEANUP,
     SERVICE_RECORD_WEIGHT,
     SERVICE_RESOLVE_NFC,
+    SERVICE_RETIRE_VARIETY,
     SERVICE_SET_BATCH_LOCATION,
     SERVICE_SET_CHECK_REMINDER,
     SERVICE_SET_CULTURE_LOCATION,
+    SERVICE_SET_CULTURE_STATUS,
     SERVICE_SET_MEDIA_LOCATION,
     SERVICE_TRANSITION_BATCH,
     SIGNAL_WEIGH_SESSION_UPDATED,
@@ -69,6 +72,7 @@ from .domain.batch_milestones import (
 from .domain.culture import (
     CULTURE_CONTAINERS,
     CULTURE_FORMS,
+    CULTURE_STATUSES,
     DEFAULT_AGAR_RECIPE_KEY,
     MEDIA_MILESTONES,
     MEDIA_RECIPES,
@@ -171,12 +175,31 @@ RECORD_MEDIA_MILESTONE_SCHEMA = vol.Schema(
 
 ACQUIRE_CULTURE_SCHEMA = vol.Schema(
     {
-        vol.Required("name"): cv.string,
+        vol.Optional("name"): cv.string,
         vol.Required("source_type"): vol.In(SOURCE_TYPES),
         vol.Required("form"): vol.In(CULTURE_FORMS),
         vol.Optional("container"): vol.In(CULTURE_CONTAINERS),
         vol.Optional("strain_label", default=""): cv.string,
         vol.Optional("zone_id"): cv.string,
+        vol.Optional("nfc_uid"): cv.string,
+        vol.Optional("variety_id"): cv.string,
+        vol.Optional("variety_name"): cv.string,
+    }
+)
+
+CREATE_VARIETY_SCHEMA = vol.Schema(
+    {
+        vol.Required("name"): cv.string,
+        vol.Optional("notes"): cv.string,
+    }
+)
+
+RETIRE_VARIETY_SCHEMA = vol.Schema({vol.Required("variety_id"): cv.string})
+
+SET_CULTURE_STATUS_SCHEMA = vol.Schema(
+    {
+        vol.Required("status"): vol.In(CULTURE_STATUSES),
+        vol.Optional("culture_id"): cv.string,
     }
 )
 
@@ -384,6 +407,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "heat_treatment": "pasteurized",
         "active_media_batch_id": None,
         "active_culture_id": None,
+        "catalog_variety_id": None,
+        "variety_name_draft": "",
+        "acquire_form": "liquid_culture",
+        "acquire_source": "purchased",
+        "culture_vessel_status": "ready",
         "container_type": "bag",
         "substrate_g_per_container": 1000.0,
         "harvest_mass_g": 100.0,
@@ -472,12 +500,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await culture_actions.async_acquire_culture(
             hass,
             entry.entry_id,
-            name=call.data["name"],
+            name=call.data.get("name"),
             source_type=call.data["source_type"],
             form=call.data["form"],
             container=call.data.get("container"),
             strain_label=call.data.get("strain_label", ""),
             zone_id=call.data.get("zone_id"),
+            nfc_uid=call.data.get("nfc_uid"),
+            variety_id=call.data.get("variety_id"),
+            variety_name=call.data.get("variety_name"),
+        )
+
+    async def async_create_variety(call: ServiceCall) -> None:
+        await culture_actions.async_create_variety(
+            hass,
+            entry.entry_id,
+            name=call.data["name"],
+            notes=call.data.get("notes"),
+        )
+
+    async def async_retire_variety(call: ServiceCall) -> None:
+        await culture_actions.async_retire_variety(
+            hass, entry.entry_id, variety_id=call.data["variety_id"]
+        )
+
+    async def async_set_culture_status(call: ServiceCall) -> None:
+        await culture_actions.async_set_culture_status(
+            hass,
+            entry.entry_id,
+            status=call.data["status"],
+            culture_id=call.data.get("culture_id"),
         )
 
     async def async_introduce_culture(call: ServiceCall) -> None:
@@ -684,6 +736,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_ACQUIRE_CULTURE,
             async_acquire_culture,
             schema=ACQUIRE_CULTURE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_CREATE_VARIETY):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CREATE_VARIETY,
+            async_create_variety,
+            schema=CREATE_VARIETY_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RETIRE_VARIETY):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RETIRE_VARIETY,
+            async_retire_variety,
+            schema=RETIRE_VARIETY_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_CULTURE_STATUS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_CULTURE_STATUS,
+            async_set_culture_status,
+            schema=SET_CULTURE_STATUS_SCHEMA,
         )
     if not hass.services.has_service(DOMAIN, SERVICE_INTRODUCE_CULTURE):
         hass.services.async_register(

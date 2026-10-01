@@ -19,13 +19,18 @@ SOURCE_TYPES = frozenset({SOURCE_WILD, SOURCE_ACQUAINTANCE, SOURCE_PURCHASED})
 FORM_LIQUID_CULTURE = "liquid_culture"
 FORM_AGAR = "agar"
 FORM_SPORES = "spores"
-CULTURE_FORMS = frozenset({FORM_LIQUID_CULTURE, FORM_AGAR, FORM_SPORES})
+FORM_GRAIN_SPAWN = "grain_spawn"
+CULTURE_FORMS = frozenset(
+    {FORM_LIQUID_CULTURE, FORM_AGAR, FORM_SPORES, FORM_GRAIN_SPAWN}
+)
+VESSEL_FORMS = frozenset({FORM_LIQUID_CULTURE, FORM_GRAIN_SPAWN})
 
 CONTAINER_SYRINGE = "syringe"
 CONTAINER_STERILE_BAG = "sterile_bag"
 CONTAINER_PLATE = "plate"
 CONTAINER_JAR = "jar"
 CONTAINER_SLANT = "slant"
+CONTAINER_VIAL = "vial"
 CONTAINER_OTHER = "other"
 CULTURE_CONTAINERS = frozenset(
     {
@@ -34,21 +39,65 @@ CULTURE_CONTAINERS = frozenset(
         CONTAINER_PLATE,
         CONTAINER_JAR,
         CONTAINER_SLANT,
+        CONTAINER_VIAL,
         CONTAINER_OTHER,
     }
 )
 
+# Legacy agar/spore (and pre-v11) statuses
 CULTURE_STATUS_ACTIVE = "active"
 CULTURE_STATUS_RETIRED = "retired"
 CULTURE_STATUS_CONTAMINATED = "contaminated"
 CULTURE_STATUS_CONSUMED = "consumed"
+# LC / grain vessel statuses (same vocabulary for both)
+CULTURE_STATUS_COLONIZING = "colonizing"
+CULTURE_STATUS_READY = "ready"
+CULTURE_STATUS_DRAWING = "drawing"
+CULTURE_STATUS_EXHAUSTED = "exhausted"
 CULTURE_STATUSES = frozenset(
     {
         CULTURE_STATUS_ACTIVE,
         CULTURE_STATUS_RETIRED,
         CULTURE_STATUS_CONTAMINATED,
         CULTURE_STATUS_CONSUMED,
+        CULTURE_STATUS_COLONIZING,
+        CULTURE_STATUS_READY,
+        CULTURE_STATUS_DRAWING,
+        CULTURE_STATUS_EXHAUSTED,
     }
+)
+VESSEL_STATUSES = frozenset(
+    {
+        CULTURE_STATUS_COLONIZING,
+        CULTURE_STATUS_READY,
+        CULTURE_STATUS_DRAWING,
+        CULTURE_STATUS_EXHAUSTED,
+        CULTURE_STATUS_CONTAMINATED,
+        CULTURE_STATUS_RETIRED,
+    }
+)
+# May be selected as production inoculum
+INOCULUM_READY_STATUSES = frozenset(
+    {
+        CULTURE_STATUS_READY,
+        CULTURE_STATUS_DRAWING,
+        CULTURE_STATUS_ACTIVE,  # legacy lots
+    }
+)
+
+VARIETY_STATUS_ACTIVE = "active"
+VARIETY_STATUS_RETIRED = "retired"
+VARIETY_STATUSES = frozenset({VARIETY_STATUS_ACTIVE, VARIETY_STATUS_RETIRED})
+
+# Seed mushroom varieties (display name, slug)
+SEED_VARIETIES: tuple[tuple[str, str], ...] = (
+    ("Chestnut", "chestnut"),
+    ("Blue oyster", "blue_oyster"),
+    ("White oyster", "white_oyster"),
+    ("Shiitake", "shiitake"),
+    ("APE", "ape"),
+    ("Cascadia Teacher", "cascadia_teacher"),
+    ("Golden Teacher", "golden_teacher"),
 )
 
 # --- Media batch ---
@@ -155,6 +204,9 @@ EVENT_CULTURE_CONTAMINATED = "culture_contaminated"
 EVENT_CULTURE_RETIRED = "culture_retired"
 EVENT_CULTURE_LOCATION_SET = "culture_location_set"
 EVENT_MEDIA_LOCATION_SET = "media_location_set"
+EVENT_VARIETY_CREATED = "variety_created"
+EVENT_VARIETY_RETIRED = "variety_retired"
+EVENT_CULTURE_STATUS_SET = "culture_status_set"
 
 # LC mason-jar lid expectations (documented on recipe meta; not separate columns yet).
 LC_LID_FEATURES = frozenset({"syringe_port", "breathability_port", "stir_bar"})
@@ -182,9 +234,55 @@ MEDIA_RECIPE_META: dict[str, dict[str, str]] = {
 ALLOWED_MEDIA_UNITS = frozenset({"g", "ml"})
 
 
+def slugify_variety_name(name: str) -> str:
+    cleaned = "".join(
+        ch.lower() if ch.isalnum() else "_" for ch in name.strip()
+    )
+    while "__" in cleaned:
+        cleaned = cleaned.replace("__", "_")
+    return cleaned.strip("_") or "variety"
+
+
+def default_status_for_form(form: str) -> str:
+    if form in VESSEL_FORMS:
+        return CULTURE_STATUS_READY
+    return CULTURE_STATUS_ACTIVE
+
+
+def default_child_status_for_form(form: str) -> str:
+    if form in VESSEL_FORMS:
+        return CULTURE_STATUS_COLONIZING
+    return CULTURE_STATUS_ACTIVE
+
+
+@dataclass(slots=True)
+class Variety:
+    """Mushroom variety / strain catalog entry (display name for inoculum)."""
+
+    name: str
+    slug: str
+    is_seed: bool = False
+    status: str = VARIETY_STATUS_ACTIVE
+    notes: str | None = None
+    created_at: str | None = None
+    id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = new_id("variety")
+        if not self.slug:
+            self.slug = slugify_variety_name(self.name)
+        validate_readable_name(self.name, field_name="variety name")
+        if self.status not in VARIETY_STATUSES:
+            raise ValidationError(f"variety status must be one of {sorted(VARIETY_STATUSES)}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 @dataclass(slots=True)
 class CultureLot:
-    """Stable culture inventory unit."""
+    """One physical culture vessel (jar / vial / plate) — one UID per row."""
 
     site_id: str
     environment_id: str
@@ -194,20 +292,31 @@ class CultureLot:
     container: str
     strain_label: str = ""
     parent_culture_id: str | None = None
-    status: str = CULTURE_STATUS_ACTIVE
+    status: str = ""
     acquired_at: str | None = None
     nfc_uid: str | None = None
     notes: str | None = None
     zone_id: str | None = None
+    variety_id: str | None = None
     id: str = ""
 
     def __post_init__(self) -> None:
         if not self.id:
             self.id = new_id("culture")
+        # Default tag UID = stable id so mock handheld scans work without bind_nfc.
+        if not self.nfc_uid:
+            self.nfc_uid = self.id
+        if not self.status:
+            self.status = default_status_for_form(self.form)
         validate_culture_lot_fields(self)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def display_label(self) -> str:
+        """UI label: variety name · form · status · short id."""
+        form_label = self.form.replace("_", " ")
+        return f"{self.name} · {form_label} · {self.status} · {self.id[-8:]}"
 
 
 @dataclass(slots=True)
@@ -388,20 +497,22 @@ def child_culture_from_parent(
     zone_id: str | None = None,
 ) -> CultureLot:
     """Always create a new child lot — never mutate parent identity."""
+    child_form = form or parent.form
     return CultureLot(
         site_id=parent.site_id,
         environment_id=parent.environment_id,
         name=name or f"{parent.name} child",
         source_type=parent.source_type,
-        form=form or parent.form,
+        form=child_form,
         container=container
-        or (CONTAINER_PLATE if (form or parent.form) == FORM_AGAR else parent.container),
+        or (CONTAINER_PLATE if child_form == FORM_AGAR else parent.container),
         strain_label=parent.strain_label,
         parent_culture_id=parent.id,
-        status=CULTURE_STATUS_ACTIVE,
+        status=default_child_status_for_form(child_form),
         acquired_at=acquired_at,
         notes=f"expanded from {parent.id}",
         zone_id=zone_id,
+        variety_id=parent.variety_id,
     )
 
 

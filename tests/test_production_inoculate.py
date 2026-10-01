@@ -18,8 +18,10 @@ from custom_components.communifarm.const import (
 )
 from custom_components.communifarm.dashboard.builder import DashboardBuilder
 from custom_components.communifarm.domain.culture import (
+    CONTAINER_JAR,
     FORM_LIQUID_CULTURE,
     SOURCE_PURCHASED,
+    CultureLot,
 )
 from custom_components.communifarm.domain.production import (
     DEFAULT_MAX_FLUSHES,
@@ -64,6 +66,18 @@ def test_gate_allows_inoculate_from_cooling() -> None:
     assert_can_inoculate("cooling")
     assert_can_inoculate("planned")
     assert_can_inoculate(STAGE_INOCULATED)
+
+
+def test_culture_lot_nfc_uid_defaults_to_stable_id() -> None:
+    lot = CultureLot(
+        site_id="site_test",
+        environment_id="env_test",
+        name="Mock LC",
+        source_type=SOURCE_PURCHASED,
+        form=FORM_LIQUID_CULTURE,
+        container=CONTAINER_JAR,
+    )
+    assert lot.nfc_uid == lot.id
 
 
 def test_validate_inoculate_requires_substrate() -> None:
@@ -159,7 +173,7 @@ def test_sqlite_migration_v6_adds_production_columns(tmp_path: Path) -> None:
 
 def test_dashboard_includes_production_tab(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
-    assert len(config["views"]) == 6
+    assert len(config["views"]) == 7
     production = next(
         view for view in config["views"] if view.get("path") == "production"
     )
@@ -181,6 +195,8 @@ def test_dashboard_includes_production_tab(sample_state) -> None:
         row["entity"] if isinstance(row, dict) else row for row in inoculate["entities"]
     ]
     assert "button.communifarm_inoculate_batch" in ids
+    assert "select.communifarm_active_inoculum" in ids
+    assert "button.communifarm_select_inoculum_from_nfc" in ids
     assert "select.communifarm_container_type" in ids
     assert "number.communifarm_substrate_g_per_container" in ids
 

@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -404,6 +404,29 @@ MIGRATIONS: dict[int, str] = {
       ON sale_packs (sold_sale_id);
     CREATE INDEX IF NOT EXISTS idx_sale_packs_status
       ON sale_packs (status, created_at);
+    """,
+    11: """
+    CREATE TABLE IF NOT EXISTS varieties (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      is_seed INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_varieties_name_nocase
+      ON varieties (name COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS idx_varieties_status
+      ON varieties (status, created_at);
+
+    ALTER TABLE culture_lots ADD COLUMN variety_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_variety
+      ON culture_lots (variety_id);
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_nfc
+      ON culture_lots (nfc_uid);
     """,
 }
 

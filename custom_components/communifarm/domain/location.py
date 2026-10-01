@@ -47,6 +47,7 @@ CULTURE_FORM_SUGGESTED_AREA_KIND: dict[str, str] = {
     "agar": AREA_CULTURE_FRIDGE,
     "liquid_culture": AREA_CULTURE_FRIDGE,
     "spores": AREA_CULTURE_FRIDGE,
+    "grain_spawn": AREA_CULTURE_FRIDGE,
 }
 
 # Media prep / cooling in SAB; ready / in-use storage in culture fridge.

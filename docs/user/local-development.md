@@ -108,3 +108,17 @@ yarn provision:ha-token
 
 Scale mock + NFC stub: [mock-scale.md](mock-scale.md) (`yarn test:e2e:scale` when `TEST_HA_TOKEN` is present).
 
+Production → harvest → POS (no physical scanner):
+
+```bash
+yarn test:e2e:t1:pos
+```
+
+| Spec | Path |
+| --- | --- |
+| `production-to-pos` | UI inoculate→incubating→fruiting→harvesting→batch harvest→POS sale |
+| `mock-nfc-harvest-pos` | Sets `input_text.esp32dev_last_nfc_uid` to container UID → Harvest confirm → POS |
+| `inoculate-from-nfc` | Culture tag on `esp32dev_last_nfc_uid` → **Select inoculum from NFC** → inoculate |
+
+Mix is not required before inoculate (`planned` is enough). Harvest NFC uses Communifarm `check_in`, not `esp32dev_simulate_nfc_scan`.
+

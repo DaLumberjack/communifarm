@@ -191,7 +191,9 @@ class ContainerRepository:
         self._conn.commit()
 
     async def async_insert_sale_pack(self, pack: SalePack) -> SalePack:
-        return await self._hass.async_add_executor_job(self._locked, self._insert_sale_pack_sync, pack)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_sale_pack_sync, pack
+        )
 
     def _insert_sale_pack_sync(self, pack: SalePack) -> SalePack:
         assert self._conn is not None

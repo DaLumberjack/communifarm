@@ -16,8 +16,8 @@ from ..domain.nfc import (
     NfcCheckin,
     NfcResolution,
 )
-from .container_repository import ContainerRepository
 from . import sqlite_db
+from .container_repository import ContainerRepository
 
 
 class NfcRepository:

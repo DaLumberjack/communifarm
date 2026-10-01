@@ -49,7 +49,7 @@ def test_sqlite_migration_v10_sales(tmp_path: Path) -> None:
     path = tmp_path / "communifarm.db"
     conn = sqlite_db.connect(path)
     version = sqlite_db.apply_migrations(conn)
-    assert version == 10
+    assert version == sqlite_db.SCHEMA_VERSION
     tables = {
         row[0]
         for row in conn.execute(
@@ -68,7 +68,7 @@ def test_sqlite_migration_v10_sales(tmp_path: Path) -> None:
 
 def test_dashboard_includes_pos_tab(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
-    assert len(config["views"]) == 6
+    assert len(config["views"]) == 7
     pos = next(v for v in config["views"] if v.get("path") == "pos")
     assert pos["title"] == "POS"
     titles = [c.get("title") for c in pos["cards"]]

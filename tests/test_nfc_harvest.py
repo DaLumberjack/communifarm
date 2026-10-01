@@ -103,7 +103,7 @@ def test_sqlite_migration_v9_containers(tmp_path: Path) -> None:
     path = tmp_path / "communifarm.db"
     conn = sqlite_db.connect(path)
     version = sqlite_db.apply_migrations(conn)
-    assert version == 10
+    assert version == sqlite_db.SCHEMA_VERSION
     tables = {
         row[0]
         for row in conn.execute(
@@ -124,13 +124,30 @@ def test_sqlite_migration_v9_containers(tmp_path: Path) -> None:
 
 def test_dashboard_includes_harvest_tab(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
-    assert len(config["views"]) == 6
+    assert len(config["views"]) == 7
     harvest = next(v for v in config["views"] if v.get("path") == "harvest")
+    production = next(v for v in config["views"] if v.get("path") == "production")
     assert harvest["title"] == "Harvest"
     titles = [c.get("title") for c in harvest["cards"]]
-    assert "Per-container harvest" in titles
+    assert "Batch harvest" in titles
+    assert "Harvest" in titles
     assert "Fridge / bagging (residential)" in titles
-    assert "NFC + confirm" in titles
+    assert "NFC + confirm" not in titles
+
+    harvest_card = next(c for c in harvest["cards"] if c.get("title") == "Harvest")
+    production_card = next(
+        c for c in production["cards"] if c.get("title") == "Harvest"
+    )
+    assert harvest_card["entities"] == production_card["entities"]
+    entity_ids = [
+        row["entity"] if isinstance(row, dict) else row
+        for row in harvest_card["entities"]
+    ]
+    assert entity_ids == [
+        "number.communifarm_harvest_mass_g",
+        "button.communifarm_record_harvest",
+        "button.communifarm_final_harvest",
+    ]
 
 
 @pytest.mark.asyncio

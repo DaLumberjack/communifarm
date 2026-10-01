@@ -9,7 +9,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN, SIGNAL_BATCH_UPDATED, SIGNAL_NFC_CHECKIN_UPDATED, SIGNAL_WEIGH_SESSION_UPDATED
+from .const import (
+    DOMAIN,
+    SIGNAL_BATCH_UPDATED,
+    SIGNAL_NFC_CHECKIN_UPDATED,
+    SIGNAL_WEIGH_SESSION_UPDATED,
+)
 from .domain.batch_milestones import (
     MILESTONE_BATCH_NOTE,
     MILESTONE_CHECK_REMINDER_SET,
@@ -110,6 +115,13 @@ async def async_inoculate_batch(
     culture = await culture_repo.async_get_culture(culture_id)
     if culture is None:
         raise HomeAssistantError(f"unknown culture_id: {culture_id}")
+    from .domain.culture import INOCULUM_READY_STATUSES
+
+    if culture.status not in INOCULUM_READY_STATUSES:
+        raise HomeAssistantError(
+            f"culture status {culture.status} cannot inoculate; "
+            f"need one of {sorted(INOCULUM_READY_STATUSES)}"
+        )
 
     try:
         spec = validate_inoculate_spec(

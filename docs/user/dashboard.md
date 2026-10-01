@@ -7,7 +7,10 @@ After Communifarm setup finishes, open **Communifarm** in the sidebar (`/communi
 | Overview | `/communifarm/overview` | Environment, targets, controls, batch |
 | Weigh | `/communifarm/weigh` | Scale, NFC, recipe scale, session progress, mix milestones |
 | Batches | `/communifarm/batches` | Batch list, complete/new, post-weigh mix process |
-| Production | `/communifarm/production` | Culture inoculate, incubation/fruiting, harvest |
+| Culture | `/communifarm/culture` | Variety catalog CRUD, acquire LC/grain vessels, vessel status |
+| Production | `/communifarm/production` | Culture inoculate, incubation/fruiting, batch harvest (shared entities) |
+| Harvest | `/communifarm/harvest` | Same batch harvest entities + fridge/bagging SOP (NFC UI later) |
+| POS | `/communifarm/pos` | Sale draft, confirm, cleanup |
 
 ### Weigh session
 
@@ -29,7 +32,7 @@ First successful weigh-in **auto-records** `dry_mixing_started`.
 
 | Control | Entity |
 | --- | --- |
-| Batch list | `sensor.communifarm_batch_list` |
+| Batch list | `sensor.communifarm_batch_list` (latest **10** batches; state-filtered widgets later) |
 | Milestones | `sensor.communifarm_batch_milestones` |
 | Complete & new | `button.communifarm_complete_and_new_batch` |
 | Completely mixed | `button.communifarm_completely_mixed` |
@@ -58,6 +61,10 @@ Culture → substrate containers. See [production-inoculate.md](../process/produ
 | Final harvest | `button.communifarm_final_harvest` |
 
 Acquire a culture first (`acquire_culture` service) so the inoculate button has an `active_culture_id`, or call `inoculate_batch` with an explicit `culture_id`.
+
+### Harvest tab
+
+Same **Harvest** entities as Production (shared card builder). Lifecycle advances stay on **Production**; pick/pack SOP stays here. Per-container NFC services remain; dashboard NFC buttons deferred.
 
 | Validity signal | Where |
 | --- | --- |

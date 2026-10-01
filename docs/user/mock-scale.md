@@ -31,12 +31,16 @@ Inject-only helpers (`input_number.esp32dev_inject_*`, etc.) are mock scaffoldin
 | Entity | Purpose |
 | --- | --- |
 | `input_select.esp32dev_selected_ingredient` | Dropdown of recipe ingredients (scan result) |
-| `input_text.esp32dev_last_nfc_uid` | Mock tag UID |
-| `input_button.esp32dev_simulate_nfc_scan` | Apply UID → ingredient map |
+| `input_text.esp32dev_last_nfc_uid` | Mock tag UID (shared with Communifarm harvest resolve) |
+| `input_button.esp32dev_simulate_nfc_scan` | Apply UID → **recipe ingredient** map (weigh only) |
 
 Record Weight appends `| <ingredient>` when a selection other than `(none)` is active.
 
 Example UIDs already mapped: `nfc-hardwood-pellets`, `nfc-gypsum`, … (see package automation).
+
+**Production inoculum:** set `input_text.esp32dev_last_nfc_uid` to a culture tag, then press **Select inoculum from NFC scan** on the Production tab (or pick **Active inoculum** in the dropdown). Do **not** use `simulate_nfc_scan` — that maps weigh ingredients only.
+
+**Harvest / POS:** set the same `input_text` to a container UID (`cont_*` from inoculate), then Harvest check-in / confirm. Playwright: `yarn test:e2e:t1:pos`.
 
 ## How to drive the mock
 

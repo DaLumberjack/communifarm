@@ -41,11 +41,16 @@ media_batches (culture media hub)
   ├── culture_events.media_batch_id
   └── media_batches.zone_id           # placement slot (v8)
 
-culture_lots (culture inventory)
+culture_lots (culture inventory — one jar/vial per row)
+  ├── culture_lots.variety_id         # FK → varieties (mushroom display name)
   ├── culture_events.culture_id
   ├── culture_events.batch_id         # production inoculate link
   ├── culture_lots.parent_culture_id  # lineage; expand always creates a child
   └── culture_lots.zone_id            # placement slot (v8)
+
+varieties (mushroom catalog, schema v11)
+  ├── seed rows (Chestnut, oysters, Shiitake, APE, Teachers, …)
+  └── custom rows via create_variety / Culture tab
 ```
 
 | Column | Purpose |
@@ -76,7 +81,9 @@ Sibling process family for agar / liquid culture prep. **Do not overload product
 | `create_media_batch` | Start MEA agar (default) or honey/Karo LC prep; optional `zone_id` |
 | `record_media_weight` | Recipe line amount (`g` / `ml`) with scale + target |
 | `record_media_milestone` | `media_portioned` → `media_sterilized` → `media_ready` (pour plates **before** sterilize) |
-| `acquire_culture` | Register lot (`wild` / `acquaintance` / `purchased`); optional `zone_id` |
+| `acquire_culture` | Register lot (`wild` / `acquaintance` / `purchased`); optional `variety_id` / `variety_name`; optional `zone_id` |
+| `create_variety` / `retire_variety` | Catalog CRUD (seed varieties cannot be retired) |
+| `set_culture_status` | LC/grain vessel state: colonizing / ready / drawing / exhausted / contaminated / retired |
 | `introduce_culture` | Requires `media_ready` or `in_use`; **always** creates a new child `culture_lot`; optional child `zone_id` |
 | `set_culture_location` | Set `culture_lots.zone_id`; event `culture_location_set` |
 | `set_media_location` | Set `media_batches.zone_id`; event `media_location_set` |
@@ -102,7 +109,7 @@ Culture → substrate containers (independent of mix recipe). See [production-in
 | `resolve_nfc` / `check_in` / `bind_nfc` | Handheld NFC ID resolve + activity context (see [nfc-harvest-checkin.md](../process/nfc-harvest-checkin.md)) |
 | `add_batch_note` / `set_check_reminder` | Notes + HA notification |
 
-`harvest_events` rows FK `batches.stable_id` (optional `container_id`). Dashboard **Harvest** tab drives NFC check-in; **Production** tab still has batch-level harvest.
+`harvest_events` rows FK `batches.stable_id` (optional `container_id`). Dashboard **Harvest** and **Production** tabs share batch-level harvest entities (`record_harvest` / `final_harvest`). Per-container NFC UI is deferred; services still work.
 
 ## Placement locations (schema v7–v8)
 
@@ -142,7 +149,7 @@ Append-only process events (`dry_mixing_started`, `water_added`, `heat_treated`,
 | --- | --- |
 | `sensor.communifarm_weigh_session` | Session table includes **Target** + recorded; attrs carry `recipe_scale` |
 | `number.communifarm_recipe_scale` | Updates Store **and** master `batches.recipe_scale` |
-| `sensor.communifarm_batch_list` | Master list with phase + scale + mix times |
+| `sensor.communifarm_batch_list` | Master list with phase + scale + mix times (**latest 10** in the Batches dashboard widget; `total_batches` / `limit` attrs) |
 | `sensor.communifarm_batch_milestones` | Timeline for active batch |
 
 ## Validity rules (operator-usable)

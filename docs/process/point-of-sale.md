@@ -18,6 +18,10 @@ weigh-at-sale (harvest+mass) ─┘
 → return home → record_sale_cleanup
 ```
 
+Prerequisite harvest can be **batch-level** (`record_harvest`) with no NFC, or **per-container** after mock/physical NFC check-in.
+
+T1 Playwright: `yarn test:e2e:t1:pos` (`production-to-pos` + `mock-nfc-harvest-pos`).
+
 ## Identity
 
 Sale lines denormalize `batch_id` and `harvest_id` from the pack’s harvest. Production `batches.stable_id` is the grow/substrate hub — not `media_batches`.
