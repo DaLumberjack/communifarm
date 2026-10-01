@@ -5,9 +5,10 @@ Long-term Communifarm events live in a Communifarm-owned SQLite file — not Hom
 | Item | Value |
 | --- | --- |
 | Path | `<HA config>/communifarm/communifarm.db` |
-| Schema | v7 |
+| Schema | v10 |
+| Concurrency | Process-wide `DB_LOCK` + WAL + 30s busy timeout (HA executor-safe) |
 | ADR | [0003-communifarm-sqlite.md](../adr/0003-communifarm-sqlite.md) |
-| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location` |
+| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `record_container_harvest`, `resolve_nfc`, `check_in`, `bind_nfc`, `record_sale`, `record_sale_cleanup`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location`, `set_culture_location`, `set_media_location` |
 
 ## Why not Recorder?
 
@@ -21,9 +22,15 @@ Recorder is for entity history. Grow analysis needs Communifarm stable IDs (site
 batches (master)
   ├── weight_events.batch_id          # mix weigh-ins (scale + target per ingredient)
   ├── batch_milestones.batch_id       # process timeline
-  ├── harvest_events.batch_id         # flush harvest weights (+ optional zone_id)
+  ├── harvest_events.batch_id         # flush harvest weights (+ optional zone_id / container_id)
+  ├── production_containers.batch_id  # per-block NFC + flush + zone (v9)
   ├── batches.zone_id                 # placement slot (v7)
-  └── sales_lots.batch_id             # future sell-through stats
+  └── sale_packs.harvest_id           # bagged portions (v9)
+        └── sale_line_items.sale_pack_id  # POS lines (v10)
+              └── sales                   # venue / buyer / payment (v10)
+
+nfc_checkins                          # handheld resolve/check-in audit (v9)
+sale_cleanup_events                   # post-sale clean / put-away (v10)
 
 placement_areas (site tents / fridges / cabinets)
   └── zones.area_id                   # level / shelf slots
@@ -31,12 +38,19 @@ placement_areas (site tents / fridges / cabinets)
 media_batches (culture media hub)
   ├── media_weight_events.media_batch_id
   ├── media_milestones.media_batch_id
-  └── culture_events.media_batch_id
+  ├── culture_events.media_batch_id
+  └── media_batches.zone_id           # placement slot (v8)
 
-culture_lots (culture inventory)
+culture_lots (culture inventory — one jar/vial per row)
+  ├── culture_lots.variety_id         # FK → varieties (mushroom display name)
   ├── culture_events.culture_id
   ├── culture_events.batch_id         # production inoculate link
-  └── culture_lots.parent_culture_id  # lineage; expand always creates a child
+  ├── culture_lots.parent_culture_id  # lineage; expand always creates a child
+  └── culture_lots.zone_id            # placement slot (v8)
+
+varieties (mushroom catalog, schema v11)
+  ├── seed rows (Chestnut, oysters, Shiitake, APE, Teachers, …)
+  └── custom rows via create_variety / Culture tab
 ```
 
 | Column | Purpose |
@@ -64,11 +78,15 @@ Sibling process family for agar / liquid culture prep. **Do not overload product
 
 | Service | Purpose |
 | --- | --- |
-| `create_media_batch` | Start MEA agar (default) or honey/Karo LC prep |
+| `create_media_batch` | Start MEA agar (default) or honey/Karo LC prep; optional `zone_id` |
 | `record_media_weight` | Recipe line amount (`g` / `ml`) with scale + target |
 | `record_media_milestone` | `media_portioned` → `media_sterilized` → `media_ready` (pour plates **before** sterilize) |
-| `acquire_culture` | Register lot (`wild` / `acquaintance` / `purchased`) |
-| `introduce_culture` | Requires `media_ready` or `in_use`; **always** creates a new child `culture_lot` |
+| `acquire_culture` | Register lot (`wild` / `acquaintance` / `purchased`); optional `variety_id` / `variety_name`; optional `zone_id` |
+| `create_variety` / `retire_variety` | Catalog CRUD (seed varieties cannot be retired) |
+| `set_culture_status` | LC/grain vessel state: colonizing / ready / drawing / exhausted / contaminated / retired |
+| `introduce_culture` | Requires `media_ready` or `in_use`; **always** creates a new child `culture_lot`; optional child `zone_id` |
+| `set_culture_location` | Set `culture_lots.zone_id`; event `culture_location_set` |
+| `set_media_location` | Set `media_batches.zone_id`; event `media_location_set` |
 
 Hard gate: introducing culture into a planned/weighing/sterilizing media batch is rejected.
 
@@ -86,12 +104,14 @@ Culture → substrate containers (independent of mix recipe). See [production-in
 | --- | --- |
 | `inoculate_batch` | Link active culture lot; set container type/count + substrate g/container; optional `zone_id` |
 | `advance_production_stage` | `incubating` → `fruiting` → `harvesting`; optional `zone_id` |
-| `record_harvest` | Flush mass (g); `is_final` completes batch; optional harvest `zone_id` |
+| `record_harvest` | Flush mass (g); `is_final` completes batch; optional harvest `zone_id` (batch-level) |
+| `record_container_harvest` | Per-container flush; requires `confirm=true`; returns to fruiting unless final |
+| `resolve_nfc` / `check_in` / `bind_nfc` | Handheld NFC ID resolve + activity context (see [nfc-harvest-checkin.md](../process/nfc-harvest-checkin.md)) |
 | `add_batch_note` / `set_check_reminder` | Notes + HA notification |
 
-`harvest_events` rows FK `batches.stable_id`. Dashboard **Production** tab drives the flow.
+`harvest_events` rows FK `batches.stable_id` (optional `container_id`). Dashboard **Harvest** and **Production** tabs share batch-level harvest entities (`record_harvest` / `final_harvest`). Per-container NFC UI is deferred; services still work.
 
-## Placement locations (schema v7)
+## Placement locations (schema v7–v8)
 
 Site → PlacementArea → Zone. See [placement-locations.md](../process/placement-locations.md).
 
@@ -99,8 +119,10 @@ Site → PlacementArea → Zone. See [placement-locations.md](../process/placeme
 | --- | --- |
 | `ensure_placement_layout` | Seed default tents/fridges/cabinets + 24 zones (idempotent) |
 | `set_batch_location` | Set `batches.zone_id` |
+| `set_culture_location` | Set `culture_lots.zone_id` (v8) |
+| `set_media_location` | Set `media_batches.zone_id` (v8) |
 
-Soft stage → area_kind hints only (no hard reject in MVP).
+Soft stage / form / media-status → area_kind hints only (no hard reject in MVP).
 
 ## Mix weigh-ins (`weight_events`)
 
@@ -127,7 +149,7 @@ Append-only process events (`dry_mixing_started`, `water_added`, `heat_treated`,
 | --- | --- |
 | `sensor.communifarm_weigh_session` | Session table includes **Target** + recorded; attrs carry `recipe_scale` |
 | `number.communifarm_recipe_scale` | Updates Store **and** master `batches.recipe_scale` |
-| `sensor.communifarm_batch_list` | Master list with phase + scale + mix times |
+| `sensor.communifarm_batch_list` | Master list with phase + scale + mix times (**latest 10** in the Batches dashboard widget; `total_batches` / `limit` attrs) |
 | `sensor.communifarm_batch_milestones` | Timeline for active batch |
 
 ## Validity rules (operator-usable)

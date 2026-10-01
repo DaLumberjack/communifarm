@@ -30,8 +30,9 @@ class WeightEventRepository:
         await self._hass.async_add_executor_job(self._setup_sync)
 
     def _setup_sync(self) -> None:
-        self._conn = sqlite_db.connect(self._path)
-        version = sqlite_db.apply_migrations(self._conn)
+        with sqlite_db.DB_LOCK:
+            self._conn = sqlite_db.connect(self._path)
+            version = sqlite_db.apply_migrations(self._conn)
         _LOGGER.info("Communifarm SQLite ready at %s (schema v%s)", self._path, version)
 
     async def async_close(self) -> None:
@@ -42,8 +43,14 @@ class WeightEventRepository:
             self._conn.close()
             self._conn = None
 
+    def _locked(self, fn, /, *args):
+        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
+        with sqlite_db.DB_LOCK:
+            return fn(*args)
+
+
     async def async_insert(self, event: WeightEvent) -> WeightEvent:
-        await self._hass.async_add_executor_job(self._insert_sync, event)
+        await self._hass.async_add_executor_job(self._locked, self._insert_sync, event)
         return event
 
     def _insert_sync(self, event: WeightEvent) -> None:
@@ -78,7 +85,9 @@ class WeightEventRepository:
         self._conn.commit()
 
     async def async_list_for_batch(self, batch_id: str) -> list[WeightEvent]:
-        return await self._hass.async_add_executor_job(self._list_for_batch_sync, batch_id)
+        return await self._hass.async_add_executor_job(
+            self._locked, self._list_for_batch_sync, batch_id
+        )
 
     def _list_for_batch_sync(self, batch_id: str) -> list[WeightEvent]:
         assert self._conn is not None

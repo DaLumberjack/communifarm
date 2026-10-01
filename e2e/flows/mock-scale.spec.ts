@@ -1,6 +1,7 @@
 import { test, expect } from "../fixtures/ha-test";
 import { CommunifarmPage } from "../fixtures/communifarm-page";
 import { getStage } from "../fixtures/environment";
+import { STEP_MS } from "../fixtures/timeouts";
 import { getStateViaHass } from "../helpers/ha-api";
 import {
   pressMockScaleButton,
@@ -21,19 +22,26 @@ test.describe("Mock esp32dev scale (T1)", () => {
     );
     test.skip(
       !process.env.TEST_HA_TOKEN,
-      "TEST_HA_TOKEN required to drive mock scale services"
+      "OpenBao kv/ha-test missing dev_container_playwright_long_lived_access_token"
     );
 
     const cf = new CommunifarmPage(page);
     await cf.openWeighStation();
-    await expect(page.getByText(/ingredient \(nfc\)|selected ingredient/i).first()).toBeVisible();
-    await expect(page.getByText(/current mass|calibrated/i).first()).toBeVisible();
+    await expect(page.getByText(/ingredient \(nfc\)|selected ingredient/i).first()).toBeVisible({
+      timeout: STEP_MS,
+    });
+    await expect(page.getByText(/current mass|calibrated/i).first()).toBeVisible({
+      timeout: STEP_MS,
+    });
 
     // Mock NFC scan → hardwood pellets, then tare / add mass / record
     await setMockScaleCalibratedSensor(50);
     await simulateMockNfcScan("nfc-hardwood-pellets");
     await expect
-      .poll(async () => getStateViaHass(page, "input_select.esp32dev_selected_ingredient"))
+      .poll(
+        async () => getStateViaHass(page, "input_select.esp32dev_selected_ingredient"),
+        { timeout: STEP_MS }
+      )
       .toBe("hardwood pellets");
 
     await pressMockScaleButton("tare");
@@ -41,8 +49,10 @@ test.describe("Mock esp32dev scale (T1)", () => {
     await pressMockScaleButton("record_weight");
 
     await expect
-      .poll(async () =>
-        Number.parseFloat(await getStateViaHass(page, "sensor.esp32dev_calibrated_g"))
+      .poll(
+        async () =>
+          Number.parseFloat(await getStateViaHass(page, "sensor.esp32dev_calibrated_g")),
+        { timeout: STEP_MS }
       )
       .toBeCloseTo(3000, 0);
 
@@ -51,7 +61,9 @@ test.describe("Mock esp32dev scale (T1)", () => {
     expect(recorded).toMatch(/hardwood pellets/);
 
     // Dashboard still shows weigh chrome after the activity
-    await expect(page.getByText(/weigh station/i).first()).toBeVisible();
+    await expect(page.getByText(/weigh station/i).first()).toBeVisible({
+      timeout: STEP_MS,
+    });
   });
 
   test("select ingredient dropdown then record weight", async ({ page }) => {
@@ -62,7 +74,7 @@ test.describe("Mock esp32dev scale (T1)", () => {
     );
     test.skip(
       !process.env.TEST_HA_TOKEN,
-      "TEST_HA_TOKEN required to drive mock scale services"
+      "OpenBao kv/ha-test missing dev_container_playwright_long_lived_access_token"
     );
 
     const cf = new CommunifarmPage(page);

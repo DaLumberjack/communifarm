@@ -7,16 +7,25 @@ from typing import Any
 from ..const import (
     DASHBOARD_TITLE,
     DASHBOARD_VIEW_BATCHES,
+    DASHBOARD_VIEW_CULTURE,
+    DASHBOARD_VIEW_HARVEST,
     DASHBOARD_VIEW_OVERVIEW,
+    DASHBOARD_VIEW_POS,
     DASHBOARD_VIEW_PRODUCTION,
     DASHBOARD_VIEW_WEIGH,
+    ENTITY_ACQUIRE_FORM,
+    ENTITY_ACQUIRE_SOURCE,
+    ENTITY_ACTIVE_CULTURE_ID,
+    ENTITY_ACTIVE_INOCULUM,
     ENTITY_ALLOWLISTED_SWITCH,
     ENTITY_BATCH_LIST,
     ENTITY_BATCH_MILESTONES,
     ENTITY_BATCH_NFC_UID,
     ENTITY_BATCH_STAGE,
+    ENTITY_BTN_ACQUIRE_CULTURE,
     ENTITY_BTN_COMPLETE_NEW_BATCH,
     ENTITY_BTN_COMPLETELY_MIXED,
+    ENTITY_BTN_CREATE_VARIETY,
     ENTITY_BTN_DRY_WET_MIX,
     ENTITY_BTN_FIELD_CAPACITY,
     ENTITY_BTN_FINAL_HARVEST,
@@ -27,20 +36,36 @@ from ..const import (
     ENTITY_BTN_MOVE_INCUBATION,
     ENTITY_BTN_PRODUCTION_START,
     ENTITY_BTN_RECORD_HARVEST,
+    ENTITY_BTN_RECORD_SALE,
+    ENTITY_BTN_RECORD_SALE_CLEANUP,
+    ENTITY_BTN_RETIRE_VARIETY,
+    ENTITY_BTN_SELECT_INOCULUM_NFC,
     ENTITY_BTN_SEPARATE_CONTAINERS,
+    ENTITY_BTN_SET_CULTURE_STATUS,
     ENTITY_BTN_SETTLING,
     ENTITY_BTN_STORED_COOLING,
     ENTITY_BTN_WATER_ADDED,
+    ENTITY_CATALOG_VARIETY,
     ENTITY_CONTAINER_COUNT,
     ENTITY_CONTAINER_TYPE,
+    ENTITY_CULTURE_INVENTORY,
+    ENTITY_CULTURE_VESSEL_STATUS,
     ENTITY_HARVEST_MASS_G,
     ENTITY_HEAT_TREATMENT,
     ENTITY_HUMIDITY_TARGET,
     ENTITY_LC_STIR_PLATE,
+    ENTITY_PAYMENT_METHOD,
     ENTITY_PRODUCTION_STATUS,
     ENTITY_RECIPE_SCALE,
+    ENTITY_SALE_BUYER,
+    ENTITY_SALE_LINE_AMOUNT,
+    ENTITY_SALE_MASS_G,
+    ENTITY_SALE_VENUE,
+    ENTITY_SALES_STATUS,
     ENTITY_SUBSTRATE_G,
     ENTITY_TEMPERATURE_TARGET,
+    ENTITY_VARIETY_LIST,
+    ENTITY_VARIETY_NAME,
     ENTITY_WEIGH_SESSION,
     ROLE_FAN,
     ROLE_HUMIDITY,
@@ -74,7 +99,10 @@ class DashboardBuilder:
                 self._overview_view(state, resolved),
                 self._weigh_view(state),
                 self._batches_view(state),
+                self._culture_view(state),
                 self._production_view(state),
+                self._harvest_view(state),
+                self._pos_view(state),
             ],
         }
 
@@ -89,7 +117,9 @@ class DashboardBuilder:
                     f"Site: **{state.site.name}**\n"
                     f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
                     "Weighing? **Weigh** · Mix history? **Batches** · "
-                    "Inoculate / harvest? **Production**."
+                    "Culture / varieties? **Culture** · "
+                    "Inoculate? **Production** · Pick / fridge? **Harvest** · "
+                    "Sell? **POS**."
                 ),
             },
             {
@@ -372,6 +402,102 @@ class DashboardBuilder:
             ],
         }
 
+    def _culture_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Variety catalog + one-UID-per-vessel culture inventory."""
+        return {
+            "path": DASHBOARD_VIEW_CULTURE,
+            "title": "Culture",
+            "icon": "mdi:flask",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "title": "Culture / inoculum",
+                    "content": (
+                        f"Batch **{state.batch.name}**\n\n"
+                        "Each LC jar / grain bag / vial is **one row** with a stable UID. "
+                        "Display name is the **mushroom variety** "
+                        "(Chestnut, Blue oyster, …).\n\n"
+                        "Vessel states (LC & grain): "
+                        "`colonizing` → `ready` → `drawing` → `exhausted` "
+                        "(+ `contaminated` / `retired`).\n\n"
+                        f"{{{{ state_attr('{ENTITY_VARIETY_LIST}', 'list_text') }}}}"
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Variety catalog",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_VARIETY_NAME,
+                            "name": "New variety name",
+                        },
+                        {
+                            "entity": ENTITY_BTN_CREATE_VARIETY,
+                            "name": "Create variety",
+                        },
+                        {
+                            "entity": ENTITY_CATALOG_VARIETY,
+                            "name": "Catalog variety",
+                        },
+                        {
+                            "entity": ENTITY_BTN_RETIRE_VARIETY,
+                            "name": "Retire custom variety",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Acquire vessel",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_CATALOG_VARIETY,
+                            "name": "Variety",
+                        },
+                        {
+                            "entity": ENTITY_ACQUIRE_FORM,
+                            "name": "Form (LC / grain / …)",
+                        },
+                        {
+                            "entity": ENTITY_ACQUIRE_SOURCE,
+                            "name": "Source",
+                        },
+                        {
+                            "entity": ENTITY_BTN_ACQUIRE_CULTURE,
+                            "name": "Acquire culture vessel",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Vessel status",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_ACTIVE_INOCULUM,
+                            "name": "Active inoculum",
+                        },
+                        {
+                            "entity": ENTITY_CULTURE_VESSEL_STATUS,
+                            "name": "New status",
+                        },
+                        {
+                            "entity": ENTITY_BTN_SET_CULTURE_STATUS,
+                            "name": "Set culture vessel status",
+                        },
+                    ],
+                },
+                {
+                    "type": "markdown",
+                    "title": "Inventory",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_CULTURE_INVENTORY}', 'list_text') }}}}"
+                    ),
+                },
+            ],
+        }
+
     def _production_view(self, state: CommunifarmState) -> dict[str, Any]:
         return {
             "title": "Production",
@@ -383,13 +509,18 @@ class DashboardBuilder:
                     "content": (
                         f"## Production\n"
                         f"Batch: **{state.batch.name}** (`{state.batch.id}`)\n\n"
-                        "1. Acquire culture (service) → set container type + substrate g\n"
-                        "2. **Inoculate** → incubation → fruiting → harvest\n"
+                        "1. Register varieties / vessels on **Culture** tab, then pick "
+                        "**Active inoculum** (variety · form · status · UID) or NFC scan\n"
+                        "2. Set container type + substrate g → **Inoculate** → "
+                        "incubation → fruiting → harvest\n"
                         "3. Final harvest completes the batch\n\n"
                         "**Placement:** call `ensure_placement_layout` once, then "
                         "`set_batch_location` / pass `zone_id` on inoculate/advance/harvest.\n"
+                        "Culture/media: `set_culture_location`, `set_media_location`, "
+                        "or optional `zone_id` on acquire/create/introduce.\n"
                         "Soft hints: inoculated/incubating → inoculation tent; "
-                        "fruiting/harvesting → fruiting tent; pick → harvest fridge shelf.\n"
+                        "fruiting/harvesting → fruiting tent; pick → harvest fridge shelf; "
+                        "culture storage → culture fridge; media prep → still-air cabinet.\n"
                     ),
                 },
                 {
@@ -408,6 +539,18 @@ class DashboardBuilder:
                     "title": "Inoculate inputs",
                     "show_header_toggle": False,
                     "entities": [
+                        {
+                            "entity": ENTITY_ACTIVE_INOCULUM,
+                            "name": "Active inoculum",
+                        },
+                        {
+                            "entity": ENTITY_ACTIVE_CULTURE_ID,
+                            "name": "Active culture id",
+                        },
+                        {
+                            "entity": ENTITY_BTN_SELECT_INOCULUM_NFC,
+                            "name": "Select inoculum from NFC",
+                        },
                         {
                             "entity": ENTITY_CONTAINER_TYPE,
                             "name": "Container type",
@@ -445,22 +588,129 @@ class DashboardBuilder:
                         },
                     ],
                 },
+                self._batch_harvest_entities_card(),
+            ],
+        }
+
+    @staticmethod
+    def _batch_harvest_entities_card() -> dict[str, Any]:
+        """Shared batch harvest controls — Production and Harvest tabs stay in sync."""
+        return {
+            "type": "entities",
+            "title": "Harvest",
+            "show_header_toggle": False,
+            "entities": [
+                {
+                    "entity": ENTITY_HARVEST_MASS_G,
+                    "name": "Harvest mass (g)",
+                },
+                {
+                    "entity": ENTITY_BTN_RECORD_HARVEST,
+                    "name": "Record harvest (batch)",
+                },
+                {
+                    "entity": ENTITY_BTN_FINAL_HARVEST,
+                    "name": "Final harvest (batch)",
+                },
+            ],
+        }
+
+    def _harvest_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Batch harvest (same entities as Production) + fridge SOP; NFC later."""
+        return {
+            "path": DASHBOARD_VIEW_HARVEST,
+            "title": "Harvest",
+            "icon": "mdi:basket-fill",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "title": "Batch harvest",
+                    "content": (
+                        f"Batch **{state.batch.name}** (`{state.batch.id}`)\n\n"
+                        "Same controls as **Production → Harvest** "
+                        "(shared entities — pick/pack stays on this tab).\n\n"
+                        "1. Batch must be **fruiting** or **harvesting** "
+                        "(advance on **Production**)\n"
+                        "2. Set **Harvest mass (g)**\n"
+                        "3. **Record harvest (batch)** for a flush, or "
+                        "**Final harvest (batch)** to complete\n\n"
+                        f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'progress_text') }}}}"
+                    ),
+                },
+                self._batch_harvest_entities_card(),
+                {
+                    "type": "markdown",
+                    "title": "Fridge / bagging (residential)",
+                    "content": (
+                        "| Step | Practice |\n"
+                        "| --- | --- |\n"
+                        "| After cut | Cool/dry — **do not wash** |\n"
+                        "| Bag | Breathable paper / vented sale bag ASAP |\n"
+                        "| Avoid | Sealed plastic (condensation pool) |\n"
+                        "| Fridge | Main shelves, **not** crisper |\n"
+                        "| Pack | Don't overpack; leave air gap |\n"
+                        "| Target | Best quality 3–5 days |\n\n"
+                        "`sale_pack` rows link to `harvest_id`; buyer/payment on **POS**.\n\n"
+                        "Per-container NFC check-in stays available as services "
+                        "(`check_in` / `record_container_harvest`); UI wiring later."
+                    ),
+                },
+            ],
+        }
+
+    def _pos_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Point of sale — venue/buyer/payment + confirm; cleanup after return."""
+        return {
+            "path": DASHBOARD_VIEW_POS,
+            "title": "POS",
+            "icon": "mdi:point-of-sale",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "title": "Point of sale",
+                    "content": (
+                        f"Batch **{state.batch.name}**\n\n"
+                        "General sales tracking (not GAP). After payment:\n"
+                        "1. Set venue, buyer, payment method\n"
+                        "2. Enter mass (weigh-at-sale) **or** leave open packs "
+                        "and Confirm uses the oldest open pack\n"
+                        "3. Enter amount received\n"
+                        "4. Press **Confirm sale**\n"
+                        "5. At home: **Record sale cleanup**\n\n"
+                        f"{{{{ state_attr('{ENTITY_SALES_STATUS}', 'progress_text') }}}}"
+                    ),
+                },
                 {
                     "type": "entities",
-                    "title": "Harvest",
+                    "title": "Sale draft",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {"entity": ENTITY_SALE_VENUE, "name": "Venue"},
+                        {"entity": ENTITY_SALE_BUYER, "name": "Buyer"},
+                        {"entity": ENTITY_PAYMENT_METHOD, "name": "Payment"},
+                        {"entity": ENTITY_SALE_MASS_G, "name": "Mass (g)"},
+                        {
+                            "entity": ENTITY_SALE_LINE_AMOUNT,
+                            "name": "Amount received",
+                        },
+                        {
+                            "entity": ENTITY_SALES_STATUS,
+                            "name": "Sales status",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Submit",
                     "show_header_toggle": False,
                     "entities": [
                         {
-                            "entity": ENTITY_HARVEST_MASS_G,
-                            "name": "Harvest mass (g)",
+                            "entity": ENTITY_BTN_RECORD_SALE,
+                            "name": "Confirm sale",
                         },
                         {
-                            "entity": ENTITY_BTN_RECORD_HARVEST,
-                            "name": "Record harvest",
-                        },
-                        {
-                            "entity": ENTITY_BTN_FINAL_HARVEST,
-                            "name": "Final harvest",
+                            "entity": ENTITY_BTN_RECORD_SALE_CLEANUP,
+                            "name": "Record sale cleanup",
                         },
                     ],
                 },

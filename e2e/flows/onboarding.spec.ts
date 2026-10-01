@@ -2,6 +2,15 @@ import { test, expect } from "../fixtures/ha-test";
 import { CommunifarmPage } from "../fixtures/communifarm-page";
 import { getStage } from "../fixtures/environment";
 
+/**
+ * Setup suite only — not part of yarn test:e2e:t1:seeded.
+ *
+ * Run via: yarn test:e2e:t1:setup
+ * For empty HA (Welcome!): yarn test:e2e:t1:scratch
+ *
+ * Seeded suite assumes Communifarm is already configured and exercises
+ * post-init operator flows (dashboard, weigh, mocks).
+ */
 test.describe("Communifarm onboarding", () => {
   test("standalone config flow produces dashboard path", async ({ page }) => {
     const stage = getStage();

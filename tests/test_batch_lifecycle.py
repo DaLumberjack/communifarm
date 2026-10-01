@@ -114,3 +114,63 @@ async def test_weigh_milestone_and_complete_new_batch(
     batches_sensor = hass.states.get("sensor.communifarm_batch_list")
     assert batches_sensor is not None
     assert len(batches_sensor.attributes["batches"]) >= 2
+
+
+@pytest.mark.asyncio
+async def test_batch_list_sensor_shows_latest_ten_only(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from custom_components.communifarm.const import BATCH_LIST_WIDGET_LIMIT
+
+    monkeypatch.setattr(
+        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        lambda _config_dir: tmp_path / "communifarm_batch_limit.db",
+    )
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    for i in range(BATCH_LIST_WIDGET_LIMIT + 2):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_COMPLETE_AND_NEW_BATCH,
+            {"name": f"Batch limit {i}"},
+            blocking=True,
+        )
+    await hass.async_block_till_done()
+
+    batches_sensor = hass.states.get("sensor.communifarm_batch_list")
+    assert batches_sensor is not None
+    attrs = batches_sensor.attributes
+    assert attrs["limit"] == BATCH_LIST_WIDGET_LIMIT
+    assert attrs["total_batches"] > BATCH_LIST_WIDGET_LIMIT
+    assert len(attrs["batches"]) == BATCH_LIST_WIDGET_LIMIT
+    assert f"latest {BATCH_LIST_WIDGET_LIMIT}" in batches_sensor.state
+    # Newest-first: first row is the most recent complete_and_new name.
+    assert attrs["batches"][0]["name"] == f"Batch limit {BATCH_LIST_WIDGET_LIMIT + 1}"
+
+
+@pytest.mark.asyncio
+async def test_active_inoculum_select_registers(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "custom_components.communifarm.storage.weight_repository.sqlite_db.db_path_for_config_dir",
+        lambda _config_dir: tmp_path / "communifarm_inoculum_select.db",
+    )
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    select_state = hass.states.get("select.communifarm_active_inoculum")
+    assert select_state is not None
+    assert "options" in select_state.attributes
+    assert select_state.attributes["options"]

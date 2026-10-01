@@ -112,8 +112,9 @@ class BatchRepository:
         await self._hass.async_add_executor_job(self._setup_sync)
 
     def _setup_sync(self) -> None:
-        self._conn = sqlite_db.connect(self._path)
-        version = sqlite_db.apply_migrations(self._conn)
+        with sqlite_db.DB_LOCK:
+            self._conn = sqlite_db.connect(self._path)
+            version = sqlite_db.apply_migrations(self._conn)
         _LOGGER.info("Communifarm batch SQLite ready at %s (schema v%s)", self._path, version)
 
     async def async_close(self) -> None:
@@ -123,6 +124,12 @@ class BatchRepository:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    def _locked(self, fn, /, *args):
+        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
+        with sqlite_db.DB_LOCK:
+            return fn(*args)
+
 
     async def async_ensure_batch(
         self,
@@ -137,7 +144,7 @@ class BatchRepository:
         recipe_key: str = DEFAULT_RECIPE_KEY,
         lifecycle_phase: str = PHASE_PLANNED,
     ) -> BatchRecord:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._ensure_batch_sync,
             batch_id,
             site_id,
@@ -217,7 +224,7 @@ class BatchRepository:
         )
 
     async def async_list_batches(self) -> list[BatchRecord]:
-        return await self._hass.async_add_executor_job(self._list_batches_sync)
+        return await self._hass.async_add_executor_job(self._locked, self._list_batches_sync)
 
     def _list_batches_sync(self) -> list[BatchRecord]:
         assert self._conn is not None
@@ -227,7 +234,7 @@ class BatchRepository:
         return [self._row_to_batch(row) for row in rows]
 
     async def async_get_batch(self, batch_id: str) -> BatchRecord | None:
-        return await self._hass.async_add_executor_job(self._get_batch_sync, batch_id)
+        return await self._hass.async_add_executor_job(self._locked, self._get_batch_sync, batch_id)
 
     def _get_batch_sync(self, batch_id: str) -> BatchRecord | None:
         assert self._conn is not None
@@ -237,7 +244,7 @@ class BatchRepository:
         return self._row_to_batch(row) if row else None
 
     async def async_complete_batch(self, batch_id: str, completed_at: str) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._complete_batch_sync, batch_id, completed_at
         )
 
@@ -254,7 +261,7 @@ class BatchRepository:
         self._conn.commit()
 
     async def async_set_lifecycle_phase(self, batch_id: str, phase: str) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_lifecycle_phase_sync, batch_id, phase
         )
 
@@ -267,7 +274,7 @@ class BatchRepository:
         self._conn.commit()
 
     async def async_set_recipe_scale(self, batch_id: str, recipe_scale: float) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_recipe_scale_sync, batch_id, recipe_scale
         )
 
@@ -280,7 +287,7 @@ class BatchRepository:
         self._conn.commit()
 
     async def async_mark_mixing_started(self, batch_id: str, when: str) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._mark_mixing_started_sync, batch_id, when
         )
 
@@ -297,7 +304,7 @@ class BatchRepository:
         self._conn.commit()
 
     async def async_mark_mixing_finished(self, batch_id: str, when: str) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._mark_mixing_finished_sync, batch_id, when
         )
 
@@ -316,7 +323,7 @@ class BatchRepository:
     async def async_set_containers(
         self, batch_id: str, count: int, notes: str | None
     ) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_containers_sync, batch_id, count, notes
         )
 
@@ -333,7 +340,7 @@ class BatchRepository:
         self._conn.commit()
 
     async def async_has_milestone(self, batch_id: str, event_type: str) -> bool:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._has_milestone_sync, batch_id, event_type
         )
 
@@ -357,7 +364,7 @@ class BatchRepository:
         recorded_at: str | None = None,
         detail: dict[str, Any] | None = None,
     ) -> BatchMilestone:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_milestone_sync,
             batch_id,
             event_type,
@@ -401,7 +408,7 @@ class BatchRepository:
         )
 
     async def async_list_milestones(self, batch_id: str) -> list[BatchMilestone]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_milestones_sync, batch_id
         )
 
@@ -436,7 +443,7 @@ class BatchRepository:
         return out
 
     async def async_set_zone(self, batch_id: str, zone_id: str | None) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_zone_sync, batch_id, zone_id
         )
 
@@ -457,7 +464,7 @@ class BatchRepository:
         lifecycle_phase: str,
         zone_id: str | None = None,
     ) -> BatchRecord:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._apply_inoculate_sync,
             batch_id,
             spec,
@@ -517,7 +524,7 @@ class BatchRepository:
         return self._row_to_batch(row)
 
     async def async_insert_harvest(self, event: HarvestEvent) -> HarvestEvent:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_harvest_sync, event
         )
 
@@ -528,8 +535,8 @@ class BatchRepository:
             """
             INSERT INTO harvest_events (
               stable_id, batch_id, flush_number, mass_g, is_final, notes,
-              recorded_at, created_at, zone_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              recorded_at, created_at, zone_id, container_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.id,
@@ -541,6 +548,7 @@ class BatchRepository:
                 event.recorded_at,
                 created,
                 event.zone_id,
+                event.container_id,
             ),
         )
         self._conn.execute(
@@ -555,7 +563,7 @@ class BatchRepository:
         return event
 
     async def async_list_harvests(self, batch_id: str) -> list[HarvestEvent]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_harvests_sync, batch_id
         )
 
@@ -564,7 +572,7 @@ class BatchRepository:
         rows = self._conn.execute(
             """
             SELECT stable_id, batch_id, flush_number, mass_g, is_final, notes,
-                   recorded_at, zone_id
+                   recorded_at, zone_id, container_id
             FROM harvest_events
             WHERE batch_id = ?
             ORDER BY flush_number ASC, recorded_at ASC, id ASC
@@ -581,14 +589,49 @@ class BatchRepository:
                 notes=row["notes"],
                 recorded_at=row["recorded_at"],
                 zone_id=row["zone_id"] if "zone_id" in row.keys() else None,
+                container_id=(
+                    row["container_id"] if "container_id" in row.keys() else None
+                ),
             )
             for row in rows
         ]
 
+    async def async_get_harvest(self, harvest_id: str) -> HarvestEvent | None:
+        return await self._hass.async_add_executor_job(self._locked, 
+            self._get_harvest_sync, harvest_id
+        )
+
+    def _get_harvest_sync(self, harvest_id: str) -> HarvestEvent | None:
+        assert self._conn is not None
+        row = self._conn.execute(
+            """
+            SELECT stable_id, batch_id, flush_number, mass_g, is_final, notes,
+                   recorded_at, zone_id, container_id
+            FROM harvest_events
+            WHERE stable_id = ?
+            """,
+            (harvest_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return HarvestEvent(
+            id=row["stable_id"],
+            batch_id=row["batch_id"],
+            flush_number=int(row["flush_number"]),
+            mass_g=float(row["mass_g"]),
+            is_final=bool(row["is_final"]),
+            notes=row["notes"],
+            recorded_at=row["recorded_at"],
+            zone_id=row["zone_id"] if "zone_id" in row.keys() else None,
+            container_id=(
+                row["container_id"] if "container_id" in row.keys() else None
+            ),
+        )
+
     async def async_set_expected_check_at(
         self, batch_id: str, expected_check_at: str | None
     ) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_expected_check_at_sync, batch_id, expected_check_at
         )
 

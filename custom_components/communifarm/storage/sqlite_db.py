@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 11
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -266,6 +267,167 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_harvest_events_zone
       ON harvest_events (zone_id);
     """,
+    8: """
+    ALTER TABLE culture_lots ADD COLUMN zone_id TEXT;
+    ALTER TABLE media_batches ADD COLUMN zone_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_zone
+      ON culture_lots (zone_id);
+    CREATE INDEX IF NOT EXISTS idx_media_batches_zone
+      ON media_batches (zone_id);
+    """,
+    9: """
+    CREATE TABLE IF NOT EXISTS production_containers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      batch_id TEXT NOT NULL,
+      container_index INTEGER NOT NULL,
+      container_type TEXT NOT NULL,
+      nfc_uid TEXT NOT NULL UNIQUE,
+      lifecycle_phase TEXT NOT NULL,
+      flush_count INTEGER NOT NULL DEFAULT 0,
+      max_flushes INTEGER NOT NULL DEFAULT 3,
+      zone_id TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      completed_at TEXT,
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_production_containers_batch
+      ON production_containers (batch_id, container_index);
+    CREATE INDEX IF NOT EXISTS idx_production_containers_nfc
+      ON production_containers (nfc_uid);
+    CREATE INDEX IF NOT EXISTS idx_production_containers_zone
+      ON production_containers (zone_id);
+    CREATE INDEX IF NOT EXISTS idx_production_containers_status
+      ON production_containers (status, lifecycle_phase);
+
+    ALTER TABLE harvest_events ADD COLUMN container_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_harvest_events_container
+      ON harvest_events (container_id, recorded_at);
+
+    CREATE TABLE IF NOT EXISTS nfc_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      nfc_uid TEXT NOT NULL,
+      object_type TEXT NOT NULL,
+      object_id TEXT NOT NULL,
+      activity TEXT NOT NULL,
+      zone_id TEXT,
+      detail TEXT,
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nfc_checkins_nfc_time
+      ON nfc_checkins (nfc_uid, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_nfc_checkins_object
+      ON nfc_checkins (object_type, object_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_nfc_checkins_activity
+      ON nfc_checkins (activity, recorded_at);
+
+    CREATE TABLE IF NOT EXISTS sale_packs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      harvest_id TEXT NOT NULL,
+      mass_g REAL NOT NULL,
+      size_label TEXT,
+      zone_id TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL,
+      notes TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sale_packs_harvest
+      ON sale_packs (harvest_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_sale_packs_zone
+      ON sale_packs (zone_id);
+    """,
+    10: """
+    CREATE TABLE IF NOT EXISTS sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      venue_label TEXT NOT NULL,
+      buyer_label TEXT NOT NULL,
+      payment_method TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      total_amount REAL NOT NULL,
+      sold_at TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sales_sold_at
+      ON sales (sold_at);
+    CREATE INDEX IF NOT EXISTS idx_sales_payment
+      ON sales (payment_method, sold_at);
+
+    CREATE TABLE IF NOT EXISTS sale_line_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      sale_id TEXT NOT NULL,
+      sale_pack_id TEXT NOT NULL,
+      batch_id TEXT NOT NULL,
+      harvest_id TEXT NOT NULL,
+      product_label TEXT NOT NULL,
+      mass_g REAL NOT NULL,
+      unit_price REAL,
+      line_amount REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sale_line_items_sale
+      ON sale_line_items (sale_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_sale_line_items_batch
+      ON sale_line_items (batch_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_sale_line_items_pack
+      ON sale_line_items (sale_pack_id);
+
+    CREATE TABLE IF NOT EXISTS sale_cleanup_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      sale_id TEXT,
+      sale_day TEXT,
+      checklist_json TEXT NOT NULL DEFAULT '{}',
+      notes TEXT,
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sale_cleanup_sale
+      ON sale_cleanup_events (sale_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_sale_cleanup_day
+      ON sale_cleanup_events (sale_day, recorded_at);
+
+    ALTER TABLE sale_packs ADD COLUMN sold_sale_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_sale_packs_sold_sale
+      ON sale_packs (sold_sale_id);
+    CREATE INDEX IF NOT EXISTS idx_sale_packs_status
+      ON sale_packs (status, created_at);
+    """,
+    11: """
+    CREATE TABLE IF NOT EXISTS varieties (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      is_seed INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_varieties_name_nocase
+      ON varieties (name COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS idx_varieties_status
+      ON varieties (status, created_at);
+
+    ALTER TABLE culture_lots ADD COLUMN variety_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_variety
+      ON culture_lots (variety_id);
+    CREATE INDEX IF NOT EXISTS idx_culture_lots_nfc
+      ON culture_lots (nfc_uid);
+    """,
 }
 
 
@@ -276,10 +438,30 @@ def db_path_for_config_dir(config_dir: str | Path) -> Path:
     return root / "communifarm.db"
 
 
+# Serializes all Communifarm SQLite work across repos/threads.
+# Multiple connections to one file + HA's executor pool otherwise race into
+# ``database is locked`` / ``InterfaceError`` (pysqlite is not multi-thread
+# friendly without an external mutex).
+DB_LOCK = threading.RLock()
+
+
 def connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False)
+    """Open Communifarm SQLite with WAL + busy timeout.
+
+    Callers that touch the DB from HA executor jobs must hold :data:`DB_LOCK`
+    for the whole sync operation (see repository ``_locked`` helpers).
+    """
+    conn = sqlite3.connect(
+        path,
+        check_same_thread=False,
+        timeout=30.0,
+        isolation_level=None,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 

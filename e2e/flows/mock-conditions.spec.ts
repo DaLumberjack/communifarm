@@ -11,7 +11,7 @@ test.describe("Mock device conditions (T1)", () => {
     );
     test.skip(
       !process.env.TEST_HA_TOKEN,
-      "Optional long-lived token not provisioned in OpenBao yet"
+      "OpenBao kv/ha-test missing dev_container_playwright_long_lived_access_token"
     );
 
     // ha-test: homepage → login if required, then API inject

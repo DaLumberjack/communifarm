@@ -42,6 +42,26 @@ STAGE_SUGGESTED_AREA_KIND: dict[str, str] = {
     STAGE_HARVESTING: AREA_FRUITING_TENT,
 }
 
+# Culture lot storage (agar / LC / spores) → culture fridge.
+CULTURE_FORM_SUGGESTED_AREA_KIND: dict[str, str] = {
+    "agar": AREA_CULTURE_FRIDGE,
+    "liquid_culture": AREA_CULTURE_FRIDGE,
+    "spores": AREA_CULTURE_FRIDGE,
+    "grain_spawn": AREA_CULTURE_FRIDGE,
+}
+
+# Media prep / cooling in SAB; ready / in-use storage in culture fridge.
+MEDIA_STATUS_SUGGESTED_AREA_KIND: dict[str, str] = {
+    "planned": AREA_STILL_AIR_CABINET,
+    "weighing": AREA_STILL_AIR_CABINET,
+    "sterilizing": AREA_STILL_AIR_CABINET,
+    "media_ready": AREA_CULTURE_FRIDGE,
+    "in_use": AREA_CULTURE_FRIDGE,
+}
+
+# SAB work notes (transfers, plating) — soft hint only.
+SAB_WORK_SUGGESTED_AREA_KIND = AREA_STILL_AIR_CABINET
+
 # (name, area_kind, slot_kind, slot_count)
 DEFAULT_LAYOUT: tuple[tuple[str, str, str, int], ...] = (
     ("Fruiting tent", AREA_FRUITING_TENT, SLOT_LEVEL, 5),
@@ -123,6 +143,16 @@ def validate_zone_index(slot_index: int, slot_count: int) -> int:
 def suggest_area_kind_for_production_stage(stage: str) -> str | None:
     """Soft mapping from production stage → suggested area_kind (or None)."""
     return STAGE_SUGGESTED_AREA_KIND.get(stage)
+
+
+def suggest_area_kind_for_culture_form(form: str) -> str | None:
+    """Soft mapping from culture form → suggested storage area_kind (or None)."""
+    return CULTURE_FORM_SUGGESTED_AREA_KIND.get(form)
+
+
+def suggest_area_kind_for_media_status(status: str) -> str | None:
+    """Soft mapping from media status → suggested area_kind (or None)."""
+    return MEDIA_STATUS_SUGGESTED_AREA_KIND.get(status)
 
 
 def zone_display_name(slot_kind: str, slot_index: int) -> str:

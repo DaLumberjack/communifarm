@@ -9,7 +9,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN, SIGNAL_BATCH_UPDATED, SIGNAL_WEIGH_SESSION_UPDATED
+from .const import (
+    DOMAIN,
+    SIGNAL_BATCH_UPDATED,
+    SIGNAL_NFC_CHECKIN_UPDATED,
+    SIGNAL_WEIGH_SESSION_UPDATED,
+)
 from .domain.batch_milestones import (
     MILESTONE_BATCH_NOTE,
     MILESTONE_CHECK_REMINDER_SET,
@@ -19,6 +24,12 @@ from .domain.batch_milestones import (
     MILESTONE_MOVED_TO_FRUITING,
     MILESTONE_MOVED_TO_INCUBATION,
     MILESTONE_TO_PHASE,
+)
+from .domain.container import (
+    CONTAINER_STATUS_COMPLETE,
+    apply_container_harvest,
+    build_containers_for_inoculate,
+    require_confirm,
 )
 from .domain.culture import EVENT_CULTURE_INOCULATED_BATCH, CultureEvent
 from .domain.models import CommunifarmState
@@ -39,6 +50,7 @@ from .domain.production import (
 )
 from .domain.validation import ValidationError
 from .storage.batch_repository import BatchRepository
+from .storage.container_repository import ContainerRepository
 from .storage.culture_repository import CultureRepository
 
 _LOGGER = logging.getLogger(__name__)
@@ -64,6 +76,13 @@ def _culture_repo(hass: HomeAssistant, entry_id: str) -> CultureRepository:
     return repo
 
 
+def _container_repo(hass: HomeAssistant, entry_id: str) -> ContainerRepository:
+    repo = hass.data[DOMAIN][entry_id].get("container_repository")
+    if repo is None:
+        raise HomeAssistantError("Container repository is not available")
+    return repo
+
+
 def _state(hass: HomeAssistant, entry_id: str) -> CommunifarmState:
     return hass.data[DOMAIN][entry_id]["state"]
 
@@ -71,6 +90,7 @@ def _state(hass: HomeAssistant, entry_id: str) -> CommunifarmState:
 def _notify_batch(hass: HomeAssistant, entry_id: str) -> None:
     async_dispatcher_send(hass, SIGNAL_BATCH_UPDATED, entry_id)
     async_dispatcher_send(hass, SIGNAL_WEIGH_SESSION_UPDATED, entry_id)
+    async_dispatcher_send(hass, SIGNAL_NFC_CHECKIN_UPDATED, entry_id)
 
 
 async def async_inoculate_batch(
@@ -95,6 +115,13 @@ async def async_inoculate_batch(
     culture = await culture_repo.async_get_culture(culture_id)
     if culture is None:
         raise HomeAssistantError(f"unknown culture_id: {culture_id}")
+    from .domain.culture import INOCULUM_READY_STATUSES
+
+    if culture.status not in INOCULUM_READY_STATUSES:
+        raise HomeAssistantError(
+            f"culture status {culture.status} cannot inoculate; "
+            f"need one of {sorted(INOCULUM_READY_STATUSES)}"
+        )
 
     try:
         spec = validate_inoculate_spec(
@@ -148,9 +175,20 @@ async def async_inoculate_batch(
         lifecycle_phase=STAGE_INOCULATED,
         zone_id=resolved_zone,
     )
+    containers = build_containers_for_inoculate(
+        batch_id=state.batch.id,
+        container_type=spec.container_type,
+        container_count=spec.container_count,
+        max_flushes=spec.max_flushes,
+        zone_id=resolved_zone,
+        created_at=when,
+    )
+    await _container_repo(hass, entry_id).async_insert_containers(containers)
     detail = spec.to_dict()
     if resolved_zone:
         detail["zone_id"] = resolved_zone
+    detail["container_ids"] = [c.id for c in containers]
+    detail["container_nfc_uids"] = [c.nfc_uid for c in containers]
     await batch_repo.async_insert_milestone(
         batch_id=state.batch.id,
         event_type=MILESTONE_INOCULATED,
@@ -168,6 +206,7 @@ async def async_inoculate_batch(
                 "container_count": spec.container_count,
                 "substrate_g_per_container": spec.substrate_g_per_container,
                 "zone_id": resolved_zone,
+                "container_ids": detail["container_ids"],
             },
         )
     )
@@ -177,12 +216,13 @@ async def async_inoculate_batch(
             hass, state.batch.id, expected_check_at
         )
     _LOGGER.info(
-        "Inoculated batch %s with culture %s containers=%s×%s zone=%s",
+        "Inoculated batch %s with culture %s containers=%s×%s zone=%s spawned=%s",
         updated.id,
         culture.id,
         spec.container_count,
         spec.container_type,
         resolved_zone,
+        len(containers),
     )
     _notify_batch(hass, entry_id)
     return state.batch.id
@@ -223,9 +263,154 @@ async def async_advance_production_stage(
     )
     phase = MILESTONE_TO_PHASE.get(milestone, resolved)
     await batch_repo.async_set_lifecycle_phase(batch.id, phase)
+    # Keep active containers in lockstep with batch stage advances.
+    cont_repo = _container_repo(hass, entry_id)
+    for cont in await cont_repo.async_list_for_batch(batch.id):
+        if cont.status != CONTAINER_STATUS_COMPLETE:
+            cont.lifecycle_phase = phase
+            if zone_id:
+                cont.zone_id = str(zone_id).strip()
+            await cont_repo.async_update(cont)
     _LOGGER.info("Batch %s advanced %s → %s", batch.id, batch.lifecycle_phase, phase)
     _notify_batch(hass, entry_id)
     return phase
+
+
+async def async_record_container_harvest(
+    hass: HomeAssistant,
+    entry_id: str,
+    *,
+    mass_g: float,
+    confirm: bool = False,
+    is_final: bool = False,
+    return_to_fruiting: bool = True,
+    container_id: str | None = None,
+    notes: str | None = None,
+    zone_id: str | None = None,
+) -> str:
+    """Record a per-container flush harvest after NFC check-in (requires confirm)."""
+    try:
+        require_confirm(confirm)
+    except ValidationError as err:
+        raise HomeAssistantError(str(err)) from err
+
+    bucket = hass.data[DOMAIN][entry_id]
+    session = bucket.get("nfc_session") or {}
+    resolved_container_id = container_id or session.get("container_id") or session.get(
+        "object_id"
+    )
+    if not resolved_container_id:
+        raise HomeAssistantError(
+            "container_id required — check_in a container for harvest first"
+        )
+    if (
+        session.get("object_type") not in (None, "container")
+        and not container_id
+        and session.get("object_id")
+    ):
+        raise HomeAssistantError(
+            "active NFC check-in is not a production container; pass container_id"
+        )
+
+    cont_repo = _container_repo(hass, entry_id)
+    container = await cont_repo.async_get(str(resolved_container_id))
+    if container is None:
+        raise HomeAssistantError(f"unknown container_id: {resolved_container_id}")
+
+    batch_repo = _batch_repo(hass, entry_id)
+    batch = await batch_repo.async_get_batch(container.batch_id)
+    if batch is None:
+        raise HomeAssistantError(f"unknown batch_id: {container.batch_id}")
+
+    # Harvest is allowed from fruiting; mark container harvesting for gate if needed.
+    if container.lifecycle_phase == STAGE_FRUITING:
+        container.lifecycle_phase = STAGE_HARVESTING
+
+    try:
+        updated = apply_container_harvest(
+            container,
+            mass_g=mass_g,
+            is_final=is_final,
+            return_to_fruiting=return_to_fruiting,
+        )
+    except ValidationError as err:
+        raise HomeAssistantError(str(err)) from err
+
+    resolved_zone: str | None = None
+    if zone_id:
+        from . import location_actions
+
+        await location_actions.async_ensure_default_layout(hass, entry_id)
+        loc_repo = hass.data[DOMAIN][entry_id].get("location_repository")
+        if loc_repo is None:
+            raise HomeAssistantError("Location repository is not available")
+        zone = await loc_repo.async_get_zone(str(zone_id).strip())
+        if zone is None:
+            raise HomeAssistantError(f"unknown zone_id: {zone_id}")
+        resolved_zone = zone.id
+        updated.zone_id = resolved_zone
+
+    when = datetime.now(tz=UTC).isoformat()
+    if updated.status == CONTAINER_STATUS_COMPLETE:
+        updated.completed_at = when
+
+    if batch.lifecycle_phase == STAGE_FRUITING:
+        await batch_repo.async_insert_milestone(
+            batch_id=batch.id,
+            event_type=MILESTONE_HARVEST_STARTED,
+            recorded_at=when,
+        )
+        await batch_repo.async_set_lifecycle_phase(batch.id, STAGE_HARVESTING)
+
+    event = HarvestEvent(
+        batch_id=batch.id,
+        mass_g=float(mass_g),
+        recorded_at=when,
+        flush_number=updated.flush_count,
+        is_final=is_final or updated.status == CONTAINER_STATUS_COMPLETE,
+        notes=notes,
+        zone_id=resolved_zone or updated.zone_id,
+        container_id=updated.id,
+    )
+    await batch_repo.async_insert_harvest(event)
+    await cont_repo.async_update(updated)
+    await batch_repo.async_insert_milestone(
+        batch_id=batch.id,
+        event_type=MILESTONE_HARVEST_RECORDED,
+        recorded_at=when,
+        detail={
+            "flush_number": updated.flush_count,
+            "mass_g": float(mass_g),
+            "is_final": event.is_final,
+            "container_id": updated.id,
+            "container_index": updated.container_index,
+            "return_to_fruiting": return_to_fruiting
+            and updated.lifecycle_phase == STAGE_FRUITING,
+            "zone_id": event.zone_id,
+        },
+    )
+
+    siblings = await cont_repo.async_list_for_batch(batch.id)
+    if siblings and all(s.status == CONTAINER_STATUS_COMPLETE for s in siblings):
+        await batch_repo.async_complete_batch(batch.id, when)
+
+    session = bucket.setdefault("nfc_session", {})
+    session["flush_count"] = updated.flush_count
+    session["lifecycle_phase"] = updated.lifecycle_phase
+    session["progress_text"] = (
+        f"**Harvest recorded** `{event.id}` · {mass_g:g} g · "
+        f"flush {updated.flush_count}/{updated.max_flushes} · "
+        f"phase **{updated.lifecycle_phase}**"
+    )
+    _LOGGER.info(
+        "Container %s harvest flush=%s mass=%sg final=%s",
+        updated.id,
+        updated.flush_count,
+        mass_g,
+        event.is_final,
+    )
+    _notify_batch(hass, entry_id)
+    return event.id
 
 
 async def async_record_harvest(

@@ -60,7 +60,8 @@ password = (
     or payload.get("password")
 )
 token = (
-    payload.get("long_lived_token")
+    payload.get("dev_container_playwright_long_lived_access_token")
+    or payload.get("long_lived_token")
     or payload.get("token")
     or payload.get("ha_token")
 )

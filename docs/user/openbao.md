@@ -11,7 +11,33 @@ Playwright T1/T2/T3 and shared HA logins read credentials from OpenBao. **OpenBa
 | Namespace | `homelab` |
 | Dev-container user | `username_dev_container` |
 | Dev-container password | `password_dev_container` |
-| Optional API token | `long_lived_token` / `token` / `ha_token` → `TEST_HA_TOKEN` |
+| Dev-container Playwright token | `dev_container_playwright_long_lived_access_token` → `TEST_HA_TOKEN` |
+| Legacy API token aliases | `long_lived_token` / `token` / `ha_token` → `TEST_HA_TOKEN` |
+
+### Provision the Playwright token (first-time / rotate)
+
+HA long-lived tokens are created once and stored in OpenBao. Automate with:
+
+```bash
+# 1) Login to HA via OpenBao username/password, mint token, write e2e/.generated/
+yarn test:e2e:t1:provision-token
+
+# 2) Patch kv/ha-test (requires bao login)
+yarn openbao:set-playwright-token
+
+# Or both:
+yarn provision:ha-token
+```
+
+| Detail | Value |
+| --- | --- |
+| HA client_name | `communifarm-playwright-dev` |
+| Lifespan | 3650 days |
+| Artifacts | `e2e/.generated/ha-token.env` + `ha-token.json` (gitignored) |
+| OpenBao field | `dev_container_playwright_long_lived_access_token` |
+| Script | [`scripts/openbao_set_playwright_token.sh`](../../scripts/openbao_set_playwright_token.sh) |
+
+Re-running provision **deletes** any existing refresh token with that client_name and creates a fresh access token (HA never re-shows the old string).
 
 Loader: [`scripts/load_openbao_ha_secrets.sh`](../../scripts/load_openbao_ha_secrets.sh) exports `TEST_HA_USERNAME` / `TEST_HA_PASSWORD` (and token when present). Override path with `OPENBAO_HA_PATH` if needed.
 

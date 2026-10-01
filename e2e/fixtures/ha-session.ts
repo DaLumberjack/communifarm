@@ -1,5 +1,6 @@
 import { Page, expect } from "@playwright/test";
 import { getCredentials } from "./environment";
+import { INITIAL_LOAD_MS } from "./timeouts";
 
 /**
  * Standard entry for Communifarm E2E against a configured HA instance:
@@ -18,7 +19,7 @@ export async function startHaSession(page: Page): Promise<void> {
   if (page.url().includes("onboarding")) {
     throw new Error(
       "HA is still on onboarding.html. Finish Create my smart home, restore a backup, " +
-        "or run e2e/flows/00-ha-scratch-to-communifarm.spec.ts instead."
+        "or run yarn test:e2e:t1:scratch instead."
     );
   }
 
@@ -31,8 +32,8 @@ export async function startHaSession(page: Page): Promise<void> {
 
   // Either auth form or already-authenticated shell should appear.
   await Promise.race([
-    passwordField.waitFor({ state: "visible", timeout: 20000 }),
-    homeChrome.waitFor({ state: "visible", timeout: 20000 }),
+    passwordField.waitFor({ state: "visible", timeout: INITIAL_LOAD_MS }),
+    homeChrome.waitFor({ state: "visible", timeout: INITIAL_LOAD_MS }),
   ]).catch(() => undefined);
 
   if (await passwordField.isVisible().catch(() => false)) {
@@ -46,7 +47,7 @@ export async function startHaSession(page: Page): Promise<void> {
     await page.getByRole("button", { name: /log in|next|sign in/i }).first().click();
   }
 
-  await expect(homeChrome).toBeVisible({ timeout: 60000 });
+  await expect(homeChrome).toBeVisible({ timeout: INITIAL_LOAD_MS });
   await expect(page).not.toHaveURL(/\/auth\//);
 }
 

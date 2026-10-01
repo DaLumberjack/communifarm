@@ -16,19 +16,21 @@ type HaSecretPayload = {
   token?: string;
 };
 
-function alreadyLoaded(): boolean {
+function loginCredsLoaded(): boolean {
   return Boolean(process.env.TEST_HA_USERNAME && process.env.TEST_HA_PASSWORD);
 }
 
 function applyPayload(payload: HaSecretPayload): void {
-  if (!payload.username || !payload.password) {
-    throw new Error(
-      "OpenBao kv/ha-test missing username_dev_container/password_dev_container " +
-        "(or username-1/password-1)"
-    );
+  if (!process.env.TEST_HA_USERNAME || !process.env.TEST_HA_PASSWORD) {
+    if (!payload.username || !payload.password) {
+      throw new Error(
+        "OpenBao kv/ha-test missing username_dev_container/password_dev_container " +
+          "(or username-1/password-1)"
+      );
+    }
+    process.env.TEST_HA_USERNAME = payload.username;
+    process.env.TEST_HA_PASSWORD = payload.password;
   }
-  process.env.TEST_HA_USERNAME = payload.username;
-  process.env.TEST_HA_PASSWORD = payload.password;
   if (payload.token && !process.env.TEST_HA_TOKEN) {
     process.env.TEST_HA_TOKEN = payload.token;
   }
@@ -45,6 +47,9 @@ function pickFields(data: Record<string, unknown>): HaSecretPayload {
       (data["password-1"] as string | undefined) ||
       (data.password as string | undefined),
     token:
+      (data.dev_container_playwright_long_lived_access_token as
+        | string
+        | undefined) ||
       (data.long_lived_token as string | undefined) ||
       (data.token as string | undefined) ||
       (data.ha_token as string | undefined),
@@ -168,10 +173,14 @@ function loadViaHttp(): boolean {
 
 /**
  * Populate TEST_HA_USERNAME / TEST_HA_PASSWORD / optional TEST_HA_TOKEN.
- * Safe to call multiple times. No-op if already set or SKIP_OPENBAO_SECRETS=1.
+ * Safe to call multiple times. Still hits OpenBao when login creds exist but
+ * TEST_HA_TOKEN is missing (so the long-lived access token can be filled).
  */
 export function loadOpenBaoHaSecrets(): void {
-  if (process.env.SKIP_OPENBAO_SECRETS === "1" || alreadyLoaded()) {
+  if (process.env.SKIP_OPENBAO_SECRETS === "1") {
+    return;
+  }
+  if (loginCredsLoaded() && process.env.TEST_HA_TOKEN) {
     return;
   }
 

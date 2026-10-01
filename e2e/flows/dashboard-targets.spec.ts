@@ -1,6 +1,7 @@
 import { test, expect } from "../fixtures/ha-test";
 import { CommunifarmPage } from "../fixtures/communifarm-page";
 import { getStage } from "../fixtures/environment";
+import { STEP_MS } from "../fixtures/timeouts";
 import {
   getNumberValueViaHass,
   setNumberValueViaHass,
@@ -23,7 +24,7 @@ test.describe("Dashboard target controls (T1)", () => {
     const cf = new CommunifarmPage(page);
     await cf.openCommunifarmDashboard();
     await expect(page.getByText(/current settings|targets/i).first()).toBeVisible({
-      timeout: 30000,
+      timeout: STEP_MS,
     });
 
     const baselineTemp = await getNumberValueViaHass(page, TEMP_TARGET);
@@ -54,7 +55,9 @@ test.describe("Dashboard target controls (T1)", () => {
     );
 
     await page.reload();
-    await expect(page.getByText(/targets/i).first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText(/targets/i).first()).toBeVisible({
+      timeout: STEP_MS,
+    });
     expect(await getNumberValueViaHass(page, TEMP_TARGET)).toBeCloseTo(
       baselineTemp,
       5
