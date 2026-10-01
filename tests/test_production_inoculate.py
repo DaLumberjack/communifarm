@@ -159,7 +159,7 @@ def test_sqlite_migration_v6_adds_production_columns(tmp_path: Path) -> None:
 
 def test_dashboard_includes_production_tab(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
-    assert len(config["views"]) == 4
+    assert len(config["views"]) == 6
     production = next(
         view for view in config["views"] if view.get("path") == "production"
     )

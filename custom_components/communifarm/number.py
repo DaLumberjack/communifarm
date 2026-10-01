@@ -31,6 +31,8 @@ async def async_setup_entry(
             CommunifarmContainerCount(entry.entry_id),
             CommunifarmSubstrateGPerContainer(entry.entry_id),
             CommunifarmHarvestMassG(entry.entry_id),
+            CommunifarmSaleMassG(entry.entry_id),
+            CommunifarmSaleLineAmount(entry.entry_id),
         ]
     )
 
@@ -264,4 +266,72 @@ class CommunifarmHarvestMassG(NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         self._value = max(0.1, float(value))
         self.hass.data[DOMAIN][self._entry_id]["harvest_mass_g"] = self._value
+        self.async_write_ha_state()
+
+
+class CommunifarmSaleMassG(NumberEntity):
+    """Sold mass (g) for weigh-at-sale when no open pack is selected."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Sale mass"
+    _attr_unique_id = "communifarm_sale_mass_g"
+    _attr_icon = "mdi:scale-balance"
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = 0.1
+    _attr_native_max_value = 50000.0
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = "g"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "number.communifarm_sale_mass_g"
+        self._value = 100.0
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["sale_mass_g"] = self._value
+
+    @property
+    def native_value(self) -> float:
+        return float(
+            self.hass.data[DOMAIN][self._entry_id].get("sale_mass_g", self._value)
+        )
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._value = max(0.1, float(value))
+        self.hass.data[DOMAIN][self._entry_id]["sale_mass_g"] = self._value
+        self.async_write_ha_state()
+
+
+class CommunifarmSaleLineAmount(NumberEntity):
+    """Money received for the sale line (after payment)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Sale line amount"
+    _attr_unique_id = "communifarm_sale_line_amount"
+    _attr_icon = "mdi:currency-usd"
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 1000000.0
+    _attr_native_step = 0.01
+    _attr_native_unit_of_measurement = "USD"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "number.communifarm_sale_line_amount"
+        self._value = 10.0
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["sale_line_amount"] = self._value
+
+    @property
+    def native_value(self) -> float:
+        return float(
+            self.hass.data[DOMAIN][self._entry_id].get(
+                "sale_line_amount", self._value
+            )
+        )
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._value = max(0.0, float(value))
+        self.hass.data[DOMAIN][self._entry_id]["sale_line_amount"] = self._value
         self.async_write_ha_state()

@@ -287,3 +287,157 @@ set_media_location:
     zone_id:
       name: Zone ID
       required: true
+
+resolve_nfc:
+  name: Resolve NFC
+  description: Look up the Communifarm object for a handheld-scanned NFC UID (SQLite is source of truth).
+  fields:
+    nfc_uid:
+      name: NFC UID
+      description: Defaults to input_text.esp32dev_last_nfc_uid from the handheld/scale reader.
+
+check_in:
+  name: Check in
+  description: Resolve NFC, set harvest/move/inventory context, optionally update zone placement.
+  fields:
+    activity:
+      name: Activity
+      required: true
+      selector:
+        select:
+          options:
+            - harvest
+            - move
+            - inventory
+            - check_in
+    nfc_uid:
+      name: NFC UID
+    zone_id:
+      name: Zone ID
+      description: Optional — update object location on check-in (e.g. fruiting tent level).
+
+bind_nfc:
+  name: Bind NFC
+  description: Assign a physical NFC UID to a container or batch (tag holds ID only).
+  fields:
+    object_type:
+      name: Object type
+      required: true
+      selector:
+        select:
+          options:
+            - container
+            - batch
+            - culture
+            - media
+    object_id:
+      name: Object ID
+      required: true
+    nfc_uid:
+      name: NFC UID
+      description: Defaults to last handheld scan.
+
+record_container_harvest:
+  name: Record container harvest
+  description: Confirm per-container flush mass after NFC harvest check-in. Returns container to fruiting unless final.
+  fields:
+    mass_g:
+      name: Mass (g)
+      required: true
+    confirm:
+      name: Confirm
+      required: true
+      selector:
+        boolean:
+    is_final:
+      name: Final harvest for this container
+      selector:
+        boolean:
+    return_to_fruiting:
+      name: Return to fruiting
+      description: Default true after a non-final flush.
+      selector:
+        boolean:
+    container_id:
+      name: Container ID
+      description: Defaults to the active NFC harvest check-in.
+    notes:
+      name: Notes
+    zone_id:
+      name: Zone ID
+      description: Optional — fruiting tent level when putting the block back.
+
+record_sale:
+  name: Record sale
+  description: >
+    Record a paid sale (general tracking). Pass sale_pack_id for a prepacked
+    open pack, or harvest_id + mass_g to weigh at sale. Requires confirm=true.
+  fields:
+    venue_label:
+      name: Venue
+      required: true
+    buyer_label:
+      name: Buyer
+      required: true
+    payment_method:
+      name: Payment method
+      required: true
+      selector:
+        select:
+          options:
+            - cash
+            - check
+            - venmo
+            - digital
+            - other
+    line_amount:
+      name: Amount received
+      required: true
+    confirm:
+      name: Confirm
+      required: true
+      selector:
+        boolean:
+    sale_pack_id:
+      name: Sale pack ID
+      description: Prepacked open pack to sell.
+    harvest_id:
+      name: Harvest ID
+      description: Required for weigh-at-sale when not using the latest harvest.
+    mass_g:
+      name: Mass (g)
+      description: Weigh-at-sale mass when sale_pack_id is omitted.
+    product_label:
+      name: Product label
+    size_label:
+      name: Size label
+    notes:
+      name: Notes
+    currency:
+      name: Currency
+      description: Default USD.
+
+record_sale_cleanup:
+  name: Record sale cleanup
+  description: After returning home — clean gear, put away, ready for next sale.
+  fields:
+    sale_id:
+      name: Sale ID
+      description: Defaults to the last recorded sale.
+    sale_day:
+      name: Sale day
+      description: ISO date key; defaults to today.
+    cleaned:
+      name: Cleaned
+      selector:
+        boolean:
+    put_away:
+      name: Put away
+      selector:
+        boolean:
+    ready_next:
+      name: Ready for next
+      selector:
+        boolean:
+    notes:
+      name: Notes

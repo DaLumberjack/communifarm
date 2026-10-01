@@ -7,7 +7,9 @@ from typing import Any
 from ..const import (
     DASHBOARD_TITLE,
     DASHBOARD_VIEW_BATCHES,
+    DASHBOARD_VIEW_HARVEST,
     DASHBOARD_VIEW_OVERVIEW,
+    DASHBOARD_VIEW_POS,
     DASHBOARD_VIEW_PRODUCTION,
     DASHBOARD_VIEW_WEIGH,
     ENTITY_ALLOWLISTED_SWITCH,
@@ -17,6 +19,8 @@ from ..const import (
     ENTITY_BATCH_STAGE,
     ENTITY_BTN_COMPLETE_NEW_BATCH,
     ENTITY_BTN_COMPLETELY_MIXED,
+    ENTITY_BTN_CONFIRM_CONTAINER_HARVEST,
+    ENTITY_BTN_CONFIRM_FINAL_CONTAINER_HARVEST,
     ENTITY_BTN_DRY_WET_MIX,
     ENTITY_BTN_FIELD_CAPACITY,
     ENTITY_BTN_FINAL_HARVEST,
@@ -25,8 +29,11 @@ from ..const import (
     ENTITY_BTN_MOVE_FRUITING,
     ENTITY_BTN_MOVE_HARVEST,
     ENTITY_BTN_MOVE_INCUBATION,
+    ENTITY_BTN_NFC_CHECKIN_HARVEST,
     ENTITY_BTN_PRODUCTION_START,
     ENTITY_BTN_RECORD_HARVEST,
+    ENTITY_BTN_RECORD_SALE,
+    ENTITY_BTN_RECORD_SALE_CLEANUP,
     ENTITY_BTN_SEPARATE_CONTAINERS,
     ENTITY_BTN_SETTLING,
     ENTITY_BTN_STORED_COOLING,
@@ -37,8 +44,15 @@ from ..const import (
     ENTITY_HEAT_TREATMENT,
     ENTITY_HUMIDITY_TARGET,
     ENTITY_LC_STIR_PLATE,
+    ENTITY_NFC_CHECKIN,
+    ENTITY_PAYMENT_METHOD,
     ENTITY_PRODUCTION_STATUS,
     ENTITY_RECIPE_SCALE,
+    ENTITY_SALE_BUYER,
+    ENTITY_SALE_LINE_AMOUNT,
+    ENTITY_SALE_MASS_G,
+    ENTITY_SALE_VENUE,
+    ENTITY_SALES_STATUS,
     ENTITY_SUBSTRATE_G,
     ENTITY_TEMPERATURE_TARGET,
     ENTITY_WEIGH_SESSION,
@@ -75,6 +89,8 @@ class DashboardBuilder:
                 self._weigh_view(state),
                 self._batches_view(state),
                 self._production_view(state),
+                self._harvest_view(state),
+                self._pos_view(state),
             ],
         }
 
@@ -89,7 +105,8 @@ class DashboardBuilder:
                     f"Site: **{state.site.name}**\n"
                     f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
                     "Weighing? **Weigh** · Mix history? **Batches** · "
-                    "Inoculate / harvest? **Production**."
+                    "Inoculate? **Production** · Pick / fridge? **Harvest** · "
+                    "Sell? **POS**."
                 ),
             },
             {
@@ -459,11 +476,136 @@ class DashboardBuilder:
                         },
                         {
                             "entity": ENTITY_BTN_RECORD_HARVEST,
-                            "name": "Record harvest",
+                            "name": "Record harvest (batch)",
                         },
                         {
                             "entity": ENTITY_BTN_FINAL_HARVEST,
-                            "name": "Final harvest",
+                            "name": "Final harvest (batch)",
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def _harvest_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Handheld NFC check-in + per-container harvest + fridge SOP."""
+        return {
+            "path": DASHBOARD_VIEW_HARVEST,
+            "title": "Harvest",
+            "icon": "mdi:basket-fill",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "title": "Per-container harvest",
+                    "content": (
+                        f"Batch **{state.batch.name}** · NFC `{state.batch.nfc_uid}`\n\n"
+                        "1. Scan the **block** with the handheld reader\n"
+                        "2. Press **NFC check-in harvest**\n"
+                        "3. Cut, weigh, enter mass\n"
+                        "4. Press **Confirm container harvest** "
+                        "(returns block to fruiting)\n"
+                        "5. Repeat for ready containers\n\n"
+                        f"{{{{ state_attr('{ENTITY_NFC_CHECKIN}', 'progress_text') }}}}"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Fridge / bagging (residential)",
+                    "content": (
+                        "| Step | Practice |\n"
+                        "| --- | --- |\n"
+                        "| After cut | Cool/dry — **do not wash** |\n"
+                        "| Bag | Breathable paper / vented sale bag ASAP |\n"
+                        "| Avoid | Sealed plastic (condensation pool) |\n"
+                        "| Fridge | Main shelves, **not** crisper |\n"
+                        "| Pack | Don't overpack; leave air gap |\n"
+                        "| Target | Best quality 3–5 days |\n\n"
+                        "`sale_pack` rows link to `harvest_id`; buyer/payment on **POS**."
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "NFC + confirm",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_NFC_CHECKIN,
+                            "name": "NFC check-in",
+                        },
+                        {
+                            "entity": ENTITY_HARVEST_MASS_G,
+                            "name": "Harvest mass (g)",
+                        },
+                        {
+                            "entity": ENTITY_BTN_NFC_CHECKIN_HARVEST,
+                            "name": "NFC check-in harvest",
+                        },
+                        {
+                            "entity": ENTITY_BTN_CONFIRM_CONTAINER_HARVEST,
+                            "name": "Confirm container harvest",
+                        },
+                        {
+                            "entity": ENTITY_BTN_CONFIRM_FINAL_CONTAINER_HARVEST,
+                            "name": "Confirm final container harvest",
+                        },
+                    ],
+                },
+            ],
+        }
+
+    def _pos_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Point of sale — venue/buyer/payment + confirm; cleanup after return."""
+        return {
+            "path": DASHBOARD_VIEW_POS,
+            "title": "POS",
+            "icon": "mdi:point-of-sale",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "title": "Point of sale",
+                    "content": (
+                        f"Batch **{state.batch.name}**\n\n"
+                        "General sales tracking (not GAP). After payment:\n"
+                        "1. Set venue, buyer, payment method\n"
+                        "2. Enter mass (weigh-at-sale) **or** leave open packs "
+                        "and Confirm uses the oldest open pack\n"
+                        "3. Enter amount received\n"
+                        "4. Press **Confirm sale**\n"
+                        "5. At home: **Record sale cleanup**\n\n"
+                        f"{{{{ state_attr('{ENTITY_SALES_STATUS}', 'progress_text') }}}}"
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Sale draft",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {"entity": ENTITY_SALE_VENUE, "name": "Venue"},
+                        {"entity": ENTITY_SALE_BUYER, "name": "Buyer"},
+                        {"entity": ENTITY_PAYMENT_METHOD, "name": "Payment"},
+                        {"entity": ENTITY_SALE_MASS_G, "name": "Mass (g)"},
+                        {
+                            "entity": ENTITY_SALE_LINE_AMOUNT,
+                            "name": "Amount received",
+                        },
+                        {
+                            "entity": ENTITY_SALES_STATUS,
+                            "name": "Sales status",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Submit",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_BTN_RECORD_SALE,
+                            "name": "Confirm sale",
+                        },
+                        {
+                            "entity": ENTITY_BTN_RECORD_SALE_CLEANUP,
+                            "name": "Record sale cleanup",
                         },
                     ],
                 },

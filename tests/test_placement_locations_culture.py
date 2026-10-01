@@ -62,7 +62,7 @@ def test_sqlite_migration_v8_culture_media_zones(tmp_path: Path) -> None:
     conn = sqlite_db.connect(path)
     version = sqlite_db.apply_migrations(conn)
     assert version == sqlite_db.SCHEMA_VERSION
-    assert version == 8
+    assert version == 10
     culture_cols = {
         row[1] for row in conn.execute("PRAGMA table_info(culture_lots)").fetchall()
     }

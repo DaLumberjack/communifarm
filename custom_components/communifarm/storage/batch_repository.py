@@ -528,8 +528,8 @@ class BatchRepository:
             """
             INSERT INTO harvest_events (
               stable_id, batch_id, flush_number, mass_g, is_final, notes,
-              recorded_at, created_at, zone_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              recorded_at, created_at, zone_id, container_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.id,
@@ -541,6 +541,7 @@ class BatchRepository:
                 event.recorded_at,
                 created,
                 event.zone_id,
+                event.container_id,
             ),
         )
         self._conn.execute(
@@ -564,7 +565,7 @@ class BatchRepository:
         rows = self._conn.execute(
             """
             SELECT stable_id, batch_id, flush_number, mass_g, is_final, notes,
-                   recorded_at, zone_id
+                   recorded_at, zone_id, container_id
             FROM harvest_events
             WHERE batch_id = ?
             ORDER BY flush_number ASC, recorded_at ASC, id ASC
@@ -581,9 +582,44 @@ class BatchRepository:
                 notes=row["notes"],
                 recorded_at=row["recorded_at"],
                 zone_id=row["zone_id"] if "zone_id" in row.keys() else None,
+                container_id=(
+                    row["container_id"] if "container_id" in row.keys() else None
+                ),
             )
             for row in rows
         ]
+
+    async def async_get_harvest(self, harvest_id: str) -> HarvestEvent | None:
+        return await self._hass.async_add_executor_job(
+            self._get_harvest_sync, harvest_id
+        )
+
+    def _get_harvest_sync(self, harvest_id: str) -> HarvestEvent | None:
+        assert self._conn is not None
+        row = self._conn.execute(
+            """
+            SELECT stable_id, batch_id, flush_number, mass_g, is_final, notes,
+                   recorded_at, zone_id, container_id
+            FROM harvest_events
+            WHERE stable_id = ?
+            """,
+            (harvest_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return HarvestEvent(
+            id=row["stable_id"],
+            batch_id=row["batch_id"],
+            flush_number=int(row["flush_number"]),
+            mass_g=float(row["mass_g"]),
+            is_final=bool(row["is_final"]),
+            notes=row["notes"],
+            recorded_at=row["recorded_at"],
+            zone_id=row["zone_id"] if "zone_id" in row.keys() else None,
+            container_id=(
+                row["container_id"] if "container_id" in row.keys() else None
+            ),
+        )
 
     async def async_set_expected_check_at(
         self, batch_id: str, expected_check_at: str | None

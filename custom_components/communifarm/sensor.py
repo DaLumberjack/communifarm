@@ -13,6 +13,8 @@ from .const import (
     ROLE_HUMIDITY,
     ROLE_TEMPERATURE,
     SIGNAL_BATCH_UPDATED,
+    SIGNAL_NFC_CHECKIN_UPDATED,
+    SIGNAL_SALES_UPDATED,
     SIGNAL_WEIGH_SESSION_UPDATED,
 )
 from .domain.models import CommunifarmState
@@ -38,6 +40,8 @@ async def async_setup_entry(
             CommunifarmBatchListSensor(entry.entry_id),
             CommunifarmBatchMilestonesSensor(entry.entry_id),
             CommunifarmProductionStatusSensor(entry.entry_id),
+            CommunifarmNfcCheckinSensor(entry.entry_id),
+            CommunifarmSalesStatusSensor(entry.entry_id),
         ]
     )
 
@@ -384,6 +388,121 @@ class CommunifarmProductionStatusSensor(SensorEntity):
             **summary.to_dict(),
             "progress_text": production_actions.production_summary_markdown(summary),
         }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmNfcCheckinSensor(SensorEntity):
+    """Last handheld NFC resolve / check-in context for harvest."""
+
+    _attr_has_entity_name = True
+    _attr_name = "NFC check-in"
+    _attr_unique_id = "communifarm_nfc_checkin"
+    _attr_icon = "mdi:nfc"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "sensor.communifarm_nfc_checkin"
+        self._value = "idle"
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        self._refresh()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_NFC_CHECKIN_UPDATED, self._on_update
+            )
+        )
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_BATCH_UPDATED, self._on_update
+            )
+        )
+
+    @callback
+    def _on_update(self, entry_id: str) -> None:
+        if entry_id != self._entry_id:
+            return
+        self._refresh()
+
+    def _refresh(self) -> None:
+        session = self.hass.data[DOMAIN][self._entry_id].get("nfc_session") or {}
+        if session.get("found"):
+            self._value = f"{session.get('object_type')}:{session.get('object_id')}"
+        elif session.get("nfc_uid"):
+            self._value = "not_found"
+        else:
+            self._value = "idle"
+        self._attrs = {
+            "nfc_uid": session.get("nfc_uid"),
+            "object_type": session.get("object_type"),
+            "object_id": session.get("object_id"),
+            "container_id": session.get("container_id"),
+            "activity": session.get("activity"),
+            "batch_id": session.get("batch_id"),
+            "zone_id": session.get("zone_id"),
+            "label": session.get("label"),
+            "lifecycle_phase": session.get("lifecycle_phase"),
+            "flush_count": session.get("flush_count"),
+            "max_flushes": session.get("max_flushes"),
+            "found": bool(session.get("found")),
+            "checkin_id": session.get("checkin_id"),
+            "progress_text": session.get("progress_text")
+            or "Scan a tag with the handheld reader.",
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmSalesStatusSensor(SensorEntity):
+    """POS sales snapshot — updates when sales or cleanup are recorded."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Sales status"
+    _attr_unique_id = "communifarm_sales_status"
+    _attr_icon = "mdi:point-of-sale"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "sensor.communifarm_sales_status"
+        self._value = "idle"
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass, SIGNAL_SALES_UPDATED, self._on_update
+            )
+        )
+
+    @callback
+    def _on_update(self, entry_id: str) -> None:
+        if entry_id != self._entry_id:
+            return
+        self.hass.async_create_task(self.async_refresh())
+
+    async def async_refresh(self) -> None:
+        from . import sale_actions
+
+        summary = await sale_actions.async_sales_summary(self.hass, self._entry_id)
+        last = summary.get("last_sale") or {}
+        self._value = last.get("id") if last else "idle"
+        self._attrs = summary
         self.async_write_ha_state()
 
     @property

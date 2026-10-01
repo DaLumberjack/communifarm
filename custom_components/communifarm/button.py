@@ -121,6 +121,11 @@ async def async_setup_entry(
             ),
             CommunifarmRecordHarvestButton(entry.entry_id, is_final=False),
             CommunifarmRecordHarvestButton(entry.entry_id, is_final=True),
+            CommunifarmNfcCheckinHarvestButton(entry.entry_id),
+            CommunifarmConfirmContainerHarvestButton(entry.entry_id, is_final=False),
+            CommunifarmConfirmContainerHarvestButton(entry.entry_id, is_final=True),
+            CommunifarmRecordSaleButton(entry.entry_id),
+            CommunifarmRecordSaleCleanupButton(entry.entry_id),
         ]
     )
 
@@ -300,3 +305,105 @@ class CommunifarmRecordHarvestButton(ButtonEntity):
             mass_g=mass,
             is_final=self._is_final,
         )
+
+
+class CommunifarmNfcCheckinHarvestButton(ButtonEntity):
+    _attr_has_entity_name = True
+    _attr_name = "NFC check-in harvest"
+    _attr_unique_id = "communifarm_nfc_checkin_harvest"
+    _attr_icon = "mdi:nfc-variant"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_nfc_checkin_harvest"
+
+    async def async_press(self) -> None:
+        from . import nfc_actions
+        from .domain.nfc import ACTIVITY_HARVEST
+
+        await nfc_actions.async_check_in(
+            self.hass, self._entry_id, activity=ACTIVITY_HARVEST
+        )
+
+
+class CommunifarmConfirmContainerHarvestButton(ButtonEntity):
+    _attr_has_entity_name = True
+
+    def __init__(self, entry_id: str, *, is_final: bool) -> None:
+        self._entry_id = entry_id
+        self._is_final = is_final
+        if is_final:
+            self._attr_name = "Confirm final container harvest"
+            self._attr_unique_id = "communifarm_confirm_final_container_harvest"
+            self.entity_id = "button.communifarm_confirm_final_container_harvest"
+            self._attr_icon = "mdi:flag-checkered"
+        else:
+            self._attr_name = "Confirm container harvest"
+            self._attr_unique_id = "communifarm_confirm_container_harvest"
+            self.entity_id = "button.communifarm_confirm_container_harvest"
+            self._attr_icon = "mdi:check-circle"
+
+    async def async_press(self) -> None:
+        from . import production_actions
+
+        bucket = self.hass.data[DOMAIN][self._entry_id]
+        mass = float(bucket.get("harvest_mass_g", 100.0) or 100.0)
+        await production_actions.async_record_container_harvest(
+            self.hass,
+            self._entry_id,
+            mass_g=mass,
+            confirm=True,
+            is_final=self._is_final,
+            return_to_fruiting=not self._is_final,
+        )
+
+
+class CommunifarmRecordSaleButton(ButtonEntity):
+    """Confirm POS sale using dashboard draft fields (weigh-at-sale or oldest open pack)."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Confirm sale"
+    _attr_unique_id = "communifarm_record_sale"
+    _attr_icon = "mdi:point-of-sale"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_record_sale"
+
+    async def async_press(self) -> None:
+        from . import sale_actions
+
+        bucket = self.hass.data[DOMAIN][self._entry_id]
+        container_repo = bucket["container_repository"]
+        open_packs = await container_repo.async_list_open_sale_packs()
+        sale_pack_id = open_packs[-1].id if open_packs else None
+        mass = float(bucket.get("sale_mass_g", 100.0) or 100.0)
+        amount = float(bucket.get("sale_line_amount", 10.0) or 10.0)
+        await sale_actions.async_record_sale(
+            self.hass,
+            self._entry_id,
+            venue_label=str(bucket.get("sale_venue_label") or "Farmers market"),
+            buyer_label=str(bucket.get("sale_buyer_label") or "Walk-up"),
+            payment_method=str(bucket.get("payment_method") or "cash"),
+            line_amount=amount,
+            confirm=True,
+            sale_pack_id=sale_pack_id,
+            mass_g=None if sale_pack_id else mass,
+            product_label=None,
+        )
+
+
+class CommunifarmRecordSaleCleanupButton(ButtonEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Record sale cleanup"
+    _attr_unique_id = "communifarm_record_sale_cleanup"
+    _attr_icon = "mdi:broom"
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "button.communifarm_record_sale_cleanup"
+
+    async def async_press(self) -> None:
+        from . import sale_actions
+
+        await sale_actions.async_record_sale_cleanup(self.hass, self._entry_id)

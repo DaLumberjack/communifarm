@@ -5,9 +5,9 @@ Long-term Communifarm events live in a Communifarm-owned SQLite file — not Hom
 | Item | Value |
 | --- | --- |
 | Path | `<HA config>/communifarm/communifarm.db` |
-| Schema | v8 |
+| Schema | v10 |
 | ADR | [0003-communifarm-sqlite.md](../adr/0003-communifarm-sqlite.md) |
-| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location`, `set_culture_location`, `set_media_location` |
+| Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `record_container_harvest`, `resolve_nfc`, `check_in`, `bind_nfc`, `record_sale`, `record_sale_cleanup`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location`, `set_culture_location`, `set_media_location` |
 
 ## Why not Recorder?
 
@@ -21,9 +21,15 @@ Recorder is for entity history. Grow analysis needs Communifarm stable IDs (site
 batches (master)
   ├── weight_events.batch_id          # mix weigh-ins (scale + target per ingredient)
   ├── batch_milestones.batch_id       # process timeline
-  ├── harvest_events.batch_id         # flush harvest weights (+ optional zone_id)
+  ├── harvest_events.batch_id         # flush harvest weights (+ optional zone_id / container_id)
+  ├── production_containers.batch_id  # per-block NFC + flush + zone (v9)
   ├── batches.zone_id                 # placement slot (v7)
-  └── sales_lots.batch_id             # future sell-through stats
+  └── sale_packs.harvest_id           # bagged portions (v9)
+        └── sale_line_items.sale_pack_id  # POS lines (v10)
+              └── sales                   # venue / buyer / payment (v10)
+
+nfc_checkins                          # handheld resolve/check-in audit (v9)
+sale_cleanup_events                   # post-sale clean / put-away (v10)
 
 placement_areas (site tents / fridges / cabinets)
   └── zones.area_id                   # level / shelf slots
@@ -90,10 +96,12 @@ Culture → substrate containers (independent of mix recipe). See [production-in
 | --- | --- |
 | `inoculate_batch` | Link active culture lot; set container type/count + substrate g/container; optional `zone_id` |
 | `advance_production_stage` | `incubating` → `fruiting` → `harvesting`; optional `zone_id` |
-| `record_harvest` | Flush mass (g); `is_final` completes batch; optional harvest `zone_id` |
+| `record_harvest` | Flush mass (g); `is_final` completes batch; optional harvest `zone_id` (batch-level) |
+| `record_container_harvest` | Per-container flush; requires `confirm=true`; returns to fruiting unless final |
+| `resolve_nfc` / `check_in` / `bind_nfc` | Handheld NFC ID resolve + activity context (see [nfc-harvest-checkin.md](../process/nfc-harvest-checkin.md)) |
 | `add_batch_note` / `set_check_reminder` | Notes + HA notification |
 
-`harvest_events` rows FK `batches.stable_id`. Dashboard **Production** tab drives the flow.
+`harvest_events` rows FK `batches.stable_id` (optional `container_id`). Dashboard **Harvest** tab drives NFC check-in; **Production** tab still has batch-level harvest.
 
 ## Placement locations (schema v7–v8)
 

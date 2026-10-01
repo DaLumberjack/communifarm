@@ -16,6 +16,13 @@ from .domain.production import (
     CONTAINER_OTHER,
     CONTAINER_TUB,
 )
+from .domain.sale import (
+    PAYMENT_CASH,
+    PAYMENT_CHECK,
+    PAYMENT_DIGITAL,
+    PAYMENT_OTHER,
+    PAYMENT_VENMO,
+)
 
 
 async def async_setup_entry(
@@ -27,6 +34,9 @@ async def async_setup_entry(
         [
             CommunifarmHeatTreatmentSelect(entry.entry_id),
             CommunifarmContainerTypeSelect(entry.entry_id),
+            CommunifarmPaymentMethodSelect(entry.entry_id),
+            CommunifarmSaleVenueSelect(entry.entry_id),
+            CommunifarmSaleBuyerSelect(entry.entry_id),
         ]
     )
 
@@ -88,4 +98,104 @@ class CommunifarmContainerTypeSelect(SelectEntity):
             return
         self._current = option
         self.hass.data[DOMAIN][self._entry_id]["container_type"] = option
+        self.async_write_ha_state()
+
+
+class CommunifarmPaymentMethodSelect(SelectEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Payment method"
+    _attr_unique_id = "communifarm_payment_method"
+    _attr_icon = "mdi:cash"
+    _attr_options = [
+        PAYMENT_CASH,
+        PAYMENT_CHECK,
+        PAYMENT_VENMO,
+        PAYMENT_DIGITAL,
+        PAYMENT_OTHER,
+    ]
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "select.communifarm_payment_method"
+        self._current = PAYMENT_CASH
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["payment_method"] = self._current
+
+    @property
+    def current_option(self) -> str | None:
+        return self._current
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        self._current = option
+        self.hass.data[DOMAIN][self._entry_id]["payment_method"] = option
+        self.async_write_ha_state()
+
+
+class CommunifarmSaleVenueSelect(SelectEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Sale venue"
+    _attr_unique_id = "communifarm_sale_venue"
+    _attr_icon = "mdi:map-marker"
+    _attr_options = [
+        "Farmers market",
+        "Farm stand",
+        "CSA pickup",
+        "Restaurant",
+        "Delivery",
+        "Other",
+    ]
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "select.communifarm_sale_venue"
+        self._current = "Farmers market"
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["sale_venue_label"] = self._current
+
+    @property
+    def current_option(self) -> str | None:
+        return self._current
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        self._current = option
+        self.hass.data[DOMAIN][self._entry_id]["sale_venue_label"] = option
+        self.async_write_ha_state()
+
+
+class CommunifarmSaleBuyerSelect(SelectEntity):
+    _attr_has_entity_name = True
+    _attr_name = "Sale buyer"
+    _attr_unique_id = "communifarm_sale_buyer"
+    _attr_icon = "mdi:account"
+    _attr_options = [
+        "Walk-up",
+        "CSA member",
+        "Restaurant",
+        "Wholesale",
+        "Other",
+    ]
+
+    def __init__(self, entry_id: str) -> None:
+        self._entry_id = entry_id
+        self.entity_id = "select.communifarm_sale_buyer"
+        self._current = "Walk-up"
+
+    async def async_added_to_hass(self) -> None:
+        self.hass.data[DOMAIN][self._entry_id]["sale_buyer_label"] = self._current
+
+    @property
+    def current_option(self) -> str | None:
+        return self._current
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        self._current = option
+        self.hass.data[DOMAIN][self._entry_id]["sale_buyer_label"] = option
         self.async_write_ha_state()

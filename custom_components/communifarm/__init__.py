@@ -14,7 +14,14 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
-from . import batch_actions, culture_actions, location_actions, production_actions
+from . import (
+    batch_actions,
+    culture_actions,
+    location_actions,
+    nfc_actions,
+    production_actions,
+    sale_actions,
+)
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
     DOMAIN,
@@ -28,16 +35,22 @@ from .const import (
     SERVICE_ACQUIRE_CULTURE,
     SERVICE_ADD_BATCH_NOTE,
     SERVICE_ADVANCE_PRODUCTION_STAGE,
+    SERVICE_BIND_NFC,
+    SERVICE_CHECK_IN,
     SERVICE_COMPLETE_AND_NEW_BATCH,
     SERVICE_CREATE_MEDIA_BATCH,
     SERVICE_ENSURE_PLACEMENT_LAYOUT,
     SERVICE_INOCULATE_BATCH,
     SERVICE_INTRODUCE_CULTURE,
     SERVICE_RECORD_BATCH_MILESTONE,
+    SERVICE_RECORD_CONTAINER_HARVEST,
     SERVICE_RECORD_HARVEST,
     SERVICE_RECORD_MEDIA_MILESTONE,
     SERVICE_RECORD_MEDIA_WEIGHT,
+    SERVICE_RECORD_SALE,
+    SERVICE_RECORD_SALE_CLEANUP,
     SERVICE_RECORD_WEIGHT,
+    SERVICE_RESOLVE_NFC,
     SERVICE_SET_BATCH_LOCATION,
     SERVICE_SET_CHECK_REMINDER,
     SERVICE_SET_CULTURE_LOCATION,
@@ -62,6 +75,7 @@ from .domain.culture import (
     SOURCE_TYPES,
 )
 from .domain.models import CommunifarmState
+from .domain.nfc import NFC_ACTIVITIES, NFC_OBJECT_TYPES
 from .domain.production import (
     DEFAULT_MAX_FLUSHES,
     INOCULUM_UNITS,
@@ -71,6 +85,7 @@ from .domain.production import (
     STAGE_INCUBATING,
 )
 from .domain.recipe import WOOD_LOVER_RECIPE, clamp_recipe_scale
+from .domain.sale import PAYMENT_METHODS
 from .domain.validation import (
     WARNING_MISSING_NFC,
     WARNING_UNKNOWN_INGREDIENT,
@@ -82,9 +97,12 @@ from .domain.validation import (
 )
 from .domain.weight import WeightEvent, ingredient_key_from_label
 from .storage.batch_repository import BatchRepository
+from .storage.container_repository import ContainerRepository
 from .storage.culture_repository import CultureRepository
 from .storage.location_repository import LocationRepository
+from .storage.nfc_repository import NfcRepository
 from .storage.repository import CommunifarmRepository
+from .storage.sale_repository import SaleRepository
 from .storage.weight_repository import WeightEventRepository
 
 _LOGGER = logging.getLogger(__name__)
@@ -237,6 +255,64 @@ SET_MEDIA_LOCATION_SCHEMA = vol.Schema(
     }
 )
 
+RESOLVE_NFC_SCHEMA = vol.Schema({vol.Optional("nfc_uid"): cv.string})
+
+CHECK_IN_SCHEMA = vol.Schema(
+    {
+        vol.Required("activity"): vol.In(NFC_ACTIVITIES),
+        vol.Optional("nfc_uid"): cv.string,
+        vol.Optional("zone_id"): cv.string,
+    }
+)
+
+BIND_NFC_SCHEMA = vol.Schema(
+    {
+        vol.Required("object_type"): vol.In(NFC_OBJECT_TYPES),
+        vol.Required("object_id"): cv.string,
+        vol.Optional("nfc_uid"): cv.string,
+    }
+)
+
+RECORD_CONTAINER_HARVEST_SCHEMA = vol.Schema(
+    {
+        vol.Required("mass_g"): vol.Coerce(float),
+        vol.Required("confirm"): cv.boolean,
+        vol.Optional("is_final", default=False): cv.boolean,
+        vol.Optional("return_to_fruiting", default=True): cv.boolean,
+        vol.Optional("container_id"): cv.string,
+        vol.Optional("notes"): cv.string,
+        vol.Optional("zone_id"): cv.string,
+    }
+)
+
+RECORD_SALE_SCHEMA = vol.Schema(
+    {
+        vol.Required("venue_label"): cv.string,
+        vol.Required("buyer_label"): cv.string,
+        vol.Required("payment_method"): vol.In(sorted(PAYMENT_METHODS)),
+        vol.Required("line_amount"): vol.Coerce(float),
+        vol.Required("confirm"): cv.boolean,
+        vol.Optional("sale_pack_id"): cv.string,
+        vol.Optional("harvest_id"): cv.string,
+        vol.Optional("mass_g"): vol.Coerce(float),
+        vol.Optional("product_label"): cv.string,
+        vol.Optional("size_label"): cv.string,
+        vol.Optional("notes"): cv.string,
+        vol.Optional("currency"): cv.string,
+    }
+)
+
+RECORD_SALE_CLEANUP_SCHEMA = vol.Schema(
+    {
+        vol.Optional("sale_id"): cv.string,
+        vol.Optional("sale_day"): cv.string,
+        vol.Optional("cleaned", default=True): cv.boolean,
+        vol.Optional("put_away", default=True): cv.boolean,
+        vol.Optional("ready_next", default=True): cv.boolean,
+        vol.Optional("notes"): cv.string,
+    }
+)
+
 _TARE_BUTTONS = frozenset(
     {ENTITY_SCALE_TARE_BUTTON, ENTITY_SCALE_LOCATION_TARE_BUTTON}
 )
@@ -271,6 +347,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await culture_repo.async_setup()
     location_repo = LocationRepository(hass, path=weight_repo.path)
     await location_repo.async_setup()
+    container_repo = ContainerRepository(hass, path=weight_repo.path)
+    await container_repo.async_setup()
+    sale_repo = SaleRepository(hass, path=weight_repo.path)
+    await sale_repo.async_setup()
+    nfc_repo = NfcRepository(
+        hass,
+        container_repo=container_repo,
+        batch_repo=batch_repo,
+        culture_repo=culture_repo,
+    )
     await location_repo.async_ensure_default_layout(state.site.id)
     await batch_repo.async_ensure_batch(
         batch_id=state.batch.id,
@@ -288,8 +374,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "batch_repository": batch_repo,
         "culture_repository": culture_repo,
         "location_repository": location_repo,
+        "container_repository": container_repo,
+        "sale_repository": sale_repo,
+        "nfc_repository": nfc_repo,
         "state": state,
         "weigh_session": new_weigh_session_tracker(),
+        "nfc_session": nfc_actions.new_nfc_session(),
         "container_count": 1,
         "heat_treatment": "pasteurized",
         "active_media_batch_id": None,
@@ -297,6 +387,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "container_type": "bag",
         "substrate_g_per_container": 1000.0,
         "harvest_mass_g": 100.0,
+        "sale_mass_g": 100.0,
+        "sale_line_amount": 10.0,
+        "payment_method": "cash",
+        "sale_venue_label": "Farmers market",
+        "sale_buyer_label": "Walk-up",
+        "last_sale_id": None,
     }
 
     dashboard_url = await async_provision_dashboard(hass, state)
@@ -467,6 +563,72 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             zone_id=call.data["zone_id"],
         )
 
+    async def async_resolve_nfc(call: ServiceCall) -> None:
+        await nfc_actions.async_resolve_nfc(
+            hass, entry.entry_id, nfc_uid=call.data.get("nfc_uid")
+        )
+
+    async def async_check_in(call: ServiceCall) -> None:
+        await nfc_actions.async_check_in(
+            hass,
+            entry.entry_id,
+            activity=call.data["activity"],
+            nfc_uid=call.data.get("nfc_uid"),
+            zone_id=call.data.get("zone_id"),
+        )
+
+    async def async_bind_nfc(call: ServiceCall) -> None:
+        await nfc_actions.async_bind_nfc(
+            hass,
+            entry.entry_id,
+            object_type=call.data["object_type"],
+            object_id=call.data["object_id"],
+            nfc_uid=call.data.get("nfc_uid"),
+        )
+
+    async def async_record_container_harvest(call: ServiceCall) -> None:
+        await production_actions.async_record_container_harvest(
+            hass,
+            entry.entry_id,
+            mass_g=call.data["mass_g"],
+            confirm=bool(call.data["confirm"]),
+            is_final=bool(call.data.get("is_final", False)),
+            return_to_fruiting=bool(call.data.get("return_to_fruiting", True)),
+            container_id=call.data.get("container_id"),
+            notes=call.data.get("notes"),
+            zone_id=call.data.get("zone_id"),
+        )
+
+    async def async_record_sale(call: ServiceCall) -> None:
+        await sale_actions.async_record_sale(
+            hass,
+            entry.entry_id,
+            venue_label=call.data["venue_label"],
+            buyer_label=call.data["buyer_label"],
+            payment_method=call.data["payment_method"],
+            line_amount=call.data["line_amount"],
+            confirm=bool(call.data["confirm"]),
+            sale_pack_id=call.data.get("sale_pack_id"),
+            harvest_id=call.data.get("harvest_id"),
+            mass_g=call.data.get("mass_g"),
+            product_label=call.data.get("product_label"),
+            size_label=call.data.get("size_label"),
+            notes=call.data.get("notes"),
+            currency=call.data.get("currency", "USD"),
+        )
+
+    async def async_record_sale_cleanup(call: ServiceCall) -> None:
+        await sale_actions.async_record_sale_cleanup(
+            hass,
+            entry.entry_id,
+            sale_id=call.data.get("sale_id"),
+            sale_day=call.data.get("sale_day"),
+            cleaned=bool(call.data.get("cleaned", True)),
+            put_away=bool(call.data.get("put_away", True)),
+            ready_next=bool(call.data.get("ready_next", True)),
+            notes=call.data.get("notes"),
+        )
+
     if not hass.services.has_service(DOMAIN, SERVICE_TRANSITION_BATCH):
         hass.services.async_register(
             DOMAIN,
@@ -592,6 +754,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_SET_MEDIA_LOCATION,
             async_set_media_location,
             schema=SET_MEDIA_LOCATION_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RESOLVE_NFC):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RESOLVE_NFC,
+            async_resolve_nfc,
+            schema=RESOLVE_NFC_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_CHECK_IN):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CHECK_IN,
+            async_check_in,
+            schema=CHECK_IN_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_BIND_NFC):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_BIND_NFC,
+            async_bind_nfc,
+            schema=BIND_NFC_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_CONTAINER_HARVEST):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_CONTAINER_HARVEST,
+            async_record_container_harvest,
+            schema=RECORD_CONTAINER_HARVEST_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_SALE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_SALE,
+            async_record_sale,
+            schema=RECORD_SALE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_SALE_CLEANUP):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_SALE_CLEANUP,
+            async_record_sale_cleanup,
+            schema=RECORD_SALE_CLEANUP_SCHEMA,
         )
 
     @callback
@@ -795,6 +999,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     location_repo: LocationRepository | None = bucket.get("location_repository")
     if location_repo is not None:
         await location_repo.async_close()
+    sale_repo: SaleRepository | None = bucket.get("sale_repository")
+    if sale_repo is not None:
+        await sale_repo.async_close()
 
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, [Platform(p) for p in PLATFORMS]
@@ -821,6 +1028,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_SET_BATCH_LOCATION,
                 SERVICE_SET_CULTURE_LOCATION,
                 SERVICE_SET_MEDIA_LOCATION,
+                SERVICE_RESOLVE_NFC,
+                SERVICE_CHECK_IN,
+                SERVICE_BIND_NFC,
+                SERVICE_RECORD_CONTAINER_HARVEST,
+                SERVICE_RECORD_SALE,
+                SERVICE_RECORD_SALE_CLEANUP,
             ):
                 if hass.services.has_service(DOMAIN, service):
                     hass.services.async_remove(DOMAIN, service)

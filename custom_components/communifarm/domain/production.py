@@ -80,7 +80,7 @@ class InoculateSpec:
 
 @dataclass(slots=True)
 class HarvestEvent:
-    """One flush harvest mass for a production batch."""
+    """One flush harvest mass for a production batch (optionally per-container)."""
 
     batch_id: str
     mass_g: float
@@ -89,6 +89,7 @@ class HarvestEvent:
     is_final: bool = False
     notes: str | None = None
     zone_id: str | None = None
+    container_id: str | None = None
     id: str = ""
 
     def __post_init__(self) -> None:
