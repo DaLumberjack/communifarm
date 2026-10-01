@@ -1,5 +1,6 @@
 import { Page } from "@playwright/test";
 import { getCredentials, getHaUrl } from "../fixtures/environment";
+import { INITIAL_LOAD_MS, STEP_MS } from "../fixtures/timeouts";
 
 /** Minimal HA REST helpers for mock injection and assertions. */
 export async function haApi(
@@ -65,29 +66,74 @@ export async function callServiceViaHass(
   page: Page,
   domain: string,
   service: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  opts?: { retries?: number }
 ): Promise<void> {
   await page.waitForFunction(() => {
     const el = document.querySelector("home-assistant") as
       | (HTMLElement & { hass?: { callService?: unknown } })
       | null;
     return Boolean(el?.hass?.callService);
-  }, undefined, { timeout: 30000 });
+  }, undefined, { timeout: INITIAL_LOAD_MS });
 
-  await page.evaluate(
-    async ({ domain, service, data }) => {
-      const el = document.querySelector("home-assistant") as HTMLElement & {
-        hass: {
-          callService: (
-            d: string,
-            s: string,
-            payload: Record<string, unknown>
-          ) => Promise<unknown>;
+  const retries = opts?.retries ?? 6;
+  let lastMessage = "unknown";
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    // Catch inside the page: HA rejects with plain objects ({code, message}),
+    // which Playwright otherwise reports only as "page.evaluate: Object".
+    const result = await page.evaluate(
+      async ({ domain, service, data }) => {
+        const el = document.querySelector("home-assistant") as HTMLElement & {
+          hass: {
+            callService: (
+              d: string,
+              s: string,
+              payload: Record<string, unknown>
+            ) => Promise<unknown>;
+          };
         };
-      };
-      await el.hass.callService(domain, service, data);
-    },
-    { domain, service, data }
+        try {
+          await el.hass.callService(domain, service, data);
+          return { ok: true as const };
+        } catch (err: unknown) {
+          const anyErr = err as {
+            message?: string;
+            code?: string;
+            error?: { message?: string; code?: string };
+          };
+          return {
+            ok: false as const,
+            message:
+              anyErr?.message ||
+              anyErr?.error?.message ||
+              (typeof err === "string" ? err : JSON.stringify(err)),
+            code: anyErr?.code || anyErr?.error?.code,
+          };
+        }
+      },
+      { domain, service, data }
+    );
+
+    if (result.ok) {
+      return;
+    }
+
+    lastMessage = result.message;
+    const locked = /database is locked/i.test(result.message);
+    if (!locked || attempt === retries - 1) {
+      throw new Error(
+        `hass.callService(${domain}.${service}) failed` +
+          (result.code ? ` [${result.code}]` : "") +
+          `: ${result.message}`
+      );
+    }
+    // Communifarm SQLite busy — wait for the other writer/reader to finish (2–5s budget).
+    await page.waitForTimeout(1000 * Math.min(attempt + 1, 3));
+  }
+
+  throw new Error(
+    `hass.callService(${domain}.${service}) failed after retries: ${lastMessage}`
   );
 }
 
@@ -104,7 +150,7 @@ export async function getStateViaHass(
       return Boolean(el?.hass?.states?.[id]);
     },
     entityId,
-    { timeout: 30000 }
+    { timeout: STEP_MS }
   );
 
   const state = await page.evaluate((id) => {
@@ -135,7 +181,7 @@ export async function getAttributesViaHass(
       return Boolean(el?.hass?.states?.[id]);
     },
     entityId,
-    { timeout: 30000 }
+    { timeout: STEP_MS }
   );
 
   const attrs = await page.evaluate((id) => {
@@ -180,7 +226,7 @@ export async function setNumberValueViaHass(
       return raw != null && Math.abs(Number.parseFloat(raw) - expected) < 0.01;
     },
     { id: entityId, expected: value },
-    { timeout: 10000 }
+    { timeout: STEP_MS }
   );
 }
 
@@ -196,7 +242,7 @@ export async function reloadCommunifarmViaHass(page: Page): Promise<void> {
         })
       | null;
     return Boolean(el?.hass?.callWS && el?.hass?.callService);
-  }, undefined, { timeout: 30000 });
+  }, undefined, { timeout: INITIAL_LOAD_MS });
 
   await page.evaluate(async () => {
     const el = document.querySelector("home-assistant") as HTMLElement & {
@@ -221,5 +267,5 @@ export async function reloadCommunifarmViaHass(page: Page): Promise<void> {
     });
   });
   // Give platforms + Lovelace provision time to settle.
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(STEP_MS);
 }

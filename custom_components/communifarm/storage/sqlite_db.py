@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from pathlib import Path
 
 SCHEMA_VERSION = 10
@@ -414,10 +415,30 @@ def db_path_for_config_dir(config_dir: str | Path) -> Path:
     return root / "communifarm.db"
 
 
+# Serializes all Communifarm SQLite work across repos/threads.
+# Multiple connections to one file + HA's executor pool otherwise race into
+# ``database is locked`` / ``InterfaceError`` (pysqlite is not multi-thread
+# friendly without an external mutex).
+DB_LOCK = threading.RLock()
+
+
 def connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False)
+    """Open Communifarm SQLite with WAL + busy timeout.
+
+    Callers that touch the DB from HA executor jobs must hold :data:`DB_LOCK`
+    for the whole sync operation (see repository ``_locked`` helpers).
+    """
+    conn = sqlite3.connect(
+        path,
+        check_same_thread=False,
+        timeout=30.0,
+        isolation_level=None,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 

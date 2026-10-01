@@ -1,4 +1,5 @@
 import { Page, expect } from "@playwright/test";
+import { INITIAL_LOAD_MS, STEP_MS } from "./timeouts";
 
 /**
  * Home Assistant scratch onboarding UI.
@@ -8,9 +9,29 @@ import { Page, expect } from "@playwright/test";
 export class HaOnboardingPage {
   constructor(private readonly page: Page) {}
 
-  async openWelcome(): Promise<void> {
+  /**
+   * Open onboarding welcome. Returns false when HA is already past onboarding
+   * (seeded instance) so the caller can skip.
+   */
+  async tryOpenWelcome(): Promise<boolean> {
     await this.page.goto("/onboarding.html", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByText(/Welcome!/i)).toBeVisible({ timeout: 60000 });
+    const welcome = this.page.getByText(/Welcome!/i);
+    try {
+      await expect(welcome).toBeVisible({ timeout: INITIAL_LOAD_MS });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async openWelcome(): Promise<void> {
+    const ok = await this.tryOpenWelcome();
+    if (!ok) {
+      throw new Error(
+        "HA onboarding Welcome! not shown — instance is already configured. " +
+          "Use an empty ha_config / wipe onboarding state, or run yarn test:e2e:t1:seeded."
+      );
+    }
   }
 
   async startCreateSmartHome(): Promise<void> {
@@ -69,10 +90,12 @@ export class HaOnboardingPage {
 
   async expectPastOnboarding(): Promise<void> {
     await this.page.waitForURL((url) => !url.pathname.includes("onboarding"), {
-      timeout: 120000,
+      timeout: INITIAL_LOAD_MS,
     });
-    await expect(this.page.locator("home-assistant, home-assistant-main, ha-sidebar").first()).toBeVisible({
-      timeout: 120000,
+    await expect(
+      this.page.locator("home-assistant, home-assistant-main, ha-sidebar").first()
+    ).toBeVisible({
+      timeout: STEP_MS,
     });
   }
 

@@ -1,5 +1,6 @@
-import { Page } from "@playwright/test";
+import { Page, expect } from "@playwright/test";
 import { getCredentials, getHaUrl } from "../fixtures/environment";
+import { STEP_MS } from "../fixtures/timeouts";
 import { callServiceViaHass, getStateViaHass } from "./ha-api";
 import { MIX_BIN_TARE_G, type WoodLoverLine } from "./wood-lover-recipe";
 
@@ -137,14 +138,21 @@ export async function weighOneIngredientStep(
 
 /**
  * One human weigh step via logged-in hass (no long-lived token).
- * Prefer this for T1 Playwright against local HA.
+ *
+ * Sets mock scale + tare, then persists with `communifarm.record_weight` only.
+ * Do **not** also press `button.esp32dev_record_weight` — that fires the same
+ * persist path via EVENT_CALL_SERVICE and races SQLite (Playwright then sees
+ * opaque `page.evaluate: Object` from hass.callService).
  */
 export async function weighOneIngredientStepViaHass(
   page: Page,
   line: WoodLoverLine,
   opts?: { containerG?: number; useNfcScan?: boolean }
 ): Promise<void> {
-  const containerG = opts?.containerG ?? MIX_BIN_TARE_G;
+  // Unique bin mass per line so consecutive equal nets (e.g. under-mix bran/gypsum)
+  // still change the gross reading before tare.
+  const containerG =
+    opts?.containerG ?? MIX_BIN_TARE_G + (Math.abs(hashLabel(line.label)) % 50);
   const useNfc = opts?.useNfcScan !== false;
 
   if (useNfc) {
@@ -153,19 +161,40 @@ export async function weighOneIngredientStepViaHass(
     await selectMockScaleIngredientViaHass(page, line.label);
   }
 
+  await expect
+    .poll(
+      async () => getStateViaHass(page, "input_select.esp32dev_selected_ingredient"),
+      { timeout: STEP_MS }
+    )
+    .toBe(line.label);
+
   await setMockScaleCalibratedSensorViaHass(page, containerG);
   await pressMockScaleButtonViaHass(page, "tare");
   await setMockScaleCalibratedSensorViaHass(page, containerG + line.amountG);
 
-  // Wait for net mass before record so Communifarm reads the right value.
   const expectedNet = line.amountG;
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const raw = await getStateViaHass(page, "sensor.esp32dev_calibrated_g");
-    if (Math.abs(Number.parseFloat(raw) - expectedNet) < 0.5) {
-      break;
-    }
-    await page.waitForTimeout(250);
-  }
+  await expect
+    .poll(
+      async () =>
+        Number.parseFloat(
+          await getStateViaHass(page, "sensor.esp32dev_calibrated_g")
+        ),
+      { timeout: STEP_MS }
+    )
+    .toBeCloseTo(expectedNet, 0);
 
-  await pressMockScaleButtonViaHass(page, "record_weight");
+  // Authoritative Communifarm write (single path — no mock Record button).
+  await callServiceViaHass(page, "communifarm", "record_weight", {
+    mass_g: expectedNet,
+    ingredient: line.label,
+    nfc_uid: line.nfcUid,
+  });
+}
+
+function hashLabel(label: string): number {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) {
+    h = (h * 31 + label.charCodeAt(i)) | 0;
+  }
+  return h;
 }

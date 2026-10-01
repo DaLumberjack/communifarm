@@ -1,5 +1,6 @@
 import { Page, expect } from "@playwright/test";
 import { DEFAULT_CF_FLOW } from "../helpers/har-flow-constants";
+import { INITIAL_LOAD_MS, STEP_MS } from "./timeouts";
 
 /**
  * Communifarm UI navigation. Call only after startHaSession / ha-test fixture
@@ -10,11 +11,13 @@ export class CommunifarmPage {
 
   async openIntegrations(): Promise<void> {
     await this.page.goto("/config/integrations", { waitUntil: "domcontentloaded" });
-    await expect(
-      this.page.getByText(/integrations|devices & services/i).first()
-    ).toBeVisible({
-      timeout: 30000,
+    await expect(this.page).toHaveURL(/\/config\/integrations/, {
+      timeout: INITIAL_LOAD_MS,
     });
+    // Prefer visible page chrome — broad getByText hits hidden menu items (e.g. show-ignored).
+    const heading = this.page.getByRole("heading", { name: /integrations/i }).first();
+    const main = this.page.locator("ha-config-integrations, home-assistant-main").first();
+    await expect(heading.or(main)).toBeVisible({ timeout: STEP_MS });
   }
 
   async startCommunifarmFlow(): Promise<void> {
@@ -73,24 +76,32 @@ export class CommunifarmPage {
         waitUntil: "domcontentloaded",
       });
     }
-    await expect(this.page).toHaveURL(/communifarm/, { timeout: 30000 });
+    await expect(this.page).toHaveURL(/communifarm/, { timeout: INITIAL_LOAD_MS });
   }
 
   /** Open the Weigh activity tab (scale + NFC select). */
   async openWeighStation(): Promise<void> {
     await this.page.goto("/communifarm/weigh", { waitUntil: "domcontentloaded" });
-    await expect(this.page).toHaveURL(/communifarm\/weigh/, { timeout: 30000 });
-    await expect(this.page.getByText(/weigh station|ingredient|current mass/i).first()).toBeVisible({
-      timeout: 30000,
+    await expect(this.page).toHaveURL(/communifarm\/weigh/, {
+      timeout: INITIAL_LOAD_MS,
+    });
+    await expect(
+      this.page.getByText(/weigh station|ingredient|current mass/i).first()
+    ).toBeVisible({
+      timeout: STEP_MS,
     });
   }
 
   /** Open the Batches tab (list + complete/new + post-weigh milestones). */
   async openBatches(): Promise<void> {
     await this.page.goto("/communifarm/batches", { waitUntil: "domcontentloaded" });
-    await expect(this.page).toHaveURL(/communifarm\/batches/, { timeout: 30000 });
-    await expect(this.page.getByText(/batches|complete batch|batch list/i).first()).toBeVisible({
-      timeout: 30000,
+    await expect(this.page).toHaveURL(/communifarm\/batches/, {
+      timeout: INITIAL_LOAD_MS,
+    });
+    await expect(
+      this.page.getByText(/batches|complete batch|batch list/i).first()
+    ).toBeVisible({
+      timeout: STEP_MS,
     });
   }
 

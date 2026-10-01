@@ -28,8 +28,9 @@ class SaleRepository:
     def _setup_sync(self) -> Path:
         if self._path is None:
             self._path = sqlite_db.db_path_for_config_dir(self._hass.config.path(""))
-        self._conn = sqlite_db.connect(self._path)
-        sqlite_db.apply_migrations(self._conn)
+        with sqlite_db.DB_LOCK:
+            self._conn = sqlite_db.connect(self._path)
+            sqlite_db.apply_migrations(self._conn)
         return self._path
 
     @property
@@ -45,12 +46,18 @@ class SaleRepository:
             self._conn.close()
             self._conn = None
 
+    def _locked(self, fn, /, *args):
+        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
+        with sqlite_db.DB_LOCK:
+            return fn(*args)
+
+
     async def async_insert_sale(
         self,
         sale: Sale,
         lines: list[SaleLineItem],
     ) -> Sale:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_sale_sync, sale, lines
         )
 
@@ -100,7 +107,7 @@ class SaleRepository:
         return sale
 
     async def async_list_sales(self, *, limit: int = 20) -> list[Sale]:
-        return await self._hass.async_add_executor_job(self._list_sales_sync, limit)
+        return await self._hass.async_add_executor_job(self._locked, self._list_sales_sync, limit)
 
     def _list_sales_sync(self, limit: int) -> list[Sale]:
         assert self._conn is not None
@@ -115,7 +122,7 @@ class SaleRepository:
         return [self._row_to_sale(row) for row in rows]
 
     async def async_get_sale(self, sale_id: str) -> Sale | None:
-        return await self._hass.async_add_executor_job(self._get_sale_sync, sale_id)
+        return await self._hass.async_add_executor_job(self._locked, self._get_sale_sync, sale_id)
 
     def _get_sale_sync(self, sale_id: str) -> Sale | None:
         assert self._conn is not None
@@ -126,7 +133,7 @@ class SaleRepository:
         return self._row_to_sale(row) if row else None
 
     async def async_list_lines_for_sale(self, sale_id: str) -> list[SaleLineItem]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_lines_for_sale_sync, sale_id
         )
 
@@ -145,7 +152,7 @@ class SaleRepository:
     async def async_insert_cleanup(
         self, event: SaleCleanupEvent
     ) -> SaleCleanupEvent:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_cleanup_sync, event
         )
 
@@ -172,7 +179,7 @@ class SaleRepository:
         return event
 
     async def async_list_cleanups(self, *, limit: int = 10) -> list[SaleCleanupEvent]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_cleanups_sync, limit
         )
 

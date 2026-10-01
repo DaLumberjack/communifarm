@@ -17,6 +17,7 @@ from ..domain.nfc import (
     NfcResolution,
 )
 from .container_repository import ContainerRepository
+from . import sqlite_db
 
 
 class NfcRepository:
@@ -39,8 +40,14 @@ class NfcRepository:
     def bind_connection(self, conn: Any) -> None:
         self._conn = conn
 
+    def _locked(self, fn, /, *args):
+        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
+        with sqlite_db.DB_LOCK:
+            return fn(*args)
+
+
     async def async_resolve(self, nfc_uid: str) -> NfcResolution:
-        return await self._hass.async_add_executor_job(self._resolve_sync, nfc_uid)
+        return await self._hass.async_add_executor_job(self._locked, self._resolve_sync, nfc_uid)
 
     def _resolve_sync(self, nfc_uid: str) -> NfcResolution:
         # Prefer containers (per-block tags) over batch-level tags.
@@ -146,7 +153,7 @@ class NfcRepository:
         return self._cultures._row_to_media(row)
 
     async def async_insert_checkin(self, event: NfcCheckin) -> NfcCheckin:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_checkin_sync, event
         )
 

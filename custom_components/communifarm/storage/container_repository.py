@@ -33,8 +33,9 @@ class ContainerRepository:
     def _setup_sync(self) -> Path:
         if self._path is None:
             self._path = sqlite_db.db_path_for_config_dir(self._hass.config.path(""))
-        self._conn = sqlite_db.connect(self._path)
-        sqlite_db.apply_migrations(self._conn)
+        with sqlite_db.DB_LOCK:
+            self._conn = sqlite_db.connect(self._path)
+            sqlite_db.apply_migrations(self._conn)
         return self._path
 
     @property
@@ -42,10 +43,24 @@ class ContainerRepository:
         assert self._path is not None
         return self._path
 
+    def _locked(self, fn, /, *args):
+        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
+        with sqlite_db.DB_LOCK:
+            return fn(*args)
+
+
+    async def async_close(self) -> None:
+        await self._hass.async_add_executor_job(self._close_sync)
+
+    def _close_sync(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
     async def async_insert_containers(
         self, containers: list[ProductionContainer]
     ) -> list[ProductionContainer]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_containers_sync, containers
         )
 
@@ -82,7 +97,7 @@ class ContainerRepository:
         return containers
 
     async def async_get(self, container_id: str) -> ProductionContainer | None:
-        return await self._hass.async_add_executor_job(self._get_sync, container_id)
+        return await self._hass.async_add_executor_job(self._locked, self._get_sync, container_id)
 
     def _get_sync(self, container_id: str) -> ProductionContainer | None:
         assert self._conn is not None
@@ -93,7 +108,7 @@ class ContainerRepository:
         return self._row_to_container(row) if row else None
 
     async def async_get_by_nfc(self, nfc_uid: str) -> ProductionContainer | None:
-        return await self._hass.async_add_executor_job(self._get_by_nfc_sync, nfc_uid)
+        return await self._hass.async_add_executor_job(self._locked, self._get_by_nfc_sync, nfc_uid)
 
     def _get_by_nfc_sync(self, nfc_uid: str) -> ProductionContainer | None:
         assert self._conn is not None
@@ -104,7 +119,7 @@ class ContainerRepository:
         return self._row_to_container(row) if row else None
 
     async def async_list_for_batch(self, batch_id: str) -> list[ProductionContainer]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_for_batch_sync, batch_id
         )
 
@@ -121,7 +136,7 @@ class ContainerRepository:
         return [self._row_to_container(row) for row in rows]
 
     async def async_update(self, container: ProductionContainer) -> ProductionContainer:
-        return await self._hass.async_add_executor_job(self._update_sync, container)
+        return await self._hass.async_add_executor_job(self._locked, self._update_sync, container)
 
     def _update_sync(self, container: ProductionContainer) -> ProductionContainer:
         assert self._conn is not None
@@ -150,7 +165,7 @@ class ContainerRepository:
     async def async_set_zone(
         self, container_id: str, zone_id: str | None
     ) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_zone_sync, container_id, zone_id
         )
 
@@ -163,7 +178,7 @@ class ContainerRepository:
         self._conn.commit()
 
     async def async_set_nfc(self, container_id: str, nfc_uid: str) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_nfc_sync, container_id, nfc_uid
         )
 
@@ -176,7 +191,7 @@ class ContainerRepository:
         self._conn.commit()
 
     async def async_insert_sale_pack(self, pack: SalePack) -> SalePack:
-        return await self._hass.async_add_executor_job(self._insert_sale_pack_sync, pack)
+        return await self._hass.async_add_executor_job(self._locked, self._insert_sale_pack_sync, pack)
 
     def _insert_sale_pack_sync(self, pack: SalePack) -> SalePack:
         assert self._conn is not None
@@ -203,7 +218,7 @@ class ContainerRepository:
         return pack
 
     async def async_get_sale_pack(self, pack_id: str) -> SalePack | None:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._get_sale_pack_sync, pack_id
         )
 
@@ -216,7 +231,7 @@ class ContainerRepository:
         return self._row_to_sale_pack(row) if row else None
 
     async def async_list_open_sale_packs(self) -> list[SalePack]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_open_sale_packs_sync
         )
 
@@ -234,7 +249,7 @@ class ContainerRepository:
     async def async_mark_sale_pack_sold(
         self, pack_id: str, sale_id: str
     ) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._mark_sale_pack_sold_sync, pack_id, sale_id
         )
 

@@ -50,8 +50,9 @@ class CultureRepository:
         await self._hass.async_add_executor_job(self._setup_sync)
 
     def _setup_sync(self) -> None:
-        self._conn = sqlite_db.connect(self._path)
-        version = sqlite_db.apply_migrations(self._conn)
+        with sqlite_db.DB_LOCK:
+            self._conn = sqlite_db.connect(self._path)
+            version = sqlite_db.apply_migrations(self._conn)
         _LOGGER.info("Communifarm culture SQLite ready at %s (schema v%s)", self._path, version)
 
     async def async_close(self) -> None:
@@ -62,10 +63,16 @@ class CultureRepository:
             self._conn.close()
             self._conn = None
 
+    def _locked(self, fn, /, *args):
+        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
+        with sqlite_db.DB_LOCK:
+            return fn(*args)
+
+
     # --- Culture lots ---
 
     async def async_insert_culture(self, lot: CultureLot) -> CultureLot:
-        return await self._hass.async_add_executor_job(self._insert_culture_sync, lot)
+        return await self._hass.async_add_executor_job(self._locked, self._insert_culture_sync, lot)
 
     def _insert_culture_sync(self, lot: CultureLot) -> CultureLot:
         assert self._conn is not None
@@ -102,7 +109,7 @@ class CultureRepository:
         return lot
 
     async def async_get_culture(self, culture_id: str) -> CultureLot | None:
-        return await self._hass.async_add_executor_job(self._get_culture_sync, culture_id)
+        return await self._hass.async_add_executor_job(self._locked, self._get_culture_sync, culture_id)
 
     def _get_culture_sync(self, culture_id: str) -> CultureLot | None:
         assert self._conn is not None
@@ -112,7 +119,7 @@ class CultureRepository:
         return self._row_to_culture(row) if row else None
 
     async def async_list_cultures(self) -> list[CultureLot]:
-        return await self._hass.async_add_executor_job(self._list_cultures_sync)
+        return await self._hass.async_add_executor_job(self._locked, self._list_cultures_sync)
 
     def _list_cultures_sync(self) -> list[CultureLot]:
         assert self._conn is not None
@@ -124,7 +131,7 @@ class CultureRepository:
     # --- Media batches ---
 
     async def async_insert_media_batch(self, batch: MediaBatch) -> MediaBatch:
-        return await self._hass.async_add_executor_job(self._insert_media_batch_sync, batch)
+        return await self._hass.async_add_executor_job(self._locked, self._insert_media_batch_sync, batch)
 
     def _insert_media_batch_sync(self, batch: MediaBatch) -> MediaBatch:
         assert self._conn is not None
@@ -161,7 +168,7 @@ class CultureRepository:
         return batch
 
     async def async_list_media_batches(self) -> list[MediaBatch]:
-        return await self._hass.async_add_executor_job(self._list_media_batches_sync)
+        return await self._hass.async_add_executor_job(self._locked, self._list_media_batches_sync)
 
     def _list_media_batches_sync(self) -> list[MediaBatch]:
         assert self._conn is not None
@@ -171,7 +178,7 @@ class CultureRepository:
         return [self._row_to_media(row) for row in rows]
 
     async def async_get_media_batch(self, media_batch_id: str) -> MediaBatch | None:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._get_media_batch_sync, media_batch_id
         )
 
@@ -190,7 +197,7 @@ class CultureRepository:
         sterilized_at: str | None = None,
         ready_at: str | None = None,
     ) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_media_status_sync,
             media_batch_id,
             status,
@@ -221,7 +228,7 @@ class CultureRepository:
     async def async_set_culture_zone(
         self, culture_id: str, zone_id: str | None
     ) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_culture_zone_sync, culture_id, zone_id
         )
 
@@ -236,7 +243,7 @@ class CultureRepository:
     async def async_set_media_zone(
         self, media_batch_id: str, zone_id: str | None
     ) -> None:
-        await self._hass.async_add_executor_job(
+        await self._hass.async_add_executor_job(self._locked, 
             self._set_media_zone_sync, media_batch_id, zone_id
         )
 
@@ -251,7 +258,7 @@ class CultureRepository:
     # --- Media weights ---
 
     async def async_insert_media_weight(self, event: MediaWeightEvent) -> MediaWeightEvent:
-        return await self._hass.async_add_executor_job(self._insert_media_weight_sync, event)
+        return await self._hass.async_add_executor_job(self._locked, self._insert_media_weight_sync, event)
 
     def _insert_media_weight_sync(self, event: MediaWeightEvent) -> MediaWeightEvent:
         assert self._conn is not None
@@ -285,7 +292,7 @@ class CultureRepository:
         return event
 
     async def async_list_media_weights(self, media_batch_id: str) -> list[MediaWeightEvent]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_media_weights_sync, media_batch_id
         )
 
@@ -311,7 +318,7 @@ class CultureRepository:
         recorded_at: str,
         detail: dict[str, Any] | None = None,
     ) -> str:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_media_milestone_sync,
             media_batch_id,
             event_type,
@@ -362,7 +369,7 @@ class CultureRepository:
         return stable_id
 
     async def async_has_media_milestone(self, media_batch_id: str, event_type: str) -> bool:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._has_media_milestone_sync, media_batch_id, event_type
         )
 
@@ -381,7 +388,7 @@ class CultureRepository:
     # --- Culture events ---
 
     async def async_insert_culture_event(self, event: CultureEvent) -> CultureEvent:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._insert_culture_event_sync, event
         )
 
@@ -413,7 +420,7 @@ class CultureRepository:
     async def async_list_culture_events_for_media(
         self, media_batch_id: str
     ) -> list[CultureEvent]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_culture_events_for_media_sync, media_batch_id
         )
 
@@ -435,7 +442,7 @@ class CultureRepository:
 
     async def async_acquire_culture(self, lot: CultureLot) -> CultureLot:
         """Persist a new culture lot and CultureAcquired event."""
-        return await self._hass.async_add_executor_job(self._acquire_culture_sync, lot)
+        return await self._hass.async_add_executor_job(self._locked, self._acquire_culture_sync, lot)
 
     def _acquire_culture_sync(self, lot: CultureLot) -> CultureLot:
         lot = self._insert_culture_sync(lot)
@@ -458,7 +465,7 @@ class CultureRepository:
         return lot
 
     async def async_create_media_batch(self, batch: MediaBatch) -> MediaBatch:
-        return await self._hass.async_add_executor_job(self._create_media_batch_sync, batch)
+        return await self._hass.async_add_executor_job(self._locked, self._create_media_batch_sync, batch)
 
     def _create_media_batch_sync(self, batch: MediaBatch) -> MediaBatch:
         batch = self._insert_media_batch_sync(batch)
@@ -492,7 +499,7 @@ class CultureRepository:
         zone_id: str | None = None,
     ) -> tuple[CultureLot, CultureEvent]:
         """Gate on media ready, create child lot, append CultureIntroduced."""
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._introduce_culture_sync,
             parent_culture_id,
             media_batch_id,

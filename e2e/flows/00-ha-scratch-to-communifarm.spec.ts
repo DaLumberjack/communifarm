@@ -5,12 +5,14 @@ import { getStage, getOnboardCredentials } from "../fixtures/environment";
 import { DEFAULT_CF_FLOW } from "../helpers/har-flow-constants";
 
 /**
- * First T1 bootstrap regression.
+ * First T1 bootstrap regression (scratch suite only).
  * Source: docs/intake/initializaion_to_communifarm_setup.har
  * Requires an empty/onboarding HA instance (prefer wiping .storage for this run only).
  *
  * Credentials: TEST_HA_ONBOARD_* or OpenBao-backed TEST_HA_USERNAME/PASSWORD.
  * Never hardcode values from the intake HAR.
+ *
+ * Do not run against seeded devcontainer HA — use yarn test:e2e:t1:seeded instead.
  */
 test.describe("00 HA scratch onboarding to Communifarm", () => {
   test.describe.configure({ mode: "serial" });
@@ -28,7 +30,12 @@ test.describe("00 HA scratch onboarding to Communifarm", () => {
     }
 
     const onboarding = new HaOnboardingPage(page);
-    await onboarding.openWelcome();
+    const onEmptyHa = await onboarding.tryOpenWelcome();
+    test.skip(
+      !onEmptyHa,
+      "HA already past onboarding (no Welcome!). Wipe ha_config onboarding state for scratch, or run yarn test:e2e:t1:seeded."
+    );
+
     await onboarding.startCreateSmartHome();
     await onboarding.completeUserStep(creds);
     await onboarding.completeCoreConfigIfPresent();

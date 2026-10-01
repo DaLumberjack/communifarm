@@ -31,7 +31,15 @@ def test_sqlite_migration_creates_weight_events(tmp_path: Path) -> None:
         "SELECT name FROM sqlite_master WHERE type='table' AND name='weight_events'"
     ).fetchone()
     assert row is not None
+    mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+    assert str(mode).lower() == "wal"
     conn.close()
+
+
+def test_db_lock_is_reentrant() -> None:
+    with sqlite_db.DB_LOCK:
+        with sqlite_db.DB_LOCK:
+            assert True
 
 
 @pytest.mark.asyncio

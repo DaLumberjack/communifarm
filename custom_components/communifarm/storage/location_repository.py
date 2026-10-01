@@ -35,8 +35,9 @@ class LocationRepository:
         await self._hass.async_add_executor_job(self._setup_sync)
 
     def _setup_sync(self) -> None:
-        self._conn = sqlite_db.connect(self._path)
-        version = sqlite_db.apply_migrations(self._conn)
+        with sqlite_db.DB_LOCK:
+            self._conn = sqlite_db.connect(self._path)
+            version = sqlite_db.apply_migrations(self._conn)
         _LOGGER.info(
             "Communifarm location SQLite ready at %s (schema v%s)", self._path, version
         )
@@ -49,10 +50,16 @@ class LocationRepository:
             self._conn.close()
             self._conn = None
 
+    def _locked(self, fn, /, *args):
+        """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
+        with sqlite_db.DB_LOCK:
+            return fn(*args)
+
+
     async def async_ensure_default_layout(
         self, site_id: str
     ) -> tuple[list[PlacementArea], list[Zone]]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._ensure_default_layout_sync, site_id
         )
 
@@ -117,7 +124,7 @@ class LocationRepository:
         return layout.areas, layout.zones
 
     async def async_list_areas(self, site_id: str | None = None) -> list[PlacementArea]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_areas_sync, site_id
         )
 
@@ -139,7 +146,7 @@ class LocationRepository:
         return [self._row_to_area(row) for row in rows]
 
     async def async_get_area(self, area_id: str) -> PlacementArea | None:
-        return await self._hass.async_add_executor_job(self._get_area_sync, area_id)
+        return await self._hass.async_add_executor_job(self._locked, self._get_area_sync, area_id)
 
     def _get_area_sync(self, area_id: str) -> PlacementArea | None:
         assert self._conn is not None
@@ -149,7 +156,7 @@ class LocationRepository:
         return self._row_to_area(row) if row else None
 
     async def async_list_zones_for_area(self, area_id: str) -> list[Zone]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_zones_for_area_sync, area_id
         )
 
@@ -166,7 +173,7 @@ class LocationRepository:
         return [self._row_to_zone(row) for row in rows]
 
     async def async_list_zones(self, site_id: str | None = None) -> list[Zone]:
-        return await self._hass.async_add_executor_job(
+        return await self._hass.async_add_executor_job(self._locked, 
             self._list_zones_sync, site_id
         )
 
@@ -188,7 +195,7 @@ class LocationRepository:
         return [self._row_to_zone(row) for row in rows]
 
     async def async_get_zone(self, zone_id: str) -> Zone | None:
-        return await self._hass.async_add_executor_job(self._get_zone_sync, zone_id)
+        return await self._hass.async_add_executor_job(self._locked, self._get_zone_sync, zone_id)
 
     def _get_zone_sync(self, zone_id: str) -> Zone | None:
         assert self._conn is not None
