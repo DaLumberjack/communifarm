@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_ENTITY_ID, EVENT_CALL_SERVICE, Platform
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    EVENT_CALL_SERVICE,
+    EVENT_CORE_CONFIG_UPDATE,
+    Platform,
+)
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
 from . import (
     batch_actions,
+    climate_actions,
     culture_actions,
     location_actions,
     nfc_actions,
@@ -24,6 +31,7 @@ from . import (
 )
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
+    CLIMATE_TICK_SECONDS,
     DOMAIN,
     ENTITY_SCALE_LOCATION_TARE_BUTTON,
     ENTITY_SCALE_MASS_G,
@@ -35,11 +43,13 @@ from .const import (
     SERVICE_ACQUIRE_CULTURE,
     SERVICE_ADD_BATCH_NOTE,
     SERVICE_ADVANCE_PRODUCTION_STAGE,
+    SERVICE_BIND_CLIMATE_ROLE,
     SERVICE_BIND_NFC,
     SERVICE_CHECK_IN,
     SERVICE_COMPLETE_AND_NEW_BATCH,
     SERVICE_CREATE_MEDIA_BATCH,
     SERVICE_CREATE_VARIETY,
+    SERVICE_ENSURE_CLIMATE_LAYOUT,
     SERVICE_ENSURE_PLACEMENT_LAYOUT,
     SERVICE_INOCULATE_BATCH,
     SERVICE_INTRODUCE_CULTURE,
@@ -58,6 +68,7 @@ from .const import (
     SERVICE_SET_CULTURE_LOCATION,
     SERVICE_SET_CULTURE_STATUS,
     SERVICE_SET_MEDIA_LOCATION,
+    SERVICE_TICK_CLIMATE,
     SERVICE_TRANSITION_BATCH,
     SIGNAL_WEIGH_SESSION_UPDATED,
     new_weigh_session_tracker,
@@ -69,6 +80,7 @@ from .domain.batch_milestones import (
     HEAT_METHODS,
     WEIGH_MILESTONES,
 )
+from .domain.climate import CLIMATE_ROLES
 from .domain.culture import (
     CULTURE_CONTAINERS,
     CULTURE_FORMS,
@@ -101,6 +113,7 @@ from .domain.validation import (
 )
 from .domain.weight import WeightEvent, ingredient_key_from_label
 from .storage.batch_repository import BatchRepository
+from .storage.climate_repository import ClimateRepository
 from .storage.container_repository import ContainerRepository
 from .storage.culture_repository import CultureRepository
 from .storage.location_repository import LocationRepository
@@ -257,6 +270,20 @@ SET_CHECK_REMINDER_SCHEMA = vol.Schema(
 
 ENSURE_PLACEMENT_LAYOUT_SCHEMA = vol.Schema({})
 
+ENSURE_CLIMATE_LAYOUT_SCHEMA = vol.Schema({})
+
+TICK_CLIMATE_SCHEMA = vol.Schema({})
+
+BIND_CLIMATE_ROLE_SCHEMA = vol.Schema(
+    {
+        vol.Required("node_id"): cv.string,
+        vol.Required("role"): vol.In(sorted(CLIMATE_ROLES)),
+        vol.Required("entity_id"): cv.entity_id,
+        vol.Optional("entity_entry_id"): cv.string,
+        vol.Optional("waste_heat_to_parent", default=False): cv.boolean,
+    }
+)
+
 SET_BATCH_LOCATION_SCHEMA = vol.Schema(
     {
         vol.Required("zone_id"): cv.string,
@@ -370,6 +397,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await culture_repo.async_setup()
     location_repo = LocationRepository(hass, path=weight_repo.path)
     await location_repo.async_setup()
+    climate_repo = ClimateRepository(hass, path=weight_repo.path)
+    await climate_repo.async_setup()
     container_repo = ContainerRepository(hass, path=weight_repo.path)
     await container_repo.async_setup()
     sale_repo = SaleRepository(hass, path=weight_repo.path)
@@ -397,6 +426,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "batch_repository": batch_repo,
         "culture_repository": culture_repo,
         "location_repository": location_repo,
+        "climate_repository": climate_repo,
+        "climate_snapshot": {
+            "summary": "",
+            "node_count": 0,
+            "seeded": False,
+        },
+        "climate_light_since": {},
         "container_repository": container_repo,
         "sale_repository": sale_repo,
         "nfc_repository": nfc_repo,
@@ -428,6 +464,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(
         entry, [Platform(p) for p in PLATFORMS]
+    )
+
+    try:
+        await climate_actions.async_ensure_climate_layout(hass, entry.entry_id)
+    except Exception:
+        _LOGGER.exception("Climate layout was not seeded")
+
+    @callback
+    def _schedule_climate_tick(_now) -> None:
+        hass.async_create_task(
+            climate_actions.async_tick_climate(hass, entry.entry_id)
+        )
+
+    hass.data[DOMAIN][entry.entry_id]["unsub_climate_tick"] = async_track_time_interval(
+        hass, _schedule_climate_tick, timedelta(seconds=CLIMATE_TICK_SECONDS)
+    )
+
+    async def _reprovision_for_units(_event: Event) -> None:
+        stored = hass.data[DOMAIN][entry.entry_id]["state"]
+        await async_provision_dashboard(hass, stored)
+
+    def _on_core_config(event: Event) -> None:
+        hass.async_create_task(_reprovision_for_units(event))
+
+    hass.data[DOMAIN][entry.entry_id]["unsub_core_config"] = hass.bus.async_listen(
+        EVENT_CORE_CONFIG_UPDATE, _on_core_config
     )
 
     async def async_transition_batch(call: ServiceCall) -> None:
@@ -590,6 +652,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_ensure_placement_layout(call: ServiceCall) -> None:
         await location_actions.async_ensure_default_layout(hass, entry.entry_id)
+
+    async def async_ensure_climate_layout(call: ServiceCall) -> None:
+        await climate_actions.async_ensure_climate_layout(hass, entry.entry_id)
+
+    async def async_tick_climate(call: ServiceCall) -> None:
+        await climate_actions.async_tick_climate(hass, entry.entry_id)
+
+    async def async_bind_climate_role(call: ServiceCall) -> None:
+        await climate_actions.async_bind_climate_role(
+            hass,
+            entry.entry_id,
+            node_id=call.data["node_id"],
+            role=call.data["role"],
+            entity_id=call.data["entity_id"],
+            entity_entry_id=call.data.get("entity_entry_id"),
+            waste_heat_to_parent=bool(call.data.get("waste_heat_to_parent", False)),
+        )
 
     async def async_set_batch_location(call: ServiceCall) -> None:
         await location_actions.async_set_batch_location(
@@ -806,6 +885,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_ENSURE_PLACEMENT_LAYOUT,
             async_ensure_placement_layout,
             schema=ENSURE_PLACEMENT_LAYOUT_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_ENSURE_CLIMATE_LAYOUT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_ENSURE_CLIMATE_LAYOUT,
+            async_ensure_climate_layout,
+            schema=ENSURE_CLIMATE_LAYOUT_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_TICK_CLIMATE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_TICK_CLIMATE,
+            async_tick_climate,
+            schema=TICK_CLIMATE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_BIND_CLIMATE_ROLE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_BIND_CLIMATE_ROLE,
+            async_bind_climate_role,
+            schema=BIND_CLIMATE_ROLE_SCHEMA,
         )
     if not hass.services.has_service(DOMAIN, SERVICE_SET_BATCH_LOCATION):
         hass.services.async_register(
@@ -1060,6 +1160,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub = bucket.get("unsub_record_hook")
     if unsub:
         unsub()
+    unsub_climate = bucket.get("unsub_climate_tick")
+    if unsub_climate:
+        unsub_climate()
+    unsub_units = bucket.get("unsub_core_config")
+    if unsub_units:
+        unsub_units()
     weight_repo: WeightEventRepository | None = bucket.get("weight_repository")
     if weight_repo is not None:
         await weight_repo.async_close()
@@ -1072,6 +1178,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     location_repo: LocationRepository | None = bucket.get("location_repository")
     if location_repo is not None:
         await location_repo.async_close()
+    climate_repo: ClimateRepository | None = bucket.get("climate_repository")
+    if climate_repo is not None:
+        await climate_repo.async_close()
     sale_repo: SaleRepository | None = bucket.get("sale_repository")
     if sale_repo is not None:
         await sale_repo.async_close()
@@ -1098,6 +1207,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_ADD_BATCH_NOTE,
                 SERVICE_SET_CHECK_REMINDER,
                 SERVICE_ENSURE_PLACEMENT_LAYOUT,
+                SERVICE_ENSURE_CLIMATE_LAYOUT,
+                SERVICE_TICK_CLIMATE,
+                SERVICE_BIND_CLIMATE_ROLE,
                 SERVICE_SET_BATCH_LOCATION,
                 SERVICE_SET_CULTURE_LOCATION,
                 SERVICE_SET_MEDIA_LOCATION,

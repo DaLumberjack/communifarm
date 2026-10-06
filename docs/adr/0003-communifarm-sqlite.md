@@ -36,7 +36,7 @@ Recording scale weights (NFC-selected ingredient + mass) is the first Communifar
 
 - Weigh “Record” persists via Communifarm (service + scale button hook), not only ESPHome `last_recorded` text.
 - SQLite I/O runs off the event loop (`async_add_executor_job`).
-- Schema versioned with tested migrations (current: **v11**).
+- Schema versioned with tested migrations (current: **v12**, climate tree in ADR 0004).
 - Env metric rollups remain a later table family; raw high-frequency sensor history stays Recorder’s job.
 - Selling / production statistics tables must FK `batches.stable_id` — do not invent parallel batch ids.
 - Culture media must not reuse production `batches` rows for agar/LC prep.

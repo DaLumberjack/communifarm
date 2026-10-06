@@ -124,7 +124,7 @@ def test_sqlite_migration_v9_containers(tmp_path: Path) -> None:
 
 def test_dashboard_includes_harvest_tab(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
-    assert len(config["views"]) == 7
+    assert len(config["views"]) == 9
     harvest = next(v for v in config["views"] if v.get("path") == "harvest")
     production = next(v for v in config["views"] if v.get("path") == "production")
     assert harvest["title"] == "Harvest"

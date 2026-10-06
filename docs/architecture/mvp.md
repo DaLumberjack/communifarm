@@ -30,7 +30,7 @@ SQLite table SQL stays in `storage/sqlite_db.py` `MIGRATIONS`. Repositories inhe
 | Store | Holds |
 | --- | --- |
 | HA `Store` (`communifarm.state`) | Site/Environment/profile/batch setup |
-| Communifarm SQLite (`communifarm/communifarm.db`) | Process/analysis events (`weight_events`, later aggregates) |
+| Communifarm SQLite (`communifarm/communifarm.db`) | Process events, placement, climate nodes/bindings/intents (schema v12) |
 | HA Recorder | Raw entity history only — not Communifarm process truth |
 
 ## Dashboard targets

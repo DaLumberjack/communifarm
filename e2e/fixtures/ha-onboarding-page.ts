@@ -68,9 +68,22 @@ export class HaOnboardingPage {
   }
 
   async completeCoreConfigIfPresent(): Promise<void> {
-    // Location / unit system — often a Next/Create button is enough.
+    // US country defaults to Fahrenheit. Communifarm wants metric, via HA's own setting.
+    const metric = this.page.getByRole("radio", { name: /metric/i });
+    if (await metric.count()) {
+      await metric.first().click();
+    } else {
+      const metricLabel = this.page.getByText(/^metric\b/i);
+      if (await metricLabel.count()) {
+        await metricLabel.first().click();
+      }
+    }
     if (await this.page.getByText(/location|unit system|home location/i).count()) {
       await this.clickPrimary();
+    }
+    const updateUnits = this.page.getByRole("button", { name: /^update$/i });
+    if (await updateUnits.count()) {
+      await updateUnits.first().click();
     }
   }
 

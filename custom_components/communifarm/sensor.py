@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .climate_entities import drawing_sensor_entities
 from .const import (
     BATCH_LIST_WIDGET_LIMIT,
     DOMAIN,
@@ -15,6 +16,7 @@ from .const import (
     ENTITY_BATCH_MILESTONES,
     ENTITY_BATCH_NFC_UID,
     ENTITY_BATCH_STAGE,
+    ENTITY_CLIMATE_STATUS,
     ENTITY_CULTURE_INVENTORY,
     ENTITY_NFC_CHECKIN,
     ENTITY_PRODUCTION_STATUS,
@@ -24,6 +26,7 @@ from .const import (
     ROLE_HUMIDITY,
     ROLE_TEMPERATURE,
     SIGNAL_BATCH_UPDATED,
+    SIGNAL_CLIMATE_UPDATED,
     SIGNAL_CULTURE_UPDATED,
     SIGNAL_NFC_CHECKIN_UPDATED,
     SIGNAL_SALES_UPDATED,
@@ -74,6 +77,8 @@ async def async_setup_entry(
             CommunifarmCultureInventorySensor(entry_id),
             CommunifarmNfcCheckinSensor(entry_id),
             CommunifarmSalesStatusSensor(entry_id),
+            CommunifarmClimateStatusSensor(entry_id),
+            *drawing_sensor_entities(entry_id),
         ]
     )
 
@@ -451,6 +456,44 @@ class CommunifarmCultureInventorySensor(CommunifarmSensor):
         self._attrs = {
             "lots": [lot.to_dict() for lot in lots[:40]],
             "list_text": CultureRepository.format_culture_inventory_text(lots),
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmClimateStatusSensor(CommunifarmSensor):
+    """Effective climate readings and the last control decision."""
+
+    _attr_name = "Climate status"
+    _attr_unique_id = "communifarm_climate_status"
+    _attr_icon = "mdi:home-thermometer"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_CLIMATE_STATUS)
+        self._value = "not seeded"
+        self._attrs: dict = {"summary": "", "node_count": 0, "seeded": False}
+
+    async def async_added_to_hass(self) -> None:
+        self._refresh()
+        self.listen_entry_signals(SIGNAL_CLIMATE_UPDATED, method="_refresh")
+
+    @callback
+    def _refresh(self) -> None:
+        snapshot = self.bucket().get("climate_snapshot") or {}
+        seeded = bool(snapshot.get("seeded"))
+        count = int(snapshot.get("node_count") or 0)
+        self._value = f"{count} nodes" if seeded else "not seeded"
+        self._attrs = {
+            "summary": snapshot.get("summary") or "",
+            "node_count": count,
+            "seeded": seeded,
         }
         self.async_write_ha_state()
 

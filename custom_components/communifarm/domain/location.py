@@ -84,6 +84,7 @@ class PlacementArea:
     id: str = ""
     created_at: str | None = None
     notes: str | None = None
+    climate_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id:

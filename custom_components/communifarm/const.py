@@ -36,6 +36,9 @@ DASHBOARD_VIEW_CULTURE = "culture"
 DASHBOARD_VIEW_PRODUCTION = "production"
 DASHBOARD_VIEW_HARVEST = "harvest"
 DASHBOARD_VIEW_POS = "pos"
+DASHBOARD_VIEW_CLIMATE_LAYOUT = "climate-layout"
+DASHBOARD_VIEW_CLIMATE_STATUS = "climate-status"
+CLIMATE_LAYOUT_IMAGE = "/local/communifarm/cea-layout.png"
 
 ENTITY_TEMPERATURE_TARGET = "number.communifarm_temperature_target"
 ENTITY_HUMIDITY_TARGET = "number.communifarm_humidity_target"
@@ -75,6 +78,7 @@ ENTITY_SALE_LINE_AMOUNT = "number.communifarm_sale_line_amount"
 ENTITY_PAYMENT_METHOD = "select.communifarm_payment_method"
 ENTITY_SALE_VENUE = "select.communifarm_sale_venue"
 ENTITY_SALE_BUYER = "select.communifarm_sale_buyer"
+ENTITY_CLIMATE_STATUS = "sensor.communifarm_climate_status"
 
 ENTITY_BTN_WATER_ADDED = "button.communifarm_water_added"
 ENTITY_BTN_DRY_WET_MIX = "button.communifarm_dry_wet_mix_started"
@@ -119,6 +123,9 @@ SERVICE_RECORD_HARVEST = "record_harvest"
 SERVICE_ADD_BATCH_NOTE = "add_batch_note"
 SERVICE_SET_CHECK_REMINDER = "set_check_reminder"
 SERVICE_ENSURE_PLACEMENT_LAYOUT = "ensure_placement_layout"
+SERVICE_ENSURE_CLIMATE_LAYOUT = "ensure_climate_layout"
+SERVICE_TICK_CLIMATE = "tick_climate"
+SERVICE_BIND_CLIMATE_ROLE = "bind_climate_role"
 SERVICE_SET_BATCH_LOCATION = "set_batch_location"
 SERVICE_SET_CULTURE_LOCATION = "set_culture_location"
 SERVICE_SET_MEDIA_LOCATION = "set_media_location"
@@ -134,6 +141,9 @@ SIGNAL_BATCH_UPDATED = f"{DOMAIN}_batch_updated"
 SIGNAL_NFC_CHECKIN_UPDATED = f"{DOMAIN}_nfc_checkin_updated"
 SIGNAL_SALES_UPDATED = f"{DOMAIN}_sales_updated"
 SIGNAL_CULTURE_UPDATED = f"{DOMAIN}_culture_updated"
+SIGNAL_CLIMATE_UPDATED = f"{DOMAIN}_climate_updated"
+
+CLIMATE_TICK_SECONDS = 60
 
 # Scale entities used when recording from the Weigh station (live or mock).
 ENTITY_SCALE_MASS_G = "sensor.esp32dev_calibrated_g"
@@ -154,7 +164,7 @@ def new_weigh_session_tracker() -> dict:
         "last_reject": None,
     }
 
-PLATFORMS = ["sensor", "number", "switch", "button", "select", "text"]
+PLATFORMS = ["sensor", "number", "switch", "button", "select", "text", "binary_sensor"]
 
 BATCH_STAGE_PLANNED = "planned"
 BATCH_STAGE_ACTIVE = "active"

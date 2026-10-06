@@ -309,6 +309,50 @@ ensure_placement_layout:
   name: Ensure placement layout
   description: Seed default tents/fridges/cabinets and slot zones for the site (idempotent).
 
+ensure_climate_layout:
+  name: Ensure climate layout
+  description: >
+    Seed the operator climate tree (outdoors, general room, tents, storage) and
+    bind the sensors and machines labeled on the layout. The general room reuses
+    the onboarding environment. Later calls keep existing nodes and bindings.
+
+tick_climate:
+  name: Tick climate control
+  description: >
+    Read bound sensors and command bound fans, AC, heater, humidifier,
+    dehumidifier, lights, and the condensate pump. Does nothing for a node
+    with control turned off.
+
+bind_climate_role:
+  name: Bind climate role
+  description: >
+    Attach a sensor or machine to a climate node. Use the entity registry id
+    when you have one. Set waste_heat_to_parent on DC grow lights that warm
+    the parent room.
+  fields:
+    node_id:
+      name: Climate node ID
+      required: true
+    role:
+      name: Role
+      required: true
+      description: >
+        temperature, humidity, pressure, co2_ppm, circulation_fan, intake_fan,
+        exhaust_fan, fresh_air_intake, ac, heater, humidifier, dehumidifier,
+        light, float, or condensate_pump.
+    entity_id:
+      name: Entity ID
+      required: true
+    entity_entry_id:
+      name: Entity registry ID
+      description: Stable id. Defaults to entity_id.
+    waste_heat_to_parent:
+      name: Waste heat to parent
+      description: DC driver heat lands in the parent room.
+      default: false
+      selector:
+        boolean:
+
 set_batch_location:
   name: Set batch location
   description: Place the active (or specified) production batch into a zone slot.
