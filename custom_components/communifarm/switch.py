@@ -11,6 +11,7 @@ from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .climate_entities import drawing_switch_entities
 from .const import (
     DOMAIN,
     ENTITY_ALLOWLISTED_SWITCH,
@@ -99,6 +100,7 @@ async def async_setup_entry(
         entities.append(CommunifarmAllowlistedSwitch(entry.entry_id))
     if state.binding_for(ROLE_LC_STIR_PLATE) is not None:
         entities.append(CommunifarmLcStirPlateSwitch(entry.entry_id))
+    entities.extend(drawing_switch_entities(entry.entry_id))
     if entities:
         async_add_entities(entities)
 

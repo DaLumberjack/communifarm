@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from homeassistant.components import frontend
@@ -16,10 +17,19 @@ from ..const import (
     DASHBOARD_URL_PATH,
     DOMAIN,
 )
+from ..domain.climate_layout import OverlayPoint, overlay_points, render_operator_layout_svg
+from ..domain.climate_units import unit_system_for_temperature_symbol
 from ..domain.models import CommunifarmState
 from .builder import DashboardBuilder
+from .layout_png import render_operator_layout_png
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _unit_system(hass: HomeAssistant) -> str:
+    """Follow Home Assistant. Metric unless the configured temperature unit is °F."""
+    symbol = getattr(getattr(hass.config, "units", None), "temperature_unit", "°C")
+    return unit_system_for_temperature_symbol(str(symbol))
 
 
 def resolve_bindings(hass: HomeAssistant, state: CommunifarmState) -> dict[str, str | None]:
@@ -45,7 +55,11 @@ async def async_provision_dashboard(
 ) -> str:
     """Create or update the Communifarm dashboard; return relative URL path."""
     resolved = resolve_bindings(hass, state)
-    config = DashboardBuilder().build(state, resolved)
+    points = await _async_climate_points(hass, state)
+    config = DashboardBuilder().build(
+        state, resolved, points, _unit_system(hass)
+    )
+    await _async_write_layout_image(hass)
 
     try:
         await _async_save_lovelace(hass, config)
@@ -54,6 +68,45 @@ async def async_provision_dashboard(
         hass.data.setdefault(DOMAIN, {})["dashboard_config"] = config
 
     return f"/{DASHBOARD_URL_PATH}/overview"
+
+
+async def _async_climate_points(
+    hass: HomeAssistant, state: CommunifarmState
+) -> list[OverlayPoint]:
+    """Read climate bindings for this site. Empty until the tree is seeded."""
+    for bucket in hass.data.get(DOMAIN, {}).values():
+        if not isinstance(bucket, dict):
+            continue
+        stored = bucket.get("state")
+        if stored is None or stored.site.id != state.site.id:
+            continue
+        repo = bucket.get("climate_repository")
+        if repo is None:
+            return []
+        nodes = await repo.async_list_nodes(state.site.id)
+        bindings = await repo.async_list_bindings(state.site.id)
+        return overlay_points(nodes, bindings)
+    return []
+
+
+async def _async_write_layout_image(hass: HomeAssistant) -> None:
+    """Write the schematic beside config so picture-elements can load the PNG.
+
+    The SVG is kept for anyone opening the file. The card uses the PNG because
+    an SVG response is often not an image type, and the card then draws a
+    broken-image icon.
+    """
+
+    def _write() -> None:
+        directory = Path(hass.config.path("www/communifarm"))
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "cea-layout.svg").write_text(render_operator_layout_svg(), encoding="utf-8")
+        (directory / "cea-layout.png").write_bytes(render_operator_layout_png())
+
+    try:
+        await hass.async_add_executor_job(_write)
+    except OSError:
+        _LOGGER.warning("Could not write Communifarm layout image to config/www")
 
 
 def _lovelace_const() -> Any:

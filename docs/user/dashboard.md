@@ -4,13 +4,17 @@ After Communifarm setup finishes, open **Communifarm** in the sidebar (`/communi
 
 | Tab | Path | Purpose |
 | --- | --- | --- |
-| Overview | `/communifarm/overview` | Environment, targets, controls, batch |
+| Overview | `/communifarm/overview` | Environment, targets, climate rooms, controls, batch |
+| Layout | `/communifarm/climate-layout` | Full-width desktop floor plan. A phone layout is later |
+| Climate | `/communifarm/climate-status` | Gauges, 24h history, machine on/off |
 | Weigh | `/communifarm/weigh` | Scale, NFC, recipe scale, session progress, mix milestones |
 | Batches | `/communifarm/batches` | Batch list, complete/new, post-weigh mix process |
 | Culture | `/communifarm/culture` | Variety catalog CRUD, acquire LC/grain vessels, vessel status |
 | Production | `/communifarm/production` | Culture inoculate, incubation/fruiting, batch harvest (shared entities) |
 | Harvest | `/communifarm/harvest` | Same batch harvest entities + fridge/bagging SOP (NFC UI later) |
 | POS | `/communifarm/pos` | Sale draft, confirm, cleanup |
+
+The overview **Climate** card shows the seeded rooms. See [climate.md](climate.md).
 
 ### Weigh session
 

@@ -5,8 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from ..const import (
+    CLIMATE_LAYOUT_IMAGE,
     DASHBOARD_TITLE,
     DASHBOARD_VIEW_BATCHES,
+    DASHBOARD_VIEW_CLIMATE_LAYOUT,
+    DASHBOARD_VIEW_CLIMATE_STATUS,
     DASHBOARD_VIEW_CULTURE,
     DASHBOARD_VIEW_HARVEST,
     DASHBOARD_VIEW_OVERVIEW,
@@ -46,6 +49,7 @@ from ..const import (
     ENTITY_BTN_STORED_COOLING,
     ENTITY_BTN_WATER_ADDED,
     ENTITY_CATALOG_VARIETY,
+    ENTITY_CLIMATE_STATUS,
     ENTITY_CONTAINER_COUNT,
     ENTITY_CONTAINER_TYPE,
     ENTITY_CULTURE_INVENTORY,
@@ -73,6 +77,8 @@ from ..const import (
     ROLE_SWITCH,
     ROLE_TEMPERATURE,
 )
+from ..domain.climate_layout import OverlayPoint, overlay_prefix
+from ..domain.climate_units import UNIT_METRIC, gauge_bounds
 from ..domain.models import CommunifarmState
 from ..fixtures.esp32dev_scale import (
     ENTITY_ESP32DEV_CALIBRATED_G,
@@ -86,17 +92,29 @@ from ..fixtures.esp32dev_scale import (
 
 
 class DashboardBuilder:
-    """Build a mobile-first Lovelace dashboard from Communifarm state."""
+    """Build Lovelace views from Communifarm state."""
 
-    def build(self, state: CommunifarmState, resolved: dict[str, str | None]) -> dict[str, Any]:
+    def build(
+        self,
+        state: CommunifarmState,
+        resolved: dict[str, str | None],
+        climate_points: list[OverlayPoint] | None = None,
+        unit_system: str = UNIT_METRIC,
+    ) -> dict[str, Any]:
         """Return a Lovelace dashboard config dict.
 
         resolved maps role -> current entity_id (may be None).
+        climate_points are bound entities placed on the operator schematic.
+        unit_system is Home Assistant's current choice, metric unless it is °F.
         """
+        points = list(climate_points or [])
+        self._unit_system = unit_system
         return {
             "title": DASHBOARD_TITLE,
             "views": [
                 self._overview_view(state, resolved),
+                self._climate_layout_view(points),
+                self._climate_status_view(points),
                 self._weigh_view(state),
                 self._batches_view(state),
                 self._culture_view(state),
@@ -116,6 +134,7 @@ class DashboardBuilder:
                     f"## {state.environment.name}\n"
                     f"Site: **{state.site.name}**\n"
                     f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
+                    "Floor plan? **Layout** · Gauges and fans? **Climate** · "
                     "Weighing? **Weigh** · Mix history? **Batches** · "
                     "Culture / varieties? **Culture** · "
                     "Inoculate? **Production** · Pick / fridge? **Harvest** · "
@@ -186,6 +205,20 @@ class DashboardBuilder:
             cards.append(
                 {"type": "entities", "title": "Controls", "entities": control_entities}
             )
+
+        cards.append(
+            {
+                "type": "markdown",
+                "title": "Climate",
+                "content": (
+                    "Rooms and tents. An indoor room with no sensor uses the parent "
+                    "reading. Machines stay off when that reading is missing.\n\n"
+                    "Setup places the sensors and machines drawn on the layout. "
+                    "`bind_climate_role` swaps one of those for a real device.\n\n"
+                    f"{{{{ state_attr('{ENTITY_CLIMATE_STATUS}', 'summary') }}}}"
+                ),
+            }
+        )
 
         cards.append(
             {
@@ -716,3 +749,196 @@ class DashboardBuilder:
                 },
             ],
         }
+
+    def _climate_layout_view(self, points: list[OverlayPoint]) -> dict[str, Any]:
+        """Picture-elements floor plan. Unbound rooms stay as ink on the SVG."""
+        elements: list[dict[str, Any]] = [
+            self._overlay_element(point) for point in points
+        ]
+        if not elements:
+            elements.append(
+                {
+                    "type": "state-label",
+                    "entity": ENTITY_CLIMATE_STATUS,
+                    "prefix": "Climate ",
+                    "style": {
+                        "left": "78%",
+                        "top": "7%",
+                        "transform": "translate(-50%, -50%)",
+                        "color": "#e7f2f8",
+                        "font-size": "12px",
+                    },
+                }
+            )
+        return {
+            "title": "Layout",
+            "path": DASHBOARD_VIEW_CLIMATE_LAYOUT,
+            "icon": "mdi:floor-plan",
+            "panel": True,
+            "cards": [
+                {
+                    "type": "vertical-stack",
+                    "cards": [
+                        {
+                            "type": "markdown",
+                            "content": (
+                                "Desktop floor plan. A phone layout comes later. "
+                                "Room positions stay fixed until a layout editor exists."
+                            ),
+                        },
+                        {
+                            "type": "picture-elements",
+                            "image": CLIMATE_LAYOUT_IMAGE,
+                            "elements": elements,
+                        },
+                    ],
+                }
+            ],
+        }
+
+    def _climate_status_view(self, points: list[OverlayPoint]) -> dict[str, Any]:
+        """Gauges, 24h history, and machine on/off. No card for an unbound role."""
+        sensors = [point for point in points if point.is_sensor]
+        machines = [point for point in points if not point.is_sensor]
+        cards: list[dict[str, Any]] = [
+            {
+                "type": "markdown",
+                "content": (
+                    "## Climate status\n"
+                    "- Yellow, then red, means the reading is above the target.\n"
+                    "- A cold room still shows its number here.\n"
+                    "- Indoor gauges sit close to the target.\n"
+                    "- Outdoor gauges use a wider window.\n\n"
+                    f"{{{{ state_attr('{ENTITY_CLIMATE_STATUS}', 'summary') }}}}"
+                ),
+            }
+        ]
+        if not points:
+            cards.append(
+                {
+                    "type": "markdown",
+                    "title": "Nothing bound yet",
+                    "content": (
+                        "The labeled sensors and machines are placed at setup. "
+                        "`bind_climate_role` replaces one with hardware you already have. "
+                        "Empty slots stay off this tab so you do not get a dead gauge."
+                    ),
+                }
+            )
+        if sensors:
+            cards.append(
+                {
+                    "type": "history-graph",
+                    "title": "Last 24 hours",
+                    "hours_to_show": 24,
+                    "entities": [point.entity_id for point in sensors],
+                }
+            )
+        gauges = [card for point in sensors if (card := self._gauge_card(point))]
+        for chunk in _chunks(gauges, 3):
+            if len(chunk) == 1:
+                cards.append(chunk[0])
+            else:
+                cards.append({"type": "horizontal-stack", "cards": chunk})
+        if machines:
+            cards.append(
+                {
+                    "type": "entities",
+                    "title": "Machines",
+                    "state_color": True,
+                    "entities": [
+                        {
+                            "entity": point.entity_id,
+                            "name": f"{point.node_name} {point.role.replace('_', ' ')}",
+                        }
+                        for point in machines
+                    ],
+                }
+            )
+        return {
+            "title": "Climate",
+            "path": DASHBOARD_VIEW_CLIMATE_STATUS,
+            "icon": "mdi:gauge",
+            "cards": cards,
+        }
+
+    @staticmethod
+    def _overlay_element(point: OverlayPoint) -> dict[str, Any]:
+        label = point.node_name
+        short = point.role.replace("_", " ")
+        if point.slot:
+            short = f"{short} {point.slot + 1}"
+        style: dict[str, Any] = {
+            "left": point.left,
+            "top": point.top,
+            "transform": "translate(-50%, -50%)",
+        }
+        if point.is_sensor:
+            style.update(
+                {
+                    "font-size": "13px",
+                    "color": "#f4f7f5",
+                    "background": "rgba(0,0,0,0.55)",
+                    "padding": "0 2px",
+                    "border-radius": "2px",
+                    "line-height": "1.1",
+                    "white-space": "nowrap",
+                }
+            )
+            return {
+                "type": "state-label",
+                "entity": point.entity_id,
+                "prefix": overlay_prefix(point),
+                "style": style,
+            }
+        return {
+            "type": "state-icon",
+            "entity": point.entity_id,
+            "title": f"{label} {short}",
+            "style": style,
+        }
+
+    def _gauge_card(self, point: OverlayPoint) -> dict[str, Any] | None:
+        bounds = gauge_bounds(
+            kind=point.kind,
+            role=point.role,
+            temperature_target=point.temperature_target,
+            humidity_target=point.humidity_target,
+            co2_ppm_target=point.co2_ppm_target,
+            system=self._unit_system,
+        )
+        if bounds is None:
+            return None
+        minimum, maximum, target, band = bounds
+        card: dict[str, Any] = {
+            "type": "gauge",
+            "entity": point.entity_id,
+            "name": f"{point.node_name} {point.role.replace('_', ' ')}",
+            "min": round(minimum, 1),
+            "max": round(maximum, 1),
+            "needle": True,
+        }
+        severity = _gauge_severity(target, band, minimum, maximum)
+        if severity is not None:
+            card["severity"] = severity
+        return card
+
+
+def _chunks(items: list[Any], size: int) -> list[list[Any]]:
+    return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _gauge_severity(
+    target: float | None, band: float, minimum: float, maximum: float
+) -> dict[str, float] | None:
+    """Yellow then red above the target. Home Assistant colors from the threshold up."""
+    if target is None:
+        return None
+    yellow = float(target) + float(band)
+    red = float(target) + max(float(band) * 3, float(band) + 1)
+    if yellow >= maximum:
+        yellow = maximum - 2
+    red = min(maximum, red)
+    if yellow >= red or yellow <= minimum:
+        return None
+    return {"green": minimum, "yellow": round(yellow, 1), "red": round(red, 1)}

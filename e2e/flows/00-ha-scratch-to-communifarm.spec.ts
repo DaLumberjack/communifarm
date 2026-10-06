@@ -42,6 +42,13 @@ test.describe("00 HA scratch onboarding to Communifarm", () => {
     await onboarding.completeAnalyticsIfPresent();
     await onboarding.completeIntegrationIfPresent();
     await onboarding.expectPastOnboarding();
+    const unitSystem = await page.evaluate(() => {
+      const root = document.querySelector("home-assistant") as
+        | (HTMLElement & { hass?: { config?: { unit_system?: string } } })
+        | null;
+      return root?.hass?.config?.unit_system ?? "";
+    });
+    expect(unitSystem).toBe("metric");
 
     // Now on homepage shell — navigate to Communifarm setup endpoints
     const cf = new CommunifarmPage(page);

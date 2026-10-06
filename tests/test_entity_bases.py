@@ -5,8 +5,21 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.communifarm import button, number, select, sensor, switch, text
+from custom_components.communifarm import (
+    binary_sensor,
+    button,
+    number,
+    select,
+    sensor,
+    switch,
+    text,
+)
 from custom_components.communifarm.const import DOMAIN
+from custom_components.communifarm.domain.climate_drawing import (
+    drawing_devices,
+    drawing_entity_id,
+    drawing_object_id,
+)
 from custom_components.communifarm.domain.models import CommunifarmState
 from custom_components.communifarm.entity import CommunifarmEntity
 from custom_components.communifarm.storage.repository import CommunifarmRepository
@@ -26,6 +39,7 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
         ("sensor.communifarm_culture_inventory", "communifarm_culture_inventory"),
         ("sensor.communifarm_nfc_checkin", "communifarm_nfc_checkin"),
         ("sensor.communifarm_sales_status", "communifarm_sales_status"),
+        ("sensor.communifarm_climate_status", "communifarm_climate_status"),
         ("number.communifarm_temperature_target", "communifarm_temperature_target"),
         ("number.communifarm_humidity_target", "communifarm_humidity_target"),
         ("number.communifarm_recipe_scale", "communifarm_recipe_scale"),
@@ -79,6 +93,10 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
     }
 )
 
+DRAWING_ENTITIES: frozenset[tuple[str, str]] = frozenset(
+    (drawing_entity_id(device), drawing_object_id(device)) for device in drawing_devices()
+)
+
 
 async def test_platform_entities_keep_identity_and_base(
     hass: HomeAssistant,
@@ -97,9 +115,9 @@ async def test_platform_entities_keep_identity_and_base(
         del update_before_add
         captured.extend(entities)
 
-    for platform in (sensor, number, switch, button, select, text):
+    for platform in (sensor, number, switch, button, select, text, binary_sensor):
         await platform.async_setup_entry(hass, mock_config_entry, _add)
 
     pairs = {(entity.entity_id, entity.unique_id) for entity in captured}
-    assert pairs == EXPECTED_ENTITIES
+    assert pairs == EXPECTED_ENTITIES | DRAWING_ENTITIES
     assert all(isinstance(entity, CommunifarmEntity) for entity in captured)

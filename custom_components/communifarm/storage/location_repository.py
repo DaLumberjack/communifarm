@@ -181,6 +181,7 @@ class LocationRepository(SqliteRepository):
             slot_count=int(row["slot_count"]),
             created_at=row["created_at"],
             notes=row["notes"],
+            climate_id=row["climate_id"] if "climate_id" in row.keys() else None,
         )
 
     @staticmethod

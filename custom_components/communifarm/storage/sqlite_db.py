@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -427,6 +427,64 @@ MIGRATIONS: dict[int, str] = {
       ON culture_lots (variety_id);
     CREATE INDEX IF NOT EXISTS idx_culture_lots_nfc
       ON culture_lots (nfc_uid);
+    """,
+    12: """
+    CREATE TABLE IF NOT EXISTS climate_nodes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      parent_id TEXT,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      enclosure TEXT NOT NULL,
+      control_enabled INTEGER NOT NULL DEFAULT 0,
+      temperature_target REAL,
+      humidity_target REAL,
+      co2_ppm_target REAL,
+      temp_deadband REAL NOT NULL DEFAULT 1.0,
+      humidity_deadband REAL NOT NULL DEFAULT 5.0,
+      photoperiod_preset TEXT,
+      light_hours_on REAL,
+      light_hours_off REAL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_climate_nodes_site
+      ON climate_nodes (site_id, kind);
+    CREATE INDEX IF NOT EXISTS idx_climate_nodes_parent
+      ON climate_nodes (parent_id);
+
+    CREATE TABLE IF NOT EXISTS climate_bindings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      node_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      entity_entry_id TEXT NOT NULL,
+      entity_id TEXT,
+      waste_heat_to_parent INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_climate_bindings_node
+      ON climate_bindings (node_id, role);
+
+    CREATE TABLE IF NOT EXISTS climate_intents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      node_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      turn_on INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_climate_intents_node_time
+      ON climate_intents (node_id, recorded_at);
+
+    ALTER TABLE placement_areas ADD COLUMN climate_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_placement_areas_climate
+      ON placement_areas (climate_id);
     """,
 }
 

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 78" width="1200" height="780">
+<rect width="100%" height="100%" fill="#3a3f44"/>
+<text x="78" y="5.6" fill="#e7f2f8" font-size="2.4" font-family="sans-serif">Communifarm CEA</text>
+<line x1="8" y1="34" x2="116" y2="34" stroke="#e2c044" stroke-width="0.6"/>
+<line x1="8" y1="50" x2="16" y2="50" stroke="#4aa3d8" stroke-width="0.8"/>
+<rect x="2" y="11" width="116" height="65" rx="1.2" fill="#4e5c56" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="3.2" y="14.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">General room</text>
+<rect x="20" y="16" width="22" height="26" rx="1.2" fill="#2f6f4e" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="21.2" y="19.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Culture prep</text>
+<circle cx="31.00" cy="26.92" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="24.47" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="37.53" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="24.47" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="37.53" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<rect x="44" y="16" width="22" height="26" rx="1.2" fill="#2f6f4e" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="45.2" y="19.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Inoculation</text>
+<circle cx="55.00" cy="26.92" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="48.47" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="61.53" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="48.47" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="61.53" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<rect x="68" y="16" width="22" height="26" rx="1.2" fill="#2f6f4e" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="69.2" y="19.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Incubation</text>
+<circle cx="79.00" cy="26.92" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="72.47" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="85.53" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="72.47" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="85.53" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<rect x="92" y="16" width="24" height="26" rx="1.2" fill="#3d8f55" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="93.2" y="19.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Fruiting</text>
+<circle cx="104.00" cy="26.92" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="96.87" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="111.13" cy="22.24" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="96.87" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<circle cx="111.13" cy="31.08" r="0.7" fill="none" stroke="#d7dde2" stroke-width="0.25"/>
+<rect x="20" y="46" width="18" height="16" rx="1.2" fill="#6b5b4a" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="21.2" y="49.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Harvest</text>
+<rect x="40" y="46" width="18" height="16" rx="1.2" fill="#6b5b4a" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="41.2" y="49.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Ready to sell</text>
+<rect x="60" y="46" width="18" height="16" rx="1.2" fill="#5a5348" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="61.2" y="49.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Hard goods</text>
+<rect x="80" y="46" width="16" height="16" rx="1.2" fill="#5a5348" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="81.2" y="49.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Consumables</text>
+<rect x="98" y="46" width="18" height="16" rx="1.2" fill="#5a5348" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="99.2" y="49.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Storage</text>
+<rect x="2" y="1" width="116" height="8" rx="1.2" fill="#5d7f9a" stroke="#d7dde2" stroke-width="0.35"/>
+<text x="3.2" y="4.2" fill="#f4f7f5" font-size="2.2" font-family="sans-serif">Outdoors</text>
+<text x="18.0" y="6.2" fill="#e7f2f8" font-size="1.8" font-family="sans-serif">T</text>
+<text x="36.0" y="6.2" fill="#e7f2f8" font-size="1.8" font-family="sans-serif">RH</text>
+<text x="54.0" y="6.2" fill="#e7f2f8" font-size="1.8" font-family="sans-serif">P</text>
+<rect x="4.2" y="16.4" width="7.2" height="3.2" rx="0.4" fill="#2c3338" stroke="#e2c044" stroke-width="0.25"/>
+<text x="4.6" y="18.7" fill="#f4e7b0" font-size="1.6" font-family="sans-serif">AC</text>
+<rect x="4.2" y="24.4" width="7.2" height="3.2" rx="0.4" fill="#2c3338" stroke="#e2c044" stroke-width="0.25"/>
+<text x="4.6" y="26.7" fill="#f4e7b0" font-size="1.6" font-family="sans-serif">Heat</text>
+<rect x="4.2" y="32.4" width="7.2" height="3.2" rx="0.4" fill="#2c3338" stroke="#e2c044" stroke-width="0.25"/>
+<text x="4.6" y="34.7" fill="#f4e7b0" font-size="1.6" font-family="sans-serif">Fresh</text>
+<rect x="4.2" y="40.4" width="7.2" height="3.2" rx="0.4" fill="#2c3338" stroke="#e2c044" stroke-width="0.25"/>
+<text x="4.6" y="42.7" fill="#f4e7b0" font-size="1.6" font-family="sans-serif">Float</text>
+<rect x="4.2" y="48.4" width="7.2" height="3.2" rx="0.4" fill="#2c3338" stroke="#e2c044" stroke-width="0.25"/>
+<text x="4.6" y="50.7" fill="#f4e7b0" font-size="1.6" font-family="sans-serif">Pump</text>
+<text x="4" y="76.5" fill="#b7c0c6" font-size="1.7" font-family="sans-serif">Preset schematic. Live sensors sit on the dots. Not a scale drawing.</text>
+</svg>

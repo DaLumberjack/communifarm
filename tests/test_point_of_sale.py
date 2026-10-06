@@ -68,7 +68,7 @@ def test_sqlite_migration_v10_sales(tmp_path: Path) -> None:
 
 def test_dashboard_includes_pos_tab(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
-    assert len(config["views"]) == 7
+    assert len(config["views"]) == 9
     pos = next(v for v in config["views"] if v.get("path") == "pos")
     assert pos["title"] == "POS"
     titles = [c.get("title") for c in pos["cards"]]
