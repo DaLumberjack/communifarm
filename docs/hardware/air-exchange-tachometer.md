@@ -51,7 +51,7 @@ ACH / room-volume math is deferred. Store the raw samples first.
 
 | Stage | Coverage |
 | --- | --- |
-| T0 | `tests/test_tachometer.py` |
+| T0 | `tests/test_tachometer.py` — case file: [air-exchange-tachometer.md](../process/test-cases/air-exchange-tachometer.md) |
 | T1 | mock package + services once Communifarm is configured |
 | T2/T3 | skipped until version bump / live vents requested |
 
