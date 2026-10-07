@@ -1,0 +1,64 @@
+# Mock dedicated PN532 handheld / bench NFC reader for T1/T2.
+# Complements scale NFC stub (input_text.esp32dev_last_nfc_uid).
+# Public surface matches esphome nfc-scanner / nfc-writer Last NFC UID text sensor.
+
+input_text:
+  cf_mixroom_nfc_scan01_last_nfc_uid:
+    name: "cf-mixroom-nfc-scan01 Last NFC UID"
+    initial: ""
+    max: 64
+  cf_lab_nfc_write01_last_nfc_uid:
+    name: "cf-lab-nfc-write01 Last NFC UID"
+    initial: ""
+    max: 64
+
+input_button:
+  cf_mixroom_nfc_scan01_simulate_scan:
+    name: "cf-mixroom-nfc-scan01 Simulate Scan"
+  cf_lab_nfc_write01_simulate_scan:
+    name: "cf-lab-nfc-write01 Simulate Scan"
+
+template:
+  - sensor:
+      - name: "cf-mixroom-nfc-scan01 Last NFC UID"
+        unique_id: cf_mixroom_nfc_scan01_last_nfc_uid_sensor
+        state: "{{ states('input_text.cf_mixroom_nfc_scan01_last_nfc_uid') }}"
+      - name: "cf-lab-nfc-write01 Last NFC UID"
+        unique_id: cf_lab_nfc_write01_last_nfc_uid_sensor
+        state: "{{ states('input_text.cf_lab_nfc_write01_last_nfc_uid') }}"
+  - button:
+      - name: "cf-lab-nfc-write01 Prepare NDEF Write"
+        unique_id: cf_lab_nfc_write01_prepare_ndef_write
+        icon: mdi:nfc-tap
+        press:
+          - action: persistent_notification.create
+            data:
+              title: "cf-lab-nfc-write01 mock NDEF"
+              message: >-
+                Mock only. Real NDEF write belongs on PN532 ESPHome firmware.
+                Tags must store stable refs only.
+
+automation:
+  - id: cf_nfc_scan01_simulate_echo
+    alias: "cf NFC scan01 simulate keeps last UID"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_mixroom_nfc_scan01_simulate_scan
+    action:
+      - action: persistent_notification.create
+        data:
+          title: "cf-mixroom-nfc-scan01 mock scan"
+          message: >-
+            UID={{ states('input_text.cf_mixroom_nfc_scan01_last_nfc_uid') }}.
+            Communifarm resolve_nfc / check_in consume this value.
+  - id: cf_nfc_write01_simulate_echo
+    alias: "cf NFC write01 simulate keeps last UID"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_lab_nfc_write01_simulate_scan
+    action:
+      - action: persistent_notification.create
+        data:
+          title: "cf-lab-nfc-write01 mock scan"
+          message: >-
+            UID={{ states('input_text.cf_lab_nfc_write01_last_nfc_uid') }}.

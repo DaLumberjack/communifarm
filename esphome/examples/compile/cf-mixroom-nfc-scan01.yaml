@@ -1,0 +1,20 @@
+# CI compile target — not for production flash.
+substitutions:
+  device_name: cf-mixroom-nfc-scan01
+  friendly_name: Mixroom NFC Scanner 01
+  area_name: Mix Room
+  node_role: nfc-scanner
+  firmware_version: "0.1.0-ci"
+  wifi_ssid: "ci-test-ssid"
+  wifi_password: "ci-test-password"
+  fallback_ssid: "CF-CI-NFC-Scan-Fallback"
+  fallback_password: "ci-fallback-password"
+  i2c_sda_pin: GPIO21
+  i2c_scl_pin: GPIO22
+
+packages:
+  base: !include ../../packages/common/base.yaml
+  wifi: !include ../../packages/common/network-wifi.yaml
+  diagnostics: !include ../../packages/common/diagnostics.yaml
+  board: !include ../../packages/boards/esp32-d1-mini32.yaml
+  role: !include ../../packages/roles/nfc-scanner.yaml

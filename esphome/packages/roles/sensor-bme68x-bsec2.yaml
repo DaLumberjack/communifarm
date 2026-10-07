@@ -1,0 +1,40 @@
+# Optional BME688 BSEC2 IAQ package.
+#
+# WARNING: Bosch BSEC2 license forbids distributing compiled firmware that includes
+# this component. Do NOT add this package to CI compile examples or release binaries
+# shared outside your accepted-license usage.
+#
+# Include only on a private flash config after accepting the BSEC license:
+#   packages:
+#     bsec2: !include ../packages/roles/sensor-bme68x-bsec2.yaml
+
+bme68x_bsec2_i2c:
+  id: cf_bme68x_bsec2
+  i2c_id: cf_i2c_bus
+  address: ${bme688_address}
+  model: bme688
+  operating_age: 28d
+  sample_rate: LP
+  supply_voltage: 3.3V
+  temperature_offset: 0
+  state_save_interval: 6h
+
+sensor:
+  - platform: bme68x_bsec2
+    bme68x_bsec2_id: cf_bme68x_bsec2
+    iaq:
+      name: "BME IAQ"
+      id: cf_bme_iaq
+    co2_equivalent:
+      name: "BME CO2 Equivalent"
+      id: cf_bme_co2_eq
+    breath_voc_equivalent:
+      name: "BME Breath VOC Equivalent"
+      id: cf_bme_bvoc
+
+text_sensor:
+  - platform: bme68x_bsec2
+    bme68x_bsec2_id: cf_bme68x_bsec2
+    iaq_accuracy:
+      name: "BME IAQ Accuracy"
+      id: cf_bme_iaq_accuracy

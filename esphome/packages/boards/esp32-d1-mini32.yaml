@@ -1,0 +1,7 @@
+# ESP32-WROOM-32 D1 Mini clone (esp32dev). Verified pin notes:
+# docs/hardware/esp32-wroom-32-d1-mini-clone.md
+esp32:
+  board: esp32dev
+  variant: esp32
+  framework:
+    type: esp-idf

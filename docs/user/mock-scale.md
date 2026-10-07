@@ -72,12 +72,19 @@ button.press → button.esp32dev_record_weight
 | When do we use live devices? | Special cases: calibration math, HX711 noise, real NFC reads, human process timing — usually **T3 test VM** or a **future dedicated lab scale**, not day-to-day T1. |
 | Human process flow (recipe walk-through)? | **Deferred** — see workspace `docs/intermediate/weigh-station-process-deferred.md`. Ship mocks + contracts first. |
 
-### Later completion (not this branch)
+### Related device packages (this era)
 
-1. Dedicated ESPHome scale + NFC reader inventory for **lab/devcontainer** (separate from floor production gear).
-2. Communifarm process UI: recipe steps → expect NFC → prompt tare → record weight → next ingredient.
-3. Bind live entity registry IDs on T3; keep mock package as the T1 default.
-4. Redact/move intake `scale.yaml` secrets (API/OTA keys) into OpenBao; never commit live keys.
+| Item | Location |
+| --- | --- |
+| ESPHome scale device YAML | `esphome/devices/cf-mixroom-scale01.yaml` |
+| Dedicated NFC HA mocks | `packages/mock_cf_nfc_reader.yaml` |
+| Device matrix | [esphome-devices.md](../hardware/esphome-devices.md) |
+
+### Later completion
+
+1. Communifarm process UI: recipe steps → expect NFC → prompt tare → record weight → next ingredient.
+2. Bind live entity registry IDs on T3; keep mock package as the T1 default.
+3. Redact/move intake `scale.yaml` secrets (API/OTA keys) into OpenBao; never commit live keys.
 
 ## Dashboard Weigh tab
 

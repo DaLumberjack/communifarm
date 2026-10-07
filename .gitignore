@@ -16,7 +16,11 @@ build/
 
 # --- Node / Playwright ---
 node_modules/
-test-results/
+test-results/**
+!test-results/e2e/
+test-results/e2e/**
+!test-results/e2e/summary.json
+!test-results/e2e/summary.md
 playwright-report/
 playwright/.cache/
 blob-report/

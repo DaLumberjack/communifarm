@@ -539,3 +539,57 @@ record_sale_cleanup:
         boolean:
     notes:
       name: Notes
+
+upsert_air_vent:
+  name: Upsert air vent
+  description: >
+    Create or update a labeled vent used for manual tachometer / air-exchange
+    logging (intake, exhaust, circulation, or other).
+  fields:
+    label:
+      name: Vent label
+      required: true
+      description: Stable human label, e.g. Fruiting intake left.
+    vent_role:
+      name: Vent role
+      description: intake, exhaust, circulation, or other.
+      default: other
+    climate_node_id:
+      name: Climate node ID
+      description: Optional climate tree node this vent belongs to.
+    notes:
+      name: Notes
+    vent_id:
+      name: Vent ID
+      description: Update an existing vent by stable id.
+
+record_tachometer:
+  name: Record tachometer
+  description: >
+    Append a manual fan tachometer or airflow reading for a labeled vent.
+    Provide vent_id or vent_label. recorded_at defaults to now (UTC ISO).
+  fields:
+    value:
+      name: Value
+      required: true
+      description: Tachometer or airflow reading.
+    unit:
+      name: Unit
+      description: rpm, cfm, or fpm.
+      default: rpm
+    vent_label:
+      name: Vent label
+      description: Creates the vent if it does not exist yet.
+    vent_id:
+      name: Vent ID
+    recorded_at:
+      name: Timestamp
+      description: ISO timestamp. Defaults to now.
+    vent_role:
+      name: Vent role
+      description: Used when creating a new vent from vent_label.
+      default: other
+    climate_node_id:
+      name: Climate node ID
+    notes:
+      name: Notes

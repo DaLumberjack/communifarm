@@ -1,0 +1,5 @@
+# Low-friction USB/BLE provisioning for Wi-Fi boards.
+improv_serial:
+
+esp32_improv:
+  authorizer: false

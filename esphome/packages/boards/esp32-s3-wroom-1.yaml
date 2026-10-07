@@ -1,0 +1,8 @@
+# Generic ESP32-S3-WROOM-1 module board package.
+# Primary Communifarm board for tent / environment sensor nodes (soldered home setup).
+# Carrier pinouts vary — device files must set peripheral pins via substitutions.
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  framework:
+    type: esp-idf

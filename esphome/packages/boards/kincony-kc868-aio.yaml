@@ -1,0 +1,19 @@
+# KinCony KC868-AIO / AIO-family board profile.
+#
+# Pin mappings are NOT published here. Only flash after substituting pins from
+# current manufacturer documentation or a bench-verified harness.
+#
+# This package sets identity/metadata only. Relays and inputs come from the
+# motor-controller role via substitutions or template switches.
+esphome:
+  on_boot:
+    then:
+      - logger.log: "KinCony KC868-AIO profile loaded. Confirm relay/input pins before enabling GPIO outputs."
+
+# Prefer ethernet on real AIO hardware when available; Wi-Fi package remains optional.
+# ethernet:
+#   type: ...
+#   mdc_pin: ...
+#   mdio_pin: ...
+#   clk_mode: ...
+#   phy_addr: ...

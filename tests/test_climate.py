@@ -544,7 +544,7 @@ def test_dashboard_includes_climate_card(sample_state) -> None:
     assert "Climate" in titles
 
 
-def test_schema_v12_upgrade_preserves_v11(tmp_path: Path) -> None:
+def test_schema_v13_upgrade_preserves_v11(tmp_path: Path) -> None:
     path = tmp_path / "communifarm.db"
     conn = sqlite_db.connect(path)
     for version in range(1, 12):
@@ -575,7 +575,8 @@ def test_schema_v12_upgrade_preserves_v11(tmp_path: Path) -> None:
     )
     conn.commit()
     version = sqlite_db.apply_migrations(conn)
-    assert version == 12
+    assert version == sqlite_db.SCHEMA_VERSION
+    assert version == 13
     batch = conn.execute(
         "SELECT name, environment_id FROM batches WHERE stable_id = 'batch_keep'"
     ).fetchone()
@@ -595,6 +596,8 @@ def test_schema_v12_upgrade_preserves_v11(tmp_path: Path) -> None:
     assert "climate_nodes" in tables
     assert "climate_bindings" in tables
     assert "climate_intents" in tables
+    assert "air_vents" in tables
+    assert "tachometer_readings" in tables
     conn.close()
 
 

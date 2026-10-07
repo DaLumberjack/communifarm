@@ -63,10 +63,31 @@ Do **not** mix these against the wrong HA state. Default `yarn test:e2e` is **se
 | Script | What it covers | HA precondition |
 | --- | --- | --- |
 | `yarn test:e2e` / `yarn test:e2e:t1:seeded` | Dashboard targets, weigh/variance, mock sensors/scale, backup-artifact catalog | Past onboarding; **Communifarm already configured** |
+| `yarn test:e2e:t1:pos` | Inoculate / harvest / POS (merge-blocking with seeded) | Seeded + Communifarm configured |
 | `yarn test:e2e:t1:setup` | Standalone Communifarm config flow → dashboard path | HA logged in; Communifarm may be missing |
 | `yarn test:e2e:t1:scratch` | Empty HA `Welcome!` → Create my smart home → Communifarm | **Empty** config (`/onboarding.html`) |
 | `yarn test:e2e:t2` | Upgrade / no-data-loss | Seeded, after version bump |
 | `yarn test:e2e:t3` | Live test VM setup/onboarding probe | `192.168.102.20` only |
+| `yarn test:e2e:report` | Seeded + POS → committed MR evidence | Same as seeded/POS |
+| `yarn test:e2e:validate` | Check `summary.json` vs `HEAD` (same gate as CI) | Summary already written |
+
+### Merge-request E2E evidence (no HA in GitHub Actions)
+
+Hosted CI does **not** run Playwright or the HA container. Before you open or update an MR:
+
+```bash
+yarn test:e2e:report
+git add test-results/e2e/summary.json test-results/e2e/summary.md
+git commit -m "test: refresh local E2E summary for MR gate"
+```
+
+| Artifact | Role |
+| --- | --- |
+| `test-results/e2e/summary.json` | Machine gate: suites, counts, `git_sha` (committed) |
+| `test-results/e2e/summary.md` | Human-readable rollup (committed) |
+| `e2e/.generated/reports/raw-*.json` | Per-suite Playwright JSON (gitignored; not under `test-results/` because Playwright wipes that folder each run) |
+
+CI job `e2e-local-report` fails unless the summary’s `git_sha` matches the PR head, required suites `t1_seeded` + `t1_pos` are present, and `failed` / `errored` are 0. Test order does not matter. See [ADR 0005](../adr/0005-local-e2e-ci-evidence.md).
 
 Seeded flows assume Site/Environment/bindings/profile already exist. Future ESPHome-driven tests (e.g. tent temp/humidity excursion → exhaust/intake duty) belong in **seeded**, not setup/scratch.
 

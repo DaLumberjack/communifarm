@@ -1,0 +1,67 @@
+# Tent / environment sensor role for ESP32-S3-WROOM-1 nodes.
+# Sensors: BME688 (via bme680 platform), SHT3x, Dallas OneWire.
+# Pins and addresses come from device substitutions — do not invent board mappings.
+#
+# Pair with packages/common/sensor-calibration.yaml for HA/device offsets.
+#
+# Optional IAQ via BSEC2: packages/roles/sensor-bme68x-bsec2.yaml (license opt-in; not CI).
+
+i2c:
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  scan: true
+  id: cf_i2c_bus
+  timeout: 10ms
+
+one_wire:
+  - platform: gpio
+    pin: ${one_wire_pin}
+    id: cf_one_wire
+
+sensor:
+  # BME688 raw channels (ESPHome bme680 platform supports BME688 hardware)
+  - platform: bme680
+    i2c_id: cf_i2c_bus
+    address: ${bme688_address}
+    temperature:
+      name: "BME Temperature Raw"
+      id: cf_raw_bme_temperature
+      entity_category: diagnostic
+    humidity:
+      name: "BME Humidity Raw"
+      id: cf_raw_bme_humidity
+      entity_category: diagnostic
+    pressure:
+      name: "BME Pressure Raw"
+      id: cf_raw_bme_pressure
+      entity_category: diagnostic
+    gas_resistance:
+      name: "BME Gas Resistance"
+      id: cf_raw_bme_gas
+    update_interval: ${env_update_interval}
+
+  # SHT3x (SHT31/SHT35/SHT85 family)
+  - platform: sht3xd
+    i2c_id: cf_i2c_bus
+    address: ${sht3x_address}
+    temperature:
+      name: "SHT Temperature Raw"
+      id: cf_raw_sht_temperature
+      entity_category: diagnostic
+    humidity:
+      name: "SHT Humidity Raw"
+      id: cf_raw_sht_humidity
+      entity_category: diagnostic
+    update_interval: ${env_update_interval}
+
+  # OneWire DS18B20 (or compatible). Prefer address when known; index for first bring-up.
+  - platform: dallas_temp
+    one_wire_id: cf_one_wire
+    index: ${one_wire_index}
+    name: "OneWire Temperature Raw"
+    id: cf_raw_ow_temperature
+    entity_category: diagnostic
+    update_interval: ${env_update_interval}
+
+# Preferred Communifarm bindings: calibrated channel names from sensor-calibration.yaml
+# (BME/SHT/OneWire * Calibrated). Raw sensors stay diagnostic.

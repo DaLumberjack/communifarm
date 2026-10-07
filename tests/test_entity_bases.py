@@ -40,6 +40,7 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
         ("sensor.communifarm_nfc_checkin", "communifarm_nfc_checkin"),
         ("sensor.communifarm_sales_status", "communifarm_sales_status"),
         ("sensor.communifarm_climate_status", "communifarm_climate_status"),
+        ("sensor.communifarm_tachometer_status", "communifarm_tachometer_status"),
         ("number.communifarm_temperature_target", "communifarm_temperature_target"),
         ("number.communifarm_humidity_target", "communifarm_humidity_target"),
         ("number.communifarm_recipe_scale", "communifarm_recipe_scale"),

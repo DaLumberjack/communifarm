@@ -21,6 +21,7 @@ from .const import (
     ENTITY_NFC_CHECKIN,
     ENTITY_PRODUCTION_STATUS,
     ENTITY_SALES_STATUS,
+    ENTITY_TACHOMETER_STATUS,
     ENTITY_VARIETY_LIST,
     ENTITY_WEIGH_SESSION,
     ROLE_HUMIDITY,
@@ -30,6 +31,7 @@ from .const import (
     SIGNAL_CULTURE_UPDATED,
     SIGNAL_NFC_CHECKIN_UPDATED,
     SIGNAL_SALES_UPDATED,
+    SIGNAL_TACHOMETER_UPDATED,
     SIGNAL_WEIGH_SESSION_UPDATED,
 )
 from .domain.models import CommunifarmState
@@ -78,6 +80,7 @@ async def async_setup_entry(
             CommunifarmNfcCheckinSensor(entry_id),
             CommunifarmSalesStatusSensor(entry_id),
             CommunifarmClimateStatusSensor(entry_id),
+            CommunifarmTachometerStatusSensor(entry_id),
             *drawing_sensor_entities(entry_id),
         ]
     )
@@ -494,6 +497,57 @@ class CommunifarmClimateStatusSensor(CommunifarmSensor):
             "summary": snapshot.get("summary") or "",
             "node_count": count,
             "seeded": seeded,
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmTachometerStatusSensor(CommunifarmSensor):
+    """Latest manual vent tachometer / air-exchange reading."""
+
+    _attr_name = "Tachometer status"
+    _attr_unique_id = "communifarm_tachometer_status"
+    _attr_icon = "mdi:fan-clock"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_TACHOMETER_STATUS)
+        self._value = "no readings"
+        self._attrs: dict = {
+            "vent_count": 0,
+            "vents": [],
+            "recent_readings": [],
+        }
+
+    async def async_added_to_hass(self) -> None:
+        self._refresh()
+        self.listen_entry_signals(SIGNAL_TACHOMETER_UPDATED, method="_refresh")
+
+    @callback
+    def _refresh(self) -> None:
+        snapshot = self.bucket().get("tachometer_snapshot") or {}
+        vent_count = int(snapshot.get("vent_count") or 0)
+        last_label = snapshot.get("last_vent_label")
+        last_value = snapshot.get("last_value")
+        last_unit = snapshot.get("last_unit")
+        if last_label is not None and last_value is not None:
+            self._value = f"{last_label}: {last_value} {last_unit}"
+        else:
+            self._value = "no readings"
+        self._attrs = {
+            "vent_count": vent_count,
+            "vents": snapshot.get("vents") or [],
+            "recent_readings": snapshot.get("recent_readings") or [],
+            "last_recorded_at": snapshot.get("last_recorded_at"),
+            "last_vent_label": last_label,
+            "last_value": last_value,
+            "last_unit": last_unit,
         }
         self.async_write_ha_state()
 

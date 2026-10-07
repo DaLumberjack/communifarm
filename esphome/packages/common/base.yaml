@@ -1,0 +1,16 @@
+# Communifarm common node identity. Device files set substitutions.
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  project:
+    name: communifarm.${node_role}
+    version: ${firmware_version}
+  area: ${area_name}
+
+logger:
+  level: INFO
+
+api:
+
+ota:
+  - platform: esphome

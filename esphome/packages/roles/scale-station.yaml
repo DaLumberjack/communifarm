@@ -1,0 +1,84 @@
+# HX711 + BME280 scale station. Sanitized from intake scale.yaml (no secrets).
+i2c:
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  scan: true
+  id: cf_scale_i2c
+
+globals:
+  - id: global_tare_offset
+    type: float
+    restore_value: yes
+    initial_value: "0"
+
+sensor:
+  - platform: bme280_i2c
+    i2c_id: cf_scale_i2c
+    address: ${bme280_address}
+    temperature:
+      name: "Temperature"
+    humidity:
+      name: "Humidity"
+    pressure:
+      name: "Pressure"
+    update_interval: 30s
+
+  - platform: hx711
+    id: hx_raw
+    name: "Raw"
+    dout_pin: ${hx711_dout_pin}
+    clk_pin: ${hx711_clk_pin}
+    gain: 128
+    update_interval: 0.5s
+    filters:
+      - sliding_window_moving_average:
+          window_size: 15
+          send_every: 4
+          send_first_at: 3
+
+  - platform: template
+    id: net_weight
+    name: "Calibrated Sensor"
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    device_class: weight
+    state_class: measurement
+    update_interval: 0.5s
+    lambda: |-
+      return id(hx_raw).state;
+
+  - platform: template
+    name: "Calibrated g"
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    device_class: weight
+    state_class: measurement
+    update_interval: 0.5s
+    lambda: |-
+      return id(net_weight).state - id(global_tare_offset);
+
+  - platform: template
+    name: "g"
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    device_class: weight
+    state_class: measurement
+    update_interval: 0.5s
+    lambda: |-
+      return id(net_weight).state - id(global_tare_offset);
+
+button:
+  - platform: template
+    name: "Tare"
+    icon: mdi:scale-balance
+    on_press:
+      then:
+        - lambda: |-
+            id(global_tare_offset) = id(net_weight).state;
+
+  - platform: template
+    name: "Record Weight"
+    icon: mdi:playlist-check
+    on_press:
+      then:
+        - logger.log: "Record weight pressed — Communifarm HA owns the weigh transaction."
