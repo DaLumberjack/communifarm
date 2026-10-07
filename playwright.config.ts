@@ -22,13 +22,21 @@ if (stage === "T3" && !url.includes("192.168.102.20")) {
 
 export default defineConfig({
   testDir: "./e2e/flows",
+  // Keep artifacts out of test-results/e2e/ so committed summary.* survives runs.
+  outputDir: "test-results/pw",
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [
     ["list"],
-    ["json", { outputFile: "test-results/e2e/report.json" }],
+    [
+      "json",
+      {
+        outputFile:
+          process.env.TEST_REPORT_JSON || "test-results/e2e/report.json",
+      },
+    ],
     ["html", { open: "never", outputFolder: "playwright-report" }],
   ],
   use: {

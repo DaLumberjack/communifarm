@@ -41,3 +41,25 @@ jobs:
       - uses: esphome/build-action@v6
         with:
           yaml-file: ${{ matrix.yaml_file }}
+
+  # Playwright / HA container stay local (cost). CI only checks the committed summary.
+  e2e-local-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Resolve expected commit SHA
+        id: sha
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "value=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate committed local E2E summary
+        run: |
+          python scripts/e2e_local_report.py validate \
+            --summary test-results/e2e/summary.json \
+            --expected-sha "${{ steps.sha.outputs.value }}"
