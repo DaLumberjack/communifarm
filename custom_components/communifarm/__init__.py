@@ -105,6 +105,7 @@ from .domain.production import (
 )
 from .domain.recipe import WOOD_LOVER_RECIPE, clamp_recipe_scale
 from .domain.sale import PAYMENT_METHODS
+from .domain.tachometer import TACH_UNITS, VENT_ROLES
 from .domain.validation import (
     WARNING_MISSING_NFC,
     WARNING_UNKNOWN_INGREDIENT,
@@ -125,7 +126,6 @@ from .storage.repository import CommunifarmRepository
 from .storage.sale_repository import SaleRepository
 from .storage.tachometer_repository import TachometerRepository
 from .storage.weight_repository import WeightEventRepository
-from .domain.tachometer import TACH_UNITS, VENT_ROLES
 
 _LOGGER = logging.getLogger(__name__)
 

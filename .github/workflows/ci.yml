@@ -46,7 +46,10 @@ jobs:
   e2e-local-report:
     runs-on: ubuntu-latest
     steps:
+      # Depth 2 so summary-only tip commits can resolve parent == summary.git_sha.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
