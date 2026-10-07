@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-07T01:54:13Z",
-  "git_sha": "1adf673592ef5a0d4cae73f0d2b8daaecfaf2463",
+  "generated_at": "2026-10-07T02:25:54Z",
+  "git_sha": "055151813692bc8c170a14c2258aa240026779bc",
   "branch": "feature/esphome-device-packages",
   "required_suites": [
     "t1_seeded",
@@ -19,47 +19,47 @@
         {
           "id": "01-ha-backup-artifacts.spec.ts::[chromium] intake Dev Container Backups contain expected tarballs",
           "status": "passed",
-          "duration_ms": 10
+          "duration_ms": 7
         },
         {
           "id": "dashboard-targets.spec.ts::[chromium] adjusts temperature \u00b11\u00b0C and humidity \u00b11% from dashboard entities",
           "status": "passed",
-          "duration_ms": 2361
+          "duration_ms": 2011
         },
         {
           "id": "mock-conditions.spec.ts::[chromium] can inject mock temperature when API token present",
           "status": "passed",
-          "duration_ms": 1312
+          "duration_ms": 1091
         },
         {
           "id": "mock-scale.spec.ts::[chromium] NFC select, change weight, record on Weigh dashboard",
           "status": "passed",
-          "duration_ms": 1694
+          "duration_ms": 1548
         },
         {
           "id": "mock-scale.spec.ts::[chromium] select ingredient dropdown then record weight",
           "status": "passed",
-          "duration_ms": 1589
+          "duration_ms": 1471
         },
         {
           "id": "weigh-process.spec.ts::[chromium] complete Wood Lover recipe on Weigh tab and verify session table",
           "status": "passed",
-          "duration_ms": 5432
+          "duration_ms": 4867
         },
         {
           "id": "weigh-variance.spec.ts::[chromium] over mix (+5% each ingredient) on a new batch",
           "status": "passed",
-          "duration_ms": 10544
+          "duration_ms": 10389
         },
         {
           "id": "weigh-variance.spec.ts::[chromium] random mix (\u00b15% each ingredient) on a new batch",
           "status": "passed",
-          "duration_ms": 10491
+          "duration_ms": 10341
         },
         {
           "id": "weigh-variance.spec.ts::[chromium] under mix (\u22125% each ingredient) on a new batch",
           "status": "passed",
-          "duration_ms": 10743
+          "duration_ms": 10363
         }
       ]
     },
@@ -74,17 +74,17 @@
         {
           "id": "inoculate-from-nfc.spec.ts::[chromium] mock NFC scan selects culture for inoculate",
           "status": "passed",
-          "duration_ms": 3780
+          "duration_ms": 3723
         },
         {
           "id": "mock-nfc-harvest-pos.spec.ts::[chromium] mock container scan, harvest, then sell",
           "status": "passed",
-          "duration_ms": 6883
+          "duration_ms": 5425
         },
         {
           "id": "production-to-pos.spec.ts::[chromium] inoculate through harvest then confirm sale on POS tab",
           "status": "passed",
-          "duration_ms": 6430
+          "duration_ms": 5039
         }
       ]
     }
