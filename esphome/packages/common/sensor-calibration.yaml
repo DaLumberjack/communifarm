@@ -1,0 +1,342 @@
+# Reusable environmental calibration numbers + capture workflow.
+# Include on any ESPHome node that exposes raw sensors needing field offsets.
+#
+# Expected companion sensor ids (defined by the including role):
+#   cf_raw_bme_temperature, cf_raw_bme_humidity, cf_raw_bme_pressure
+#   cf_raw_sht_temperature, cf_raw_sht_humidity
+#   cf_raw_ow_temperature
+#
+# Operators set Reference *, then press Capture * Offset.
+# Offsets restore on the device and appear as HA number entities.
+
+number:
+  - platform: template
+    name: "BME Temp Offset"
+    id: cf_cal_bme_temp_offset
+    unit_of_measurement: "°C"
+    device_class: temperature
+    min_value: -20
+    max_value: 20
+    step: 0.01
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    mode: BOX
+    entity_category: config
+    icon: mdi:thermometer-plus
+
+  - platform: template
+    name: "BME Humidity Offset"
+    id: cf_cal_bme_hum_offset
+    unit_of_measurement: "%"
+    device_class: humidity
+    min_value: -30
+    max_value: 30
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    mode: BOX
+    entity_category: config
+    icon: mdi:water-plus
+
+  - platform: template
+    name: "BME Pressure Offset"
+    id: cf_cal_bme_pressure_offset
+    unit_of_measurement: "hPa"
+    device_class: atmospheric_pressure
+    min_value: -50
+    max_value: 50
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    mode: BOX
+    entity_category: config
+
+  - platform: template
+    name: "SHT Temp Offset"
+    id: cf_cal_sht_temp_offset
+    unit_of_measurement: "°C"
+    device_class: temperature
+    min_value: -20
+    max_value: 20
+    step: 0.01
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    mode: BOX
+    entity_category: config
+
+  - platform: template
+    name: "SHT Humidity Offset"
+    id: cf_cal_sht_hum_offset
+    unit_of_measurement: "%"
+    device_class: humidity
+    min_value: -30
+    max_value: 30
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    mode: BOX
+    entity_category: config
+
+  - platform: template
+    name: "OneWire Temp Offset"
+    id: cf_cal_ow_temp_offset
+    unit_of_measurement: "°C"
+    device_class: temperature
+    min_value: -20
+    max_value: 20
+    step: 0.01
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    mode: BOX
+    entity_category: config
+
+  - platform: template
+    name: "Reference Temperature"
+    id: cf_cal_reference_temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    min_value: -20
+    max_value: 60
+    step: 0.01
+    optimistic: true
+    restore_value: true
+    initial_value: 22.0
+    mode: BOX
+    entity_category: config
+    icon: mdi:thermometer-check
+
+  - platform: template
+    name: "Reference Humidity"
+    id: cf_cal_reference_humidity
+    unit_of_measurement: "%"
+    device_class: humidity
+    min_value: 0
+    max_value: 100
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 50.0
+    mode: BOX
+    entity_category: config
+    icon: mdi:water-check
+
+  - platform: template
+    name: "Reference Pressure"
+    id: cf_cal_reference_pressure
+    unit_of_measurement: "hPa"
+    device_class: atmospheric_pressure
+    min_value: 800
+    max_value: 1200
+    step: 0.1
+    optimistic: true
+    restore_value: true
+    initial_value: 1013.25
+    mode: BOX
+    entity_category: config
+
+button:
+  - platform: template
+    name: "Capture BME Temp Offset"
+    id: cf_cal_capture_bme_temp
+    icon: mdi:target
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            float raw = id(cf_raw_bme_temperature).state;
+            float ref = id(cf_cal_reference_temperature).state;
+            if (isnan(raw) || isnan(ref)) {
+              ESP_LOGW("cf_cal", "BME temp capture skipped — raw or reference unavailable");
+              return;
+            }
+            id(cf_cal_bme_temp_offset).publish_state(ref - raw);
+            ESP_LOGI("cf_cal", "BME temp offset set to %.3f", ref - raw);
+
+  - platform: template
+    name: "Capture BME Humidity Offset"
+    id: cf_cal_capture_bme_hum
+    icon: mdi:target
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            float raw = id(cf_raw_bme_humidity).state;
+            float ref = id(cf_cal_reference_humidity).state;
+            if (isnan(raw) || isnan(ref)) {
+              ESP_LOGW("cf_cal", "BME humidity capture skipped — raw or reference unavailable");
+              return;
+            }
+            id(cf_cal_bme_hum_offset).publish_state(ref - raw);
+
+  - platform: template
+    name: "Capture BME Pressure Offset"
+    id: cf_cal_capture_bme_pressure
+    icon: mdi:target
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            float raw = id(cf_raw_bme_pressure).state;
+            float ref = id(cf_cal_reference_pressure).state;
+            if (isnan(raw) || isnan(ref)) {
+              ESP_LOGW("cf_cal", "BME pressure capture skipped — raw or reference unavailable");
+              return;
+            }
+            id(cf_cal_bme_pressure_offset).publish_state(ref - raw);
+
+  - platform: template
+    name: "Capture SHT Temp Offset"
+    id: cf_cal_capture_sht_temp
+    icon: mdi:target
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            float raw = id(cf_raw_sht_temperature).state;
+            float ref = id(cf_cal_reference_temperature).state;
+            if (isnan(raw) || isnan(ref)) {
+              ESP_LOGW("cf_cal", "SHT temp capture skipped — raw or reference unavailable");
+              return;
+            }
+            id(cf_cal_sht_temp_offset).publish_state(ref - raw);
+
+  - platform: template
+    name: "Capture SHT Humidity Offset"
+    id: cf_cal_capture_sht_hum
+    icon: mdi:target
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            float raw = id(cf_raw_sht_humidity).state;
+            float ref = id(cf_cal_reference_humidity).state;
+            if (isnan(raw) || isnan(ref)) {
+              ESP_LOGW("cf_cal", "SHT humidity capture skipped — raw or reference unavailable");
+              return;
+            }
+            id(cf_cal_sht_hum_offset).publish_state(ref - raw);
+
+  - platform: template
+    name: "Capture OneWire Temp Offset"
+    id: cf_cal_capture_ow_temp
+    icon: mdi:target
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            float raw = id(cf_raw_ow_temperature).state;
+            float ref = id(cf_cal_reference_temperature).state;
+            if (isnan(raw) || isnan(ref)) {
+              ESP_LOGW("cf_cal", "OneWire temp capture skipped — raw or reference unavailable");
+              return;
+            }
+            id(cf_cal_ow_temp_offset).publish_state(ref - raw);
+
+  - platform: template
+    name: "Reset All Sensor Offsets"
+    id: cf_cal_reset_all_offsets
+    icon: mdi:backup-restore
+    entity_category: config
+    on_press:
+      then:
+        - number.set:
+            id: cf_cal_bme_temp_offset
+            value: 0
+        - number.set:
+            id: cf_cal_bme_hum_offset
+            value: 0
+        - number.set:
+            id: cf_cal_bme_pressure_offset
+            value: 0
+        - number.set:
+            id: cf_cal_sht_temp_offset
+            value: 0
+        - number.set:
+            id: cf_cal_sht_hum_offset
+            value: 0
+        - number.set:
+            id: cf_cal_ow_temp_offset
+            value: 0
+
+sensor:
+  - platform: template
+    name: "BME Temperature Calibrated"
+    id: cf_cal_bme_temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      return id(cf_raw_bme_temperature).state + id(cf_cal_bme_temp_offset).state;
+
+  - platform: template
+    name: "BME Humidity Calibrated"
+    id: cf_cal_bme_humidity
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      return id(cf_raw_bme_humidity).state + id(cf_cal_bme_hum_offset).state;
+
+  - platform: template
+    name: "BME Pressure Calibrated"
+    id: cf_cal_bme_pressure
+    unit_of_measurement: "hPa"
+    device_class: atmospheric_pressure
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      return id(cf_raw_bme_pressure).state + id(cf_cal_bme_pressure_offset).state;
+
+  - platform: template
+    name: "SHT Temperature Calibrated"
+    id: cf_cal_sht_temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      return id(cf_raw_sht_temperature).state + id(cf_cal_sht_temp_offset).state;
+
+  - platform: template
+    name: "SHT Humidity Calibrated"
+    id: cf_cal_sht_humidity
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: |-
+      return id(cf_raw_sht_humidity).state + id(cf_cal_sht_hum_offset).state;
+
+  - platform: template
+    name: "OneWire Temperature Calibrated"
+    id: cf_cal_ow_temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: 10s
+    lambda: |-
+      return id(cf_raw_ow_temperature).state + id(cf_cal_ow_temp_offset).state;
+
+text_sensor:
+  - platform: template
+    name: "Calibration Workflow Hint"
+    id: cf_cal_workflow_hint
+    icon: mdi:clipboard-check-outline
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      return {"1) Set Reference *  2) Press Capture * Offset  3) Bind Calibrated sensors in Communifarm"};

@@ -1,0 +1,31 @@
+# Bench NFC writer / R/W experiments.
+# Prefer PN532 for NDEF write. RC522 ESPHome path is primarily UID read.
+spi:
+  clk_pin: ${spi_clk_pin}
+  mosi_pin: ${spi_mosi_pin}
+  miso_pin: ${spi_miso_pin}
+  id: cf_nfc_spi
+
+pn532_spi:
+  id: cf_pn532_writer
+  cs_pin: ${nfc_cs_pin}
+  update_interval: 1s
+  on_tag:
+    then:
+      - text_sensor.template.publish:
+          id: cf_last_nfc_uid_writer
+          state: !lambda "return x;"
+
+text_sensor:
+  - platform: template
+    name: "Last NFC UID"
+    id: cf_last_nfc_uid_writer
+    icon: mdi:nfc
+
+button:
+  - platform: template
+    name: "Prepare NDEF Write"
+    icon: mdi:nfc-tap
+    on_press:
+      then:
+        - logger.log: "Use PN532 NDEF write lambda from ESPHome docs; tags must store stable refs only."

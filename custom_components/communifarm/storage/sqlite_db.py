@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -485,6 +485,45 @@ MIGRATIONS: dict[int, str] = {
     ALTER TABLE placement_areas ADD COLUMN climate_id TEXT;
     CREATE INDEX IF NOT EXISTS idx_placement_areas_climate
       ON placement_areas (climate_id);
+    """,
+    13: """
+    CREATE TABLE IF NOT EXISTS air_vents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      climate_node_id TEXT,
+      label TEXT NOT NULL,
+      vent_role TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      retired_at TEXT
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_air_vents_site_label_nocase
+      ON air_vents (site_id, label COLLATE NOCASE)
+      WHERE retired_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_air_vents_site
+      ON air_vents (site_id, vent_role);
+    CREATE INDEX IF NOT EXISTS idx_air_vents_climate
+      ON air_vents (climate_node_id);
+
+    CREATE TABLE IF NOT EXISTS tachometer_readings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      vent_id TEXT NOT NULL,
+      site_id TEXT NOT NULL,
+      value REAL NOT NULL,
+      unit TEXT NOT NULL,
+      recorded_at TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'manual',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tachometer_readings_vent_time
+      ON tachometer_readings (vent_id, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_tachometer_readings_site_time
+      ON tachometer_readings (site_id, recorded_at);
     """,
 }
 

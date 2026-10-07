@@ -18,8 +18,14 @@ Next developer: `docker compose -f .devcontainer/docker-compose.yml up -d homeas
 |---------|---------|
 | Empty / standalone | Communifarm mounted under `custom_components/communifarm`, no config entry yet |
 | Mocked ESP set | `sensor.mock_temperature`, `sensor.mock_humidity`, `fan.mock_circulation_fan`, `switch.mock_exhaust` |
+| Tent sensor (S3) | calibrated BME/SHT/OneWire + offsets — `packages/mock_cf_tent_sensor.yaml` |
+| AIO868 machines | `switch.cf_lab_aio868_*` — `packages/mock_cf_aio868.yaml` |
+| Dedicated NFC | `cf_mixroom_nfc_scan01_*` / `cf_lab_nfc_write01_*` — `packages/mock_cf_nfc_reader.yaml` |
+| Manual tachometer | vent label / value / timestamp helpers — `packages/mock_cf_tachometer.yaml` |
 | Mocked scale + NFC stub | `esp32dev_*` live-shaped entities — see [docs/user/mock-scale.md](../docs/user/mock-scale.md) |
 | Seeded state | Local-only `.storage` or restored backup — not committed |
+
+ESPHome YAML mockups live in `esphome/` (packages + devices). See [docs/hardware/esphome-devices.md](../docs/hardware/esphome-devices.md).
 
 ## Injecting conditions
 

@@ -1,0 +1,75 @@
+# Manual fan tachometer / air-exchange entry helpers for T1/T2.
+# Calls Communifarm services: upsert_air_vent, record_tachometer.
+
+input_text:
+  cf_tach_vent_label:
+    name: "cf Tach Vent Label"
+    initial: "Fruiting intake left"
+    max: 64
+  cf_tach_recorded_at:
+    name: "cf Tach Timestamp (ISO, blank=now)"
+    initial: ""
+    max: 64
+  cf_tach_notes:
+    name: "cf Tach Notes"
+    initial: ""
+    max: 120
+
+input_select:
+  cf_tach_vent_role:
+    name: "cf Tach Vent Role"
+    options:
+      - intake
+      - exhaust
+      - circulation
+      - other
+    initial: intake
+  cf_tach_unit:
+    name: "cf Tach Unit"
+    options:
+      - rpm
+      - cfm
+      - fpm
+    initial: rpm
+
+input_number:
+  cf_tach_value:
+    name: "cf Tach Value"
+    min: 0
+    max: 100000
+    step: 1
+    initial: 1200
+    mode: box
+
+input_button:
+  cf_tach_upsert_vent:
+    name: "cf Tach Upsert Vent Label"
+  cf_tach_record_reading:
+    name: "cf Tach Record Reading"
+
+automation:
+  - id: cf_tach_upsert_vent
+    alias: "cf tach upsert vent label"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tach_upsert_vent
+    action:
+      - action: communifarm.upsert_air_vent
+        data:
+          label: "{{ states('input_text.cf_tach_vent_label') }}"
+          vent_role: "{{ states('input_select.cf_tach_vent_role') }}"
+          notes: "{{ states('input_text.cf_tach_notes') }}"
+  - id: cf_tach_record_reading
+    alias: "cf tach record reading"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tach_record_reading
+    action:
+      - action: communifarm.record_tachometer
+        data:
+          vent_label: "{{ states('input_text.cf_tach_vent_label') }}"
+          vent_role: "{{ states('input_select.cf_tach_vent_role') }}"
+          value: "{{ states('input_number.cf_tach_value') | float(0) }}"
+          unit: "{{ states('input_select.cf_tach_unit') }}"
+          recorded_at: "{{ states('input_text.cf_tach_recorded_at') }}"
+          notes: "{{ states('input_text.cf_tach_notes') }}"

@@ -104,6 +104,17 @@ An indoor room with no working sensor shows the parent reading and marks it inhe
 
 The overview **Climate** card reads `sensor.communifarm_climate_status`.
 
+## Manual vent tachometer (air exchange)
+
+For semi-frequent air-exchange checks, label each vent and log a timestamped reading:
+
+| Service | Purpose |
+| --- | --- |
+| `communifarm.upsert_air_vent` | Create/update a vent label + role |
+| `communifarm.record_tachometer` | Store value (`rpm` / `cfm` / `fpm`) + timestamp |
+
+Status: `sensor.communifarm_tachometer_status`. Operator helpers and detail: [air-exchange-tachometer.md](../hardware/air-exchange-tachometer.md). ACH math from CFM × room volume is later.
+
 ## Layout and Climate tabs
 
 Two more tabs show the same preset.

@@ -79,6 +79,7 @@ ENTITY_PAYMENT_METHOD = "select.communifarm_payment_method"
 ENTITY_SALE_VENUE = "select.communifarm_sale_venue"
 ENTITY_SALE_BUYER = "select.communifarm_sale_buyer"
 ENTITY_CLIMATE_STATUS = "sensor.communifarm_climate_status"
+ENTITY_TACHOMETER_STATUS = "sensor.communifarm_tachometer_status"
 
 ENTITY_BTN_WATER_ADDED = "button.communifarm_water_added"
 ENTITY_BTN_DRY_WET_MIX = "button.communifarm_dry_wet_mix_started"
@@ -135,6 +136,8 @@ SERVICE_BIND_NFC = "bind_nfc"
 SERVICE_RECORD_CONTAINER_HARVEST = "record_container_harvest"
 SERVICE_RECORD_SALE = "record_sale"
 SERVICE_RECORD_SALE_CLEANUP = "record_sale_cleanup"
+SERVICE_UPSERT_AIR_VENT = "upsert_air_vent"
+SERVICE_RECORD_TACHOMETER = "record_tachometer"
 
 SIGNAL_WEIGH_SESSION_UPDATED = f"{DOMAIN}_weigh_session_updated"
 SIGNAL_BATCH_UPDATED = f"{DOMAIN}_batch_updated"
@@ -142,6 +145,7 @@ SIGNAL_NFC_CHECKIN_UPDATED = f"{DOMAIN}_nfc_checkin_updated"
 SIGNAL_SALES_UPDATED = f"{DOMAIN}_sales_updated"
 SIGNAL_CULTURE_UPDATED = f"{DOMAIN}_culture_updated"
 SIGNAL_CLIMATE_UPDATED = f"{DOMAIN}_climate_updated"
+SIGNAL_TACHOMETER_UPDATED = f"{DOMAIN}_tachometer_updated"
 
 CLIMATE_TICK_SECONDS = 60
 

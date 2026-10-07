@@ -1,0 +1,35 @@
+# Tiny local fallback state for motor/controller nodes.
+# Communifarm owns lifecycle; the device only keeps a safe local mode.
+globals:
+  - id: cf_fallback_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
+text_sensor:
+  - platform: template
+    name: "Control State"
+    id: cf_control_state
+    icon: mdi:shield-half-full
+    update_interval: never
+    lambda: |-
+      if (id(cf_fallback_enabled)) {
+        return {"FALLBACK"};
+      }
+      return {"NORMAL"};
+
+switch:
+  - platform: template
+    name: "Fallback Enabled"
+    id: cf_fallback_switch
+    icon: mdi:shield-alert
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          id(cf_fallback_enabled) = true;
+          id(cf_control_state).publish_state("FALLBACK");
+    turn_off_action:
+      - lambda: |-
+          id(cf_fallback_enabled) = false;
+          id(cf_control_state).publish_state("NORMAL");

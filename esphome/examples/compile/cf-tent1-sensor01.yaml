@@ -1,0 +1,27 @@
+# CI compile target — not for production flash.
+# Placeholder GPIOs only; replace from soldered S3 harness before real deploy.
+substitutions:
+  device_name: cf-tent1-sensor01
+  friendly_name: Tent 1 Sensor 01
+  area_name: Tent 1
+  node_role: sensor-monitor
+  firmware_version: "0.2.0-ci"
+  wifi_ssid: "ci-test-ssid"
+  wifi_password: "ci-test-password"
+  fallback_ssid: "CF-CI-Sensor-Fallback"
+  fallback_password: "ci-fallback-password"
+  i2c_sda_pin: GPIO8
+  i2c_scl_pin: GPIO9
+  one_wire_pin: GPIO4
+  one_wire_index: "0"
+  bme688_address: "0x76"
+  sht3x_address: "0x44"
+  env_update_interval: 30s
+
+packages:
+  base: !include ../../packages/common/base.yaml
+  wifi: !include ../../packages/common/network-wifi.yaml
+  diagnostics: !include ../../packages/common/diagnostics.yaml
+  calibration: !include ../../packages/common/sensor-calibration.yaml
+  board: !include ../../packages/boards/esp32-s3-wroom-1.yaml
+  role: !include ../../packages/roles/sensor-monitor.yaml

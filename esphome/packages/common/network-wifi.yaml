@@ -1,0 +1,9 @@
+# Wi-Fi + captive portal. Secrets come from the device file or secrets.yaml.
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  ap:
+    ssid: ${fallback_ssid}
+    password: ${fallback_password}
+
+captive_portal:

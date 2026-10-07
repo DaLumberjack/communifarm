@@ -28,6 +28,7 @@ from . import (
     nfc_actions,
     production_actions,
     sale_actions,
+    tachometer_actions,
 )
 from .const import (
     ALLOWED_BATCH_TRANSITIONS,
@@ -60,6 +61,7 @@ from .const import (
     SERVICE_RECORD_MEDIA_WEIGHT,
     SERVICE_RECORD_SALE,
     SERVICE_RECORD_SALE_CLEANUP,
+    SERVICE_RECORD_TACHOMETER,
     SERVICE_RECORD_WEIGHT,
     SERVICE_RESOLVE_NFC,
     SERVICE_RETIRE_VARIETY,
@@ -70,6 +72,7 @@ from .const import (
     SERVICE_SET_MEDIA_LOCATION,
     SERVICE_TICK_CLIMATE,
     SERVICE_TRANSITION_BATCH,
+    SERVICE_UPSERT_AIR_VENT,
     SIGNAL_WEIGH_SESSION_UPDATED,
     new_weigh_session_tracker,
 )
@@ -120,7 +123,9 @@ from .storage.location_repository import LocationRepository
 from .storage.nfc_repository import NfcRepository
 from .storage.repository import CommunifarmRepository
 from .storage.sale_repository import SaleRepository
+from .storage.tachometer_repository import TachometerRepository
 from .storage.weight_repository import WeightEventRepository
+from .domain.tachometer import TACH_UNITS, VENT_ROLES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -363,6 +368,29 @@ RECORD_SALE_CLEANUP_SCHEMA = vol.Schema(
     }
 )
 
+UPSERT_AIR_VENT_SCHEMA = vol.Schema(
+    {
+        vol.Required("label"): cv.string,
+        vol.Optional("vent_role", default="other"): vol.In(sorted(VENT_ROLES)),
+        vol.Optional("climate_node_id"): cv.string,
+        vol.Optional("notes"): cv.string,
+        vol.Optional("vent_id"): cv.string,
+    }
+)
+
+RECORD_TACHOMETER_SCHEMA = vol.Schema(
+    {
+        vol.Required("value"): vol.Coerce(float),
+        vol.Optional("unit", default="rpm"): vol.In(sorted(TACH_UNITS)),
+        vol.Optional("vent_id"): cv.string,
+        vol.Optional("vent_label"): cv.string,
+        vol.Optional("recorded_at"): cv.string,
+        vol.Optional("notes"): cv.string,
+        vol.Optional("vent_role", default="other"): vol.In(sorted(VENT_ROLES)),
+        vol.Optional("climate_node_id"): cv.string,
+    }
+)
+
 _TARE_BUTTONS = frozenset(
     {ENTITY_SCALE_TARE_BUTTON, ENTITY_SCALE_LOCATION_TARE_BUTTON}
 )
@@ -399,6 +427,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await location_repo.async_setup()
     climate_repo = ClimateRepository(hass, path=weight_repo.path)
     await climate_repo.async_setup()
+    tachometer_repo = TachometerRepository(hass, path=weight_repo.path)
+    await tachometer_repo.async_setup()
     container_repo = ContainerRepository(hass, path=weight_repo.path)
     await container_repo.async_setup()
     sale_repo = SaleRepository(hass, path=weight_repo.path)
@@ -420,6 +450,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         recipe_key=DEFAULT_RECIPE_KEY,
     )
 
+    tachometer_snapshot = await tachometer_repo.async_snapshot(state.site.id)
+
     hass.data[DOMAIN][entry.entry_id] = {
         "repository": repo,
         "weight_repository": weight_repo,
@@ -427,11 +459,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "culture_repository": culture_repo,
         "location_repository": location_repo,
         "climate_repository": climate_repo,
+        "tachometer_repository": tachometer_repo,
         "climate_snapshot": {
             "summary": "",
             "node_count": 0,
             "seeded": False,
         },
+        "tachometer_snapshot": tachometer_snapshot,
         "climate_light_since": {},
         "container_repository": container_repo,
         "sale_repository": sale_repo,
@@ -670,6 +704,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             waste_heat_to_parent=bool(call.data.get("waste_heat_to_parent", False)),
         )
 
+    async def async_upsert_air_vent(call: ServiceCall) -> None:
+        await tachometer_actions.async_upsert_air_vent(
+            hass,
+            entry.entry_id,
+            label=call.data["label"],
+            vent_role=call.data.get("vent_role", "other"),
+            climate_node_id=call.data.get("climate_node_id"),
+            notes=call.data.get("notes"),
+            vent_id=call.data.get("vent_id"),
+        )
+
+    async def async_record_tachometer(call: ServiceCall) -> None:
+        await tachometer_actions.async_record_tachometer(
+            hass,
+            entry.entry_id,
+            value=call.data["value"],
+            unit=call.data.get("unit", "rpm"),
+            vent_id=call.data.get("vent_id"),
+            vent_label=call.data.get("vent_label"),
+            recorded_at=call.data.get("recorded_at"),
+            notes=call.data.get("notes"),
+            vent_role=call.data.get("vent_role", "other"),
+            climate_node_id=call.data.get("climate_node_id"),
+        )
+
     async def async_set_batch_location(call: ServiceCall) -> None:
         await location_actions.async_set_batch_location(
             hass,
@@ -906,6 +965,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_BIND_CLIMATE_ROLE,
             async_bind_climate_role,
             schema=BIND_CLIMATE_ROLE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_UPSERT_AIR_VENT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_UPSERT_AIR_VENT,
+            async_upsert_air_vent,
+            schema=UPSERT_AIR_VENT_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RECORD_TACHOMETER):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RECORD_TACHOMETER,
+            async_record_tachometer,
+            schema=RECORD_TACHOMETER_SCHEMA,
         )
     if not hass.services.has_service(DOMAIN, SERVICE_SET_BATCH_LOCATION):
         hass.services.async_register(
@@ -1181,6 +1254,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     climate_repo: ClimateRepository | None = bucket.get("climate_repository")
     if climate_repo is not None:
         await climate_repo.async_close()
+    tachometer_repo: TachometerRepository | None = bucket.get("tachometer_repository")
+    if tachometer_repo is not None:
+        await tachometer_repo.async_close()
     sale_repo: SaleRepository | None = bucket.get("sale_repository")
     if sale_repo is not None:
         await sale_repo.async_close()
@@ -1210,6 +1286,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_ENSURE_CLIMATE_LAYOUT,
                 SERVICE_TICK_CLIMATE,
                 SERVICE_BIND_CLIMATE_ROLE,
+                SERVICE_UPSERT_AIR_VENT,
+                SERVICE_RECORD_TACHOMETER,
                 SERVICE_SET_BATCH_LOCATION,
                 SERVICE_SET_CULTURE_LOCATION,
                 SERVICE_SET_MEDIA_LOCATION,

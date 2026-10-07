@@ -1,0 +1,25 @@
+# Bench PN532 SPI R/W node on ESP32 D1 Mini32.
+# Prefer this over RC522 for NDEF write experiments.
+# Wiring: docs/hardware/nfc-readers-d1-mini32.md
+substitutions:
+  device_name: cf-lab-nfc-write01
+  friendly_name: Lab NFC Writer 01
+  area_name: Lab Bench
+  node_role: nfc-writer
+  firmware_version: "0.1.0-mock"
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  fallback_ssid: "CF-NFC-Write-Fallback"
+  fallback_password: !secret fallback_password
+  spi_clk_pin: GPIO18
+  spi_mosi_pin: GPIO23
+  spi_miso_pin: GPIO19
+  nfc_cs_pin: GPIO25
+
+packages:
+  base: !include ../packages/common/base.yaml
+  wifi: !include ../packages/common/network-wifi.yaml
+  diagnostics: !include ../packages/common/diagnostics.yaml
+  provisioning: !include ../packages/common/provisioning.yaml
+  board: !include ../packages/boards/esp32-d1-mini32.yaml
+  role: !include ../packages/roles/nfc-writer.yaml

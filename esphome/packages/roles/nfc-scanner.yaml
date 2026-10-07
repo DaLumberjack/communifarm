@@ -1,0 +1,23 @@
+# PN532 I2C mobile / handheld scan-only reader.
+i2c:
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  scan: true
+  id: cf_nfc_i2c
+
+pn532_i2c:
+  id: cf_pn532
+  i2c_id: cf_nfc_i2c
+  update_interval: 1s
+  on_tag:
+    then:
+      - text_sensor.template.publish:
+          id: cf_last_nfc_uid
+          state: !lambda "return x;"
+      - homeassistant.tag_scanned: !lambda "return x;"
+
+text_sensor:
+  - platform: template
+    name: "Last NFC UID"
+    id: cf_last_nfc_uid
+    icon: mdi:nfc-variant

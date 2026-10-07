@@ -1,0 +1,343 @@
+# Mock Communifarm tent environment sensor (cf-tent1-sensor01) for T1/T2.
+# Mirrors ESP32-S3-WROOM-1 sensor-monitor + shared calibration package.
+
+input_number:
+  cf_tent1_sensor01_inject_bme_temperature_raw:
+    name: "cf-tent1-sensor01 Inject BME Temperature Raw (mock only)"
+    min: -20
+    max: 50
+    step: 0.01
+    initial: 22.8
+    unit_of_measurement: "°C"
+    mode: box
+  cf_tent1_sensor01_inject_bme_humidity_raw:
+    name: "cf-tent1-sensor01 Inject BME Humidity Raw (mock only)"
+    min: 0
+    max: 100
+    step: 0.1
+    initial: 79.0
+    unit_of_measurement: "%"
+    mode: box
+  cf_tent1_sensor01_inject_bme_pressure_raw:
+    name: "cf-tent1-sensor01 Inject BME Pressure Raw (mock only)"
+    min: 800
+    max: 1200
+    step: 0.1
+    initial: 1012.4
+    unit_of_measurement: "hPa"
+    mode: box
+  cf_tent1_sensor01_inject_sht_temperature_raw:
+    name: "cf-tent1-sensor01 Inject SHT Temperature Raw (mock only)"
+    min: -20
+    max: 50
+    step: 0.01
+    initial: 22.6
+    unit_of_measurement: "°C"
+    mode: box
+  cf_tent1_sensor01_inject_sht_humidity_raw:
+    name: "cf-tent1-sensor01 Inject SHT Humidity Raw (mock only)"
+    min: 0
+    max: 100
+    step: 0.1
+    initial: 78.2
+    unit_of_measurement: "%"
+    mode: box
+  cf_tent1_sensor01_inject_ow_temperature_raw:
+    name: "cf-tent1-sensor01 Inject OneWire Temperature Raw (mock only)"
+    min: -20
+    max: 50
+    step: 0.01
+    initial: 22.4
+    unit_of_measurement: "°C"
+    mode: box
+  cf_tent1_sensor01_bme_temp_offset:
+    name: "cf-tent1-sensor01 BME Temp Offset"
+    min: -20
+    max: 20
+    step: 0.01
+    initial: 0
+    unit_of_measurement: "°C"
+    mode: box
+  cf_tent1_sensor01_bme_hum_offset:
+    name: "cf-tent1-sensor01 BME Humidity Offset"
+    min: -30
+    max: 30
+    step: 0.1
+    initial: 0
+    unit_of_measurement: "%"
+    mode: box
+  cf_tent1_sensor01_bme_pressure_offset:
+    name: "cf-tent1-sensor01 BME Pressure Offset"
+    min: -50
+    max: 50
+    step: 0.1
+    initial: 0
+    unit_of_measurement: "hPa"
+    mode: box
+  cf_tent1_sensor01_sht_temp_offset:
+    name: "cf-tent1-sensor01 SHT Temp Offset"
+    min: -20
+    max: 20
+    step: 0.01
+    initial: 0
+    unit_of_measurement: "°C"
+    mode: box
+  cf_tent1_sensor01_sht_hum_offset:
+    name: "cf-tent1-sensor01 SHT Humidity Offset"
+    min: -30
+    max: 30
+    step: 0.1
+    initial: 0
+    unit_of_measurement: "%"
+    mode: box
+  cf_tent1_sensor01_ow_temp_offset:
+    name: "cf-tent1-sensor01 OneWire Temp Offset"
+    min: -20
+    max: 20
+    step: 0.01
+    initial: 0
+    unit_of_measurement: "°C"
+    mode: box
+  cf_tent1_sensor01_reference_temperature:
+    name: "cf-tent1-sensor01 Reference Temperature"
+    min: -20
+    max: 60
+    step: 0.01
+    initial: 22.5
+    unit_of_measurement: "°C"
+    mode: box
+  cf_tent1_sensor01_reference_humidity:
+    name: "cf-tent1-sensor01 Reference Humidity"
+    min: 0
+    max: 100
+    step: 0.1
+    initial: 78.0
+    unit_of_measurement: "%"
+    mode: box
+  cf_tent1_sensor01_reference_pressure:
+    name: "cf-tent1-sensor01 Reference Pressure"
+    min: 800
+    max: 1200
+    step: 0.1
+    initial: 1013.25
+    unit_of_measurement: "hPa"
+    mode: box
+
+input_button:
+  cf_tent1_sensor01_capture_bme_temp:
+    name: "cf-tent1-sensor01 Capture BME Temp Offset"
+  cf_tent1_sensor01_capture_bme_hum:
+    name: "cf-tent1-sensor01 Capture BME Humidity Offset"
+  cf_tent1_sensor01_capture_bme_pressure:
+    name: "cf-tent1-sensor01 Capture BME Pressure Offset"
+  cf_tent1_sensor01_capture_sht_temp:
+    name: "cf-tent1-sensor01 Capture SHT Temp Offset"
+  cf_tent1_sensor01_capture_sht_hum:
+    name: "cf-tent1-sensor01 Capture SHT Humidity Offset"
+  cf_tent1_sensor01_capture_ow_temp:
+    name: "cf-tent1-sensor01 Capture OneWire Temp Offset"
+  cf_tent1_sensor01_reset_all_offsets:
+    name: "cf-tent1-sensor01 Reset All Sensor Offsets"
+
+template:
+  - sensor:
+      - name: "cf-tent1-sensor01 BME Temperature Raw"
+        unique_id: cf_tent1_sensor01_bme_temperature_raw
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: "{{ states('input_number.cf_tent1_sensor01_inject_bme_temperature_raw') }}"
+      - name: "cf-tent1-sensor01 BME Humidity Raw"
+        unique_id: cf_tent1_sensor01_bme_humidity_raw
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+        state: "{{ states('input_number.cf_tent1_sensor01_inject_bme_humidity_raw') }}"
+      - name: "cf-tent1-sensor01 BME Pressure Raw"
+        unique_id: cf_tent1_sensor01_bme_pressure_raw
+        unit_of_measurement: "hPa"
+        device_class: atmospheric_pressure
+        state_class: measurement
+        state: "{{ states('input_number.cf_tent1_sensor01_inject_bme_pressure_raw') }}"
+      - name: "cf-tent1-sensor01 SHT Temperature Raw"
+        unique_id: cf_tent1_sensor01_sht_temperature_raw
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: "{{ states('input_number.cf_tent1_sensor01_inject_sht_temperature_raw') }}"
+      - name: "cf-tent1-sensor01 SHT Humidity Raw"
+        unique_id: cf_tent1_sensor01_sht_humidity_raw
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+        state: "{{ states('input_number.cf_tent1_sensor01_inject_sht_humidity_raw') }}"
+      - name: "cf-tent1-sensor01 OneWire Temperature Raw"
+        unique_id: cf_tent1_sensor01_onewire_temperature_raw
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: "{{ states('input_number.cf_tent1_sensor01_inject_ow_temperature_raw') }}"
+      - name: "cf-tent1-sensor01 BME Temperature Calibrated"
+        unique_id: cf_tent1_sensor01_bme_temperature_calibrated
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.cf_tent1_sensor01_inject_bme_temperature_raw') | float(0))
+             + (states('input_number.cf_tent1_sensor01_bme_temp_offset') | float(0)) }}
+      - name: "cf-tent1-sensor01 BME Humidity Calibrated"
+        unique_id: cf_tent1_sensor01_bme_humidity_calibrated
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.cf_tent1_sensor01_inject_bme_humidity_raw') | float(0))
+             + (states('input_number.cf_tent1_sensor01_bme_hum_offset') | float(0)) }}
+      - name: "cf-tent1-sensor01 BME Pressure Calibrated"
+        unique_id: cf_tent1_sensor01_bme_pressure_calibrated
+        unit_of_measurement: "hPa"
+        device_class: atmospheric_pressure
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.cf_tent1_sensor01_inject_bme_pressure_raw') | float(0))
+             + (states('input_number.cf_tent1_sensor01_bme_pressure_offset') | float(0)) }}
+      - name: "cf-tent1-sensor01 SHT Temperature Calibrated"
+        unique_id: cf_tent1_sensor01_sht_temperature_calibrated
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.cf_tent1_sensor01_inject_sht_temperature_raw') | float(0))
+             + (states('input_number.cf_tent1_sensor01_sht_temp_offset') | float(0)) }}
+      - name: "cf-tent1-sensor01 SHT Humidity Calibrated"
+        unique_id: cf_tent1_sensor01_sht_humidity_calibrated
+        unit_of_measurement: "%"
+        device_class: humidity
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.cf_tent1_sensor01_inject_sht_humidity_raw') | float(0))
+             + (states('input_number.cf_tent1_sensor01_sht_hum_offset') | float(0)) }}
+      - name: "cf-tent1-sensor01 OneWire Temperature Calibrated"
+        unique_id: cf_tent1_sensor01_onewire_temperature_calibrated
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        state: >-
+          {{ (states('input_number.cf_tent1_sensor01_inject_ow_temperature_raw') | float(0))
+             + (states('input_number.cf_tent1_sensor01_ow_temp_offset') | float(0)) }}
+
+automation:
+  - id: cf_tent1_capture_bme_temp
+    alias: "cf-tent1 capture BME temp offset"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tent1_sensor01_capture_bme_temp
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_bme_temp_offset
+        data:
+          value: >-
+            {{ (states('input_number.cf_tent1_sensor01_reference_temperature') | float(0))
+               - (states('input_number.cf_tent1_sensor01_inject_bme_temperature_raw') | float(0)) }}
+  - id: cf_tent1_capture_bme_hum
+    alias: "cf-tent1 capture BME humidity offset"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tent1_sensor01_capture_bme_hum
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_bme_hum_offset
+        data:
+          value: >-
+            {{ (states('input_number.cf_tent1_sensor01_reference_humidity') | float(0))
+               - (states('input_number.cf_tent1_sensor01_inject_bme_humidity_raw') | float(0)) }}
+  - id: cf_tent1_capture_bme_pressure
+    alias: "cf-tent1 capture BME pressure offset"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tent1_sensor01_capture_bme_pressure
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_bme_pressure_offset
+        data:
+          value: >-
+            {{ (states('input_number.cf_tent1_sensor01_reference_pressure') | float(0))
+               - (states('input_number.cf_tent1_sensor01_inject_bme_pressure_raw') | float(0)) }}
+  - id: cf_tent1_capture_sht_temp
+    alias: "cf-tent1 capture SHT temp offset"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tent1_sensor01_capture_sht_temp
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_sht_temp_offset
+        data:
+          value: >-
+            {{ (states('input_number.cf_tent1_sensor01_reference_temperature') | float(0))
+               - (states('input_number.cf_tent1_sensor01_inject_sht_temperature_raw') | float(0)) }}
+  - id: cf_tent1_capture_sht_hum
+    alias: "cf-tent1 capture SHT humidity offset"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tent1_sensor01_capture_sht_hum
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_sht_hum_offset
+        data:
+          value: >-
+            {{ (states('input_number.cf_tent1_sensor01_reference_humidity') | float(0))
+               - (states('input_number.cf_tent1_sensor01_inject_sht_humidity_raw') | float(0)) }}
+  - id: cf_tent1_capture_ow_temp
+    alias: "cf-tent1 capture OneWire temp offset"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tent1_sensor01_capture_ow_temp
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_ow_temp_offset
+        data:
+          value: >-
+            {{ (states('input_number.cf_tent1_sensor01_reference_temperature') | float(0))
+               - (states('input_number.cf_tent1_sensor01_inject_ow_temperature_raw') | float(0)) }}
+  - id: cf_tent1_reset_all_offsets
+    alias: "cf-tent1 reset all sensor offsets"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_tent1_sensor01_reset_all_offsets
+    action:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_bme_temp_offset
+        data:
+          value: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_bme_hum_offset
+        data:
+          value: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_bme_pressure_offset
+        data:
+          value: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_sht_temp_offset
+        data:
+          value: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_sht_hum_offset
+        data:
+          value: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.cf_tent1_sensor01_ow_temp_offset
+        data:
+          value: 0

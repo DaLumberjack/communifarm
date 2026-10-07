@@ -1,0 +1,22 @@
+# CI compile target — not for production flash.
+substitutions:
+  device_name: cf-lab-nfc-write01
+  friendly_name: Lab NFC Writer 01
+  area_name: Lab Bench
+  node_role: nfc-writer
+  firmware_version: "0.1.0-ci"
+  wifi_ssid: "ci-test-ssid"
+  wifi_password: "ci-test-password"
+  fallback_ssid: "CF-CI-NFC-Write-Fallback"
+  fallback_password: "ci-fallback-password"
+  spi_clk_pin: GPIO18
+  spi_mosi_pin: GPIO23
+  spi_miso_pin: GPIO19
+  nfc_cs_pin: GPIO25
+
+packages:
+  base: !include ../../packages/common/base.yaml
+  wifi: !include ../../packages/common/network-wifi.yaml
+  diagnostics: !include ../../packages/common/diagnostics.yaml
+  board: !include ../../packages/boards/esp32-d1-mini32.yaml
+  role: !include ../../packages/roles/nfc-writer.yaml

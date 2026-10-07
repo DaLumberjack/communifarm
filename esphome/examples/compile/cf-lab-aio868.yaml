@@ -1,0 +1,21 @@
+# CI compile target — template motor controller / AIO868 entity surface.
+# No KinCony GPIO maps. Safe for compile; not a flash recipe for real relays.
+substitutions:
+  device_name: cf-lab-aio868
+  friendly_name: Lab AIO868 Controller
+  area_name: Grow Lab
+  node_role: motor-controller
+  firmware_version: "0.1.0-ci"
+  wifi_ssid: "ci-test-ssid"
+  wifi_password: "ci-test-password"
+  fallback_ssid: "CF-CI-AIO-Fallback"
+  fallback_password: "ci-fallback-password"
+
+packages:
+  base: !include ../../packages/common/base.yaml
+  wifi: !include ../../packages/common/network-wifi.yaml
+  diagnostics: !include ../../packages/common/diagnostics.yaml
+  failsafe: !include ../../packages/common/failsafe.yaml
+  board_meta: !include ../../packages/boards/kincony-kc868-aio.yaml
+  board: !include ../../packages/boards/esp32-d1-mini32.yaml
+  role: !include ../../packages/roles/motor-controller.yaml

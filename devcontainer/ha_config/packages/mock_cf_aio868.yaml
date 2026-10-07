@@ -1,0 +1,144 @@
+# Mock KinCony KC868-AIO machine controller (cf-lab-aio868) for T1/T2.
+# Semantic switch names match esphome/packages/roles/motor-controller.yaml.
+# No GPIO claims — this is the HA-side stand-in until pins are verified.
+
+input_boolean:
+  cf_lab_aio868_intake:
+    name: "cf-lab-aio868 Intake Source (mock only)"
+    initial: false
+  cf_lab_aio868_exhaust:
+    name: "cf-lab-aio868 Exhaust Source (mock only)"
+    initial: false
+  cf_lab_aio868_circulation:
+    name: "cf-lab-aio868 Circulation Source (mock only)"
+    initial: false
+  cf_lab_aio868_humidifier:
+    name: "cf-lab-aio868 Humidifier Source (mock only)"
+    initial: false
+  cf_lab_aio868_heater:
+    name: "cf-lab-aio868 Heater Source (mock only)"
+    initial: false
+  cf_lab_aio868_pump:
+    name: "cf-lab-aio868 Pump Source (mock only)"
+    initial: false
+  cf_lab_aio868_valve:
+    name: "cf-lab-aio868 Valve Source (mock only)"
+    initial: false
+  cf_lab_aio868_fallback_enabled:
+    name: "cf-lab-aio868 Fallback Enabled Source (mock only)"
+    initial: false
+
+input_text:
+  cf_lab_aio868_control_state:
+    name: "cf-lab-aio868 Control State (mock only)"
+    initial: "NORMAL"
+    max: 32
+
+template:
+  - switch:
+      - name: "cf-lab-aio868 Intake"
+        unique_id: cf_lab_aio868_intake
+        state: "{{ is_state('input_boolean.cf_lab_aio868_intake', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_intake
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_intake
+      - name: "cf-lab-aio868 Exhaust"
+        unique_id: cf_lab_aio868_exhaust
+        state: "{{ is_state('input_boolean.cf_lab_aio868_exhaust', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_exhaust
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_exhaust
+      - name: "cf-lab-aio868 Circulation"
+        unique_id: cf_lab_aio868_circulation
+        state: "{{ is_state('input_boolean.cf_lab_aio868_circulation', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_circulation
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_circulation
+      - name: "cf-lab-aio868 Humidifier"
+        unique_id: cf_lab_aio868_humidifier
+        state: "{{ is_state('input_boolean.cf_lab_aio868_humidifier', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_humidifier
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_humidifier
+      - name: "cf-lab-aio868 Heater"
+        unique_id: cf_lab_aio868_heater
+        state: "{{ is_state('input_boolean.cf_lab_aio868_heater', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_heater
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_heater
+      - name: "cf-lab-aio868 Pump"
+        unique_id: cf_lab_aio868_pump
+        state: "{{ is_state('input_boolean.cf_lab_aio868_pump', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_pump
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_pump
+      - name: "cf-lab-aio868 Valve"
+        unique_id: cf_lab_aio868_valve
+        state: "{{ is_state('input_boolean.cf_lab_aio868_valve', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_valve
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_valve
+      - name: "cf-lab-aio868 Fallback Enabled"
+        unique_id: cf_lab_aio868_fallback_enabled
+        state: "{{ is_state('input_boolean.cf_lab_aio868_fallback_enabled', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cf_lab_aio868_fallback_enabled
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.cf_lab_aio868_control_state
+            data:
+              value: "FALLBACK"
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cf_lab_aio868_fallback_enabled
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.cf_lab_aio868_control_state
+            data:
+              value: "NORMAL"
+  - sensor:
+      - name: "cf-lab-aio868 Control State"
+        unique_id: cf_lab_aio868_control_state
+        state: "{{ states('input_text.cf_lab_aio868_control_state') }}"
+  - binary_sensor:
+      - name: "cf-lab-aio868 Safe Actuation Allowlist"
+        unique_id: cf_lab_aio868_safe_actuation_allowlist
+        state: "on"

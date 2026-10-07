@@ -24,3 +24,20 @@ jobs:
         run: ruff check custom_components tests
       - name: Pytest T0
         run: pytest --cov=custom_components/communifarm --cov-report=term-missing
+
+  esphome:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        yaml_file:
+          - esphome/examples/compile/cf-tent1-sensor01.yaml
+          - esphome/examples/compile/cf-mixroom-scale01.yaml
+          - esphome/examples/compile/cf-mixroom-nfc-scan01.yaml
+          - esphome/examples/compile/cf-lab-nfc-write01.yaml
+          - esphome/examples/compile/cf-lab-aio868.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: esphome/build-action@v6
+        with:
+          yaml-file: ${{ matrix.yaml_file }}

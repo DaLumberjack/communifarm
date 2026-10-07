@@ -1,0 +1,52 @@
+# Machine / climate actuator role for KinCony AIO-family and similar controllers.
+# Uses template switches so configs compile and HA can bind semantic names without
+# guessing board GPIO. Replace with gpio/relay platforms after pins are verified.
+switch:
+  - platform: template
+    name: "Intake"
+    id: cf_intake
+    icon: mdi:fan-chevron-down
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    name: "Exhaust"
+    id: cf_exhaust
+    icon: mdi:fan-chevron-up
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    name: "Circulation"
+    id: cf_circulation
+    icon: mdi:fan
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    name: "Humidifier"
+    id: cf_humidifier
+    icon: mdi:water-percent
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    name: "Heater"
+    id: cf_heater
+    icon: mdi:radiator
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    name: "Pump"
+    id: cf_pump
+    icon: mdi:pump
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    name: "Valve"
+    id: cf_valve
+    icon: mdi:pipe-valve
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+binary_sensor:
+  - platform: template
+    name: "Safe Actuation Allowlist"
+    id: cf_safe_actuation
+    lambda: "return true;"
