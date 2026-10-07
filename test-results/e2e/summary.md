@@ -1,7 +1,7 @@
 # Communifarm local E2E summary
 
-- Generated: 2026-10-07T01:39:39Z
-- Git SHA: `fe759b32d5ea2ce9a54670dda8085b1a38229b14`
+- Generated: 2026-10-07T01:54:13Z
+- Git SHA: `1adf673592ef5a0d4cae73f0d2b8daaecfaf2463`
 - Branch: `feature/esphome-device-packages`
 
 ## Totals

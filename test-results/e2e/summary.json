@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-07T01:39:39Z",
-  "git_sha": "fe759b32d5ea2ce9a54670dda8085b1a38229b14",
+  "generated_at": "2026-10-07T01:54:13Z",
+  "git_sha": "1adf673592ef5a0d4cae73f0d2b8daaecfaf2463",
   "branch": "feature/esphome-device-packages",
   "required_suites": [
     "t1_seeded",
