@@ -7,8 +7,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..domain.climate import (
+    DEFAULT_HUMIDITY_DEADBAND,
+    DEFAULT_TEMP_DEADBAND_C,
     KIND_GENERAL_ROOM,
     KIND_SPECS,
+    PHOTOPERIOD_HOURS,
     PLACEMENT_AREA_CLIMATE_KIND,
     ClimateBinding,
     ClimateNode,
@@ -16,6 +19,12 @@ from ..domain.climate import (
     validate_climate_node,
 )
 from ..domain.climate_control import ControlIntent
+from ..domain.climate_settings import (
+    SCOPE_NODE,
+    SETTING_CO2_PPM_TARGET,
+    SETTING_SCOPES,
+    validate_setting,
+)
 from ..domain.models import new_id
 from ..domain.validation import ValidationError
 from .sqlite_repository import SqliteRepository
@@ -56,12 +65,12 @@ class ClimateRepository(SqliteRepository):
         general_humidity_target: float,
     ) -> list[ClimateNode]:
         assert self._conn is not None
-        existing = self._list_nodes_sync(site_id)
+        existing = self._list_nodes_sync(site_id, False)
         if existing:
             self._apply_preset_targets_sync(existing)
             self._link_placement_sync(site_id, existing)
             self._conn.commit()
-            return existing
+            return self._list_nodes_sync(site_id, True)
 
         nodes = build_operator_layout(
             site_id,
@@ -83,36 +92,57 @@ class ClimateRepository(SqliteRepository):
         return nodes
 
     def _apply_preset_targets_sync(self, nodes: list[ClimateNode]) -> None:
-        """Move tent targets onto the current preset. The general room stays the profile."""
+        """Refresh repository defaults while preserving separate user overrides."""
         assert self._conn is not None
         for node in nodes:
-            if node.kind == KIND_GENERAL_ROOM:
-                continue
             spec = KIND_SPECS.get(node.kind)
             if spec is None:
                 continue
-            if (
-                node.temperature_target == spec.temperature_target
-                and node.humidity_target == spec.humidity_target
-            ):
-                continue
+            temperature = (
+                node.temperature_target
+                if node.kind == KIND_GENERAL_ROOM
+                else spec.temperature_target
+            )
+            humidity = (
+                node.humidity_target
+                if node.kind == KIND_GENERAL_ROOM
+                else spec.humidity_target
+            )
+            light_hours = (
+                PHOTOPERIOD_HOURS[spec.photoperiod_preset]
+                if spec.photoperiod_preset
+                else (None, None)
+            )
             self._conn.execute(
                 """
                 UPDATE climate_nodes
-                SET temperature_target = ?, humidity_target = ?
+                SET temperature_target = ?, humidity_target = ?,
+                    co2_ppm_target = ?, temp_deadband = ?,
+                    humidity_deadband = ?, photoperiod_preset = ?,
+                    light_hours_on = ?, light_hours_off = ?
                 WHERE stable_id = ?
                 """,
-                (spec.temperature_target, spec.humidity_target, node.id),
+                (
+                    temperature,
+                    humidity,
+                    spec.co2_ppm_target,
+                    DEFAULT_TEMP_DEADBAND_C,
+                    DEFAULT_HUMIDITY_DEADBAND,
+                    spec.photoperiod_preset,
+                    light_hours[0],
+                    light_hours[1],
+                    node.id,
+                ),
             )
-            node.temperature_target = spec.temperature_target
-            node.humidity_target = spec.humidity_target
 
     async def async_list_nodes(self, site_id: str) -> list[ClimateNode]:
         return await self._hass.async_add_executor_job(
             self._locked, self._list_nodes_sync, site_id
         )
 
-    def _list_nodes_sync(self, site_id: str) -> list[ClimateNode]:
+    def _list_nodes_sync(
+        self, site_id: str, apply_overrides: bool = True
+    ) -> list[ClimateNode]:
         assert self._conn is not None
         rows = self._conn.execute(
             """
@@ -122,7 +152,107 @@ class ClimateRepository(SqliteRepository):
             """,
             (site_id,),
         ).fetchall()
-        return [_row_to_node(row) for row in rows]
+        nodes = [_row_to_node(row) for row in rows]
+        if apply_overrides:
+            self._apply_node_overrides_sync(nodes)
+        return nodes
+
+    def _apply_node_overrides_sync(self, nodes: list[ClimateNode]) -> None:
+        assert self._conn is not None
+        by_id = {node.id: node for node in nodes}
+        rows = self._conn.execute(
+            """
+            SELECT scope_id, setting_key, value
+            FROM climate_setting_overrides
+            WHERE scope_type = ?
+            """,
+            (SCOPE_NODE,),
+        ).fetchall()
+        for row in rows:
+            node = by_id.get(row["scope_id"])
+            if node is None or not hasattr(node, row["setting_key"]):
+                continue
+            value: float | None = float(row["value"])
+            if row["setting_key"] == SETTING_CO2_PPM_TARGET and value <= 0:
+                value = None
+            setattr(node, row["setting_key"], value)
+            validate_climate_node(node)
+
+    async def async_get_setting_overrides(
+        self, scope_type: str, scope_id: str
+    ) -> dict[str, float]:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._get_setting_overrides_sync, scope_type, scope_id
+        )
+
+    def _get_setting_overrides_sync(
+        self, scope_type: str, scope_id: str
+    ) -> dict[str, float]:
+        assert self._conn is not None
+        rows = self._conn.execute(
+            """
+            SELECT setting_key, value
+            FROM climate_setting_overrides
+            WHERE scope_type = ? AND scope_id = ?
+            """,
+            (scope_type, scope_id),
+        ).fetchall()
+        return {row["setting_key"]: float(row["value"]) for row in rows}
+
+    async def async_set_setting_override(
+        self, scope_type: str, scope_id: str, setting_key: str, value: float
+    ) -> None:
+        await self._hass.async_add_executor_job(
+            self._locked,
+            self._set_setting_override_sync,
+            scope_type,
+            scope_id,
+            setting_key,
+            value,
+        )
+
+    def _set_setting_override_sync(
+        self, scope_type: str, scope_id: str, setting_key: str, value: float
+    ) -> None:
+        assert self._conn is not None
+        if scope_type not in SETTING_SCOPES:
+            raise ValidationError(f"unsupported climate setting scope: {scope_type}")
+        number = validate_setting(scope_type, setting_key, value)
+        self._conn.execute(
+            """
+            INSERT INTO climate_setting_overrides (
+              scope_type, scope_id, setting_key, value, updated_at
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(scope_type, scope_id, setting_key)
+            DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (
+                scope_type,
+                scope_id,
+                setting_key,
+                number,
+                datetime.now(tz=UTC).isoformat(),
+            ),
+        )
+        self._conn.commit()
+
+    async def async_clear_setting_overrides(
+        self, scope_type: str, scope_id: str
+    ) -> None:
+        await self._hass.async_add_executor_job(
+            self._locked, self._clear_setting_overrides_sync, scope_type, scope_id
+        )
+
+    def _clear_setting_overrides_sync(self, scope_type: str, scope_id: str) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            """
+            DELETE FROM climate_setting_overrides
+            WHERE scope_type = ? AND scope_id = ?
+            """,
+            (scope_type, scope_id),
+        )
+        self._conn.commit()
 
     async def async_list_bindings(self, site_id: str) -> list[ClimateBinding]:
         return await self._hass.async_add_executor_job(
@@ -166,10 +296,10 @@ class ClimateRepository(SqliteRepository):
             self._conn.execute(
                 """
                 UPDATE climate_bindings
-                SET entity_id = ?, waste_heat_to_parent = ?
+                SET entity_id = ?, waste_heat_to_parent = ?, zone_id = ?
                 WHERE stable_id = ?
                 """,
-                (binding.entity_id, waste, row["stable_id"]),
+                (binding.entity_id, waste, binding.zone_id, row["stable_id"]),
             )
             binding.id = row["stable_id"]
         else:
@@ -179,8 +309,8 @@ class ClimateRepository(SqliteRepository):
                 """
                 INSERT INTO climate_bindings (
                   stable_id, node_id, role, entity_entry_id, entity_id,
-                  waste_heat_to_parent, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                  waste_heat_to_parent, zone_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     binding.id,
@@ -189,6 +319,7 @@ class ClimateRepository(SqliteRepository):
                     binding.entity_entry_id,
                     binding.entity_id,
                     waste,
+                    binding.zone_id,
                     when,
                 ),
             )
@@ -211,8 +342,9 @@ class ClimateRepository(SqliteRepository):
             self._conn.execute(
                 """
                 INSERT INTO climate_intents (
-                  stable_id, node_id, role, entity_id, turn_on, reason, recorded_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                  stable_id, node_id, role, entity_id, turn_on, reason, zone_id,
+                  recorded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     new_id("intent"),
@@ -221,6 +353,7 @@ class ClimateRepository(SqliteRepository):
                     intent.entity_id,
                     1 if intent.turn_on else 0,
                     intent.reason,
+                    intent.zone_id,
                     recorded_at,
                 ),
             )
@@ -236,7 +369,7 @@ class ClimateRepository(SqliteRepository):
         assert self._conn is not None
         rows = self._conn.execute(
             """
-            SELECT node_id, role, entity_id, turn_on, reason, recorded_at
+            SELECT node_id, role, entity_id, turn_on, reason, zone_id, recorded_at
             FROM climate_intents
             ORDER BY id DESC
             LIMIT ?
@@ -250,6 +383,7 @@ class ClimateRepository(SqliteRepository):
                 "entity_id": row["entity_id"],
                 "turn_on": bool(row["turn_on"]),
                 "reason": row["reason"],
+                "zone_id": row["zone_id"],
                 "recorded_at": row["recorded_at"],
             }
             for row in rows
@@ -332,5 +466,6 @@ def _row_to_binding(row: Any) -> ClimateBinding:
         entity_entry_id=row["entity_entry_id"],
         entity_id=row["entity_id"],
         waste_heat_to_parent=bool(row["waste_heat_to_parent"]),
+        zone_id=row["zone_id"] if "zone_id" in row.keys() else None,
         created_at=row["created_at"],
     )

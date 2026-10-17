@@ -4,14 +4,21 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import Context, HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.communifarm.const import (
     DOMAIN,
+    ENTITY_BTN_CLIMATE_RESET_NODE,
+    ENTITY_CLIMATE_ROW_FAN_ON,
+    ENTITY_CLIMATE_SETTINGS_NODE,
     ENTITY_CLIMATE_STATUS,
+    ENTITY_CLIMATE_TEMPERATURE_TARGET,
     SERVICE_BIND_CLIMATE_ROLE,
     SERVICE_ENSURE_CLIMATE_LAYOUT,
     SERVICE_TICK_CLIMATE,
@@ -32,6 +39,7 @@ from custom_components.communifarm.domain.climate import (
     ROLE_CIRCULATION_FAN,
     ROLE_CO2_PPM,
     ROLE_CONDENSATE_PUMP,
+    ROLE_CULTURE_ACTIVITY,
     ROLE_DEHUMIDIFIER,
     ROLE_EXHAUST_FAN,
     ROLE_FLOAT,
@@ -54,10 +62,20 @@ from custom_components.communifarm.domain.climate import (
 )
 from custom_components.communifarm.domain.climate_control import (
     ObservedState,
+    RowControlContext,
     decide_control,
+)
+from custom_components.communifarm.domain.climate_settings import (
+    SCOPE_NODE,
+    SCOPE_ROW,
+    SETTING_ROW_FAN_ON_MINUTES,
+    SETTING_TEMPERATURE_TARGET,
 )
 from custom_components.communifarm.domain.location import AREA_FRUITING_TENT
 from custom_components.communifarm.domain.validation import ValidationError
+from custom_components.communifarm.settings_access import (
+    async_require_automation_settings_access,
+)
 from custom_components.communifarm.storage import sqlite_db
 
 NOW_DARK = datetime(2026, 10, 1, 18, 0, tzinfo=UTC)
@@ -80,17 +98,25 @@ def _by_kind(nodes):
     return {node.kind: node for node in nodes}
 
 
-def _bind(node_id: str, role: str, entity: str, *, waste: bool = False) -> ClimateBinding:
+def _bind(
+    node_id: str,
+    role: str,
+    entity: str,
+    *,
+    waste: bool = False,
+    zone_id: str | None = None,
+) -> ClimateBinding:
     return ClimateBinding(
         node_id=node_id,
         role=role,
         entity_entry_id=f"reg_{role}_{node_id}",
         entity_id=entity,
         waste_heat_to_parent=waste,
+        zone_id=zone_id,
     )
 
 
-def _decide(samples, bindings, observed=None, now=None, nodes=None):
+def _decide(samples, bindings, observed=None, now=None, nodes=None, row_contexts=None):
     tree = nodes if nodes is not None else _layout()
     samples_by: dict = {}
     for node_id, node_samples in samples.items():
@@ -104,6 +130,7 @@ def _decide(samples, bindings, observed=None, now=None, nodes=None):
         bindings_by,
         observed or {},
         now or NOW_DARK,
+        row_contexts,
     )
     return decision, _by_kind(tree)
 
@@ -139,6 +166,24 @@ def test_operator_layout_parents_and_control_flags() -> None:
     assert by[KIND_STORAGE_HARD_GOODS].control_enabled is False
     assert by[KIND_OUTDOOR].enclosure == "outdoor"
     assert by[KIND_OUTDOOR].parent_id is None
+
+
+@pytest.mark.asyncio
+async def test_climate_setting_changes_require_admin(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(HomeAssistantError, match="authenticated"):
+        await async_require_automation_settings_access(hass, None)
+
+    lookup = AsyncMock(return_value=SimpleNamespace(is_admin=False))
+    monkeypatch.setattr(hass.auth, "async_get_user", lookup)
+    with pytest.raises(HomeAssistantError, match="administrator"):
+        await async_require_automation_settings_access(
+            hass, Context(user_id="operator")
+        )
+
+    lookup.return_value = SimpleNamespace(is_admin=True)
+    await async_require_automation_settings_access(hass, Context(user_id="admin"))
 
 
 def test_reject_temperature_target_out_of_range() -> None:
@@ -462,6 +507,177 @@ def test_photoperiod_fruiting_greens_and_dark() -> None:
     assert ROLE_LIGHT not in _ons(dark, culture.id)
 
 
+def test_occupancy_overrides_dark_schedule_then_expires() -> None:
+    nodes = _layout()
+    culture = _by_kind(nodes)[KIND_INOCULATION]
+    binding = _bind(culture.id, ROLE_LIGHT, "light.culture")
+    occupied, _ = _decide(
+        {},
+        [binding],
+        observed={culture.id: ObservedState(occupied=True)},
+        now=NOW_DARK,
+        nodes=nodes,
+    )
+    assert ROLE_LIGHT in _ons(occupied, culture.id)
+    assert "occupancy" in _reason(occupied, culture.id, ROLE_LIGHT)
+
+    held, _ = _decide(
+        {},
+        [binding],
+        observed={
+            culture.id: ObservedState(
+                occupied=False,
+                last_occupied_at=NOW_DARK - timedelta(minutes=19),
+            )
+        },
+        now=NOW_DARK,
+        nodes=nodes,
+    )
+    assert ROLE_LIGHT in _ons(held, culture.id)
+
+    expired, _ = _decide(
+        {},
+        [binding],
+        observed={
+            culture.id: ObservedState(
+                occupied=False,
+                last_occupied_at=NOW_DARK - timedelta(minutes=20),
+            )
+        },
+        now=NOW_DARK,
+        nodes=nodes,
+    )
+    assert ROLE_LIGHT not in _ons(expired, culture.id)
+
+    culture.occupancy_hold_minutes = 5
+    custom_hold, _ = _decide(
+        {},
+        [binding],
+        observed={
+            culture.id: ObservedState(
+                occupied=False,
+                last_occupied_at=NOW_DARK - timedelta(minutes=6),
+            )
+        },
+        now=NOW_DARK,
+        nodes=nodes,
+    )
+    assert ROLE_LIGHT not in _ons(custom_hold, culture.id)
+
+
+def test_culture_fan_requires_activity_and_occupancy() -> None:
+    nodes = _layout()
+    culture = _by_kind(nodes)[KIND_INOCULATION]
+    fan = _bind(culture.id, ROLE_CIRCULATION_FAN, "fan.culture")
+    activity = {culture.id: [SensorSample(ROLE_CULTURE_ACTIVITY, 1)]}
+
+    active, _ = _decide(
+        activity,
+        [fan],
+        observed={culture.id: ObservedState(occupied=True)},
+        nodes=nodes,
+    )
+    assert ROLE_CIRCULATION_FAN in _ons(active, culture.id)
+    assert "culture activity" in _reason(active, culture.id, ROLE_CIRCULATION_FAN)
+
+    vacant, _ = _decide(activity, [fan], nodes=nodes)
+    assert ROLE_CIRCULATION_FAN not in _ons(vacant, culture.id)
+
+
+def test_row_fan_uses_assigned_batch_stage_and_variety() -> None:
+    nodes = _layout()
+    fruit = _by_kind(nodes)[KIND_FRUITING]
+    zone_id = "zone_fruiting_1"
+    binding = _bind(
+        fruit.id,
+        ROLE_CIRCULATION_FAN,
+        "fan.row_1",
+        zone_id=zone_id,
+    )
+    at_minute_12 = datetime(2026, 10, 1, 10, 12, tzinfo=UTC)
+
+    oyster, _ = _decide(
+        {},
+        [binding],
+        now=at_minute_12,
+        nodes=nodes,
+        row_contexts=[
+            RowControlContext(fruit.id, zone_id, "fruiting", "blue_oyster")
+        ],
+    )
+    assert ROLE_CIRCULATION_FAN in _ons(oyster, fruit.id)
+    assert "blue_oyster" in _reason(oyster, fruit.id, ROLE_CIRCULATION_FAN)
+
+    generic, _ = _decide(
+        {},
+        [binding],
+        now=at_minute_12,
+        nodes=nodes,
+        row_contexts=[RowControlContext(fruit.id, zone_id, "fruiting", "chestnut")],
+    )
+    assert ROLE_CIRCULATION_FAN not in _ons(generic, fruit.id)
+
+    overridden, _ = _decide(
+        {},
+        [binding],
+        now=at_minute_12,
+        nodes=nodes,
+        row_contexts=[
+            RowControlContext(
+                fruit.id,
+                zone_id,
+                "fruiting",
+                "chestnut",
+                fan_on_minutes=15,
+                fan_off_minutes=5,
+            )
+        ],
+    )
+    assert ROLE_CIRCULATION_FAN in _ons(overridden, fruit.id)
+
+    incubating, _ = _decide(
+        {},
+        [binding],
+        now=at_minute_12,
+        nodes=nodes,
+        row_contexts=[
+            RowControlContext(fruit.id, zone_id, "incubating", "blue_oyster")
+        ],
+    )
+    assert ROLE_CIRCULATION_FAN not in _ons(incubating, fruit.id)
+
+    wrong_climate, _ = _decide(
+        {},
+        [binding],
+        now=at_minute_12,
+        nodes=nodes,
+        row_contexts=[
+            RowControlContext("another_climate", zone_id, "fruiting", "blue_oyster")
+        ],
+    )
+    assert ROLE_CIRCULATION_FAN not in _ons(wrong_climate, fruit.id)
+
+
+def test_general_room_independently_commands_intake_and_exhaust() -> None:
+    nodes = _layout()
+    by = _by_kind(nodes)
+    general = by[KIND_GENERAL_ROOM]
+    outdoor = by[KIND_OUTDOOR]
+    decision, _ = _decide(
+        {
+            general.id: [SensorSample(ROLE_TEMPERATURE, 30)],
+            outdoor.id: [SensorSample(ROLE_TEMPERATURE, 15)],
+        },
+        [
+            _bind(general.id, ROLE_FRESH_AIR_INTAKE, "fan.room_intake"),
+            _bind(general.id, ROLE_EXHAUST_FAN, "fan.room_exhaust"),
+        ],
+        nodes=nodes,
+    )
+    assert ROLE_FRESH_AIR_INTAKE in _ons(decision, general.id)
+    assert ROLE_EXHAUST_FAN in _ons(decision, general.id)
+
+
 def test_co2_opens_intake_and_fresh_air_checks_outdoor() -> None:
     nodes = _layout()
     by = _by_kind(nodes)
@@ -470,10 +686,16 @@ def test_co2_opens_intake_and_fresh_air_checks_outdoor() -> None:
     outdoor = by[KIND_OUTDOOR]
     ppm, _ = _decide(
         {inoc.id: [SensorSample(ROLE_CO2_PPM, 1500)]},
-        [_bind(inoc.id, ROLE_INTAKE_FAN, "fan.inoc")],
+        [
+            _bind(inoc.id, ROLE_INTAKE_FAN, "fan.inoc"),
+            _bind(inoc.id, ROLE_EXHAUST_FAN, "fan.inoc_ex"),
+            _bind(inoc.id, ROLE_CIRCULATION_FAN, "fan.inoc_circ"),
+        ],
         nodes=nodes,
     )
     assert ROLE_INTAKE_FAN in _ons(ppm, inoc.id)
+    assert ROLE_EXHAUST_FAN in _ons(ppm, inoc.id)
+    assert ROLE_CIRCULATION_FAN in _ons(ppm, inoc.id)
 
     helpful, _ = _decide(
         {
@@ -495,6 +717,194 @@ def test_co2_opens_intake_and_fresh_air_checks_outdoor() -> None:
     )
     assert ROLE_FRESH_AIR_INTAKE not in _ons(useless, general.id)
     assert "will not help" in _reason(useless, general.id, ROLE_FRESH_AIR_INTAKE)
+
+
+def test_fruiting_keeps_base_circulation_while_in_band() -> None:
+    nodes = _layout()
+    fruit = _by_kind(nodes)[KIND_FRUITING]
+    decision, _ = _decide(
+        {
+            fruit.id: [
+                SensorSample(ROLE_TEMPERATURE, 20),
+                SensorSample(ROLE_HUMIDITY, 90),
+            ]
+        },
+        [
+            _bind(fruit.id, ROLE_CIRCULATION_FAN, "fan.fruit_circ"),
+            _bind(fruit.id, ROLE_INTAKE_FAN, "fan.fruit_in"),
+            _bind(fruit.id, ROLE_EXHAUST_FAN, "fan.fruit_ex"),
+            _bind(fruit.id, ROLE_HUMIDIFIER, "switch.fruit_hum"),
+        ],
+        nodes=nodes,
+    )
+    assert ROLE_CIRCULATION_FAN in _ons(decision, fruit.id)
+    assert "base circulation" in _reason(decision, fruit.id, ROLE_CIRCULATION_FAN)
+    assert ROLE_INTAKE_FAN not in _ons(decision, fruit.id)
+    assert ROLE_HUMIDIFIER not in _ons(decision, fruit.id)
+
+
+def test_fruiting_hot_uses_cooler_general_before_ac() -> None:
+    """Sensor→action: tent +5%RH-style excursion with helpful parent air."""
+    nodes = _layout()
+    by = _by_kind(nodes)
+    fruit = by[KIND_FRUITING]
+    general = by[KIND_GENERAL_ROOM]
+    decision, _ = _decide(
+        {
+            fruit.id: [
+                SensorSample(ROLE_TEMPERATURE, 22),  # target 20 + 1°C band → too hot
+                SensorSample(ROLE_HUMIDITY, 90),
+            ],
+            general.id: [
+                SensorSample(ROLE_TEMPERATURE, 18),
+                SensorSample(ROLE_HUMIDITY, 70),
+            ],
+        },
+        [
+            _bind(fruit.id, ROLE_INTAKE_FAN, "fan.fruit_in"),
+            _bind(fruit.id, ROLE_EXHAUST_FAN, "fan.fruit_ex"),
+            _bind(fruit.id, ROLE_CIRCULATION_FAN, "fan.fruit_circ"),
+            _bind(fruit.id, ROLE_AC, "switch.fruit_ac"),
+            _bind(fruit.id, ROLE_HUMIDIFIER, "switch.fruit_hum"),
+        ],
+        nodes=nodes,
+    )
+    assert ROLE_INTAKE_FAN in _ons(decision, fruit.id)
+    assert ROLE_EXHAUST_FAN in _ons(decision, fruit.id)
+    assert ROLE_CIRCULATION_FAN in _ons(decision, fruit.id)
+    assert ROLE_AC not in _ons(decision, fruit.id)
+
+
+def test_fruiting_hot_wet_general_triggers_room_ac_and_dehumidify() -> None:
+    """When parent air cannot help, condition the general room instead of dumping tent air."""
+    nodes = _layout()
+    by = _by_kind(nodes)
+    fruit = by[KIND_FRUITING]
+    general = by[KIND_GENERAL_ROOM]
+    outdoor = by[KIND_OUTDOOR]
+    decision, _ = _decide(
+        {
+            fruit.id: [
+                SensorSample(ROLE_TEMPERATURE, 24),
+                SensorSample(ROLE_HUMIDITY, 96),
+            ],
+            general.id: [
+                SensorSample(ROLE_TEMPERATURE, 26),
+                SensorSample(ROLE_HUMIDITY, 80),
+            ],
+            outdoor.id: [
+                SensorSample(ROLE_TEMPERATURE, 30),
+                SensorSample(ROLE_HUMIDITY, 90),
+            ],
+        },
+        [
+            _bind(fruit.id, ROLE_INTAKE_FAN, "fan.fruit_in"),
+            _bind(fruit.id, ROLE_EXHAUST_FAN, "fan.fruit_ex"),
+            _bind(fruit.id, ROLE_CIRCULATION_FAN, "fan.fruit_circ"),
+            _bind(fruit.id, ROLE_HUMIDIFIER, "switch.fruit_hum"),
+            _bind(general.id, ROLE_AC, "switch.room_ac"),
+            _bind(general.id, ROLE_DEHUMIDIFIER, "switch.room_dh"),
+            _bind(general.id, ROLE_FRESH_AIR_INTAKE, "fan.room_oa"),
+            _bind(general.id, ROLE_EXHAUST_FAN, "fan.room_ex"),
+        ],
+        nodes=nodes,
+    )
+    assert ROLE_INTAKE_FAN not in _ons(decision, fruit.id)
+    assert ROLE_AC in _ons(decision, general.id)
+    assert ROLE_DEHUMIDIFIER in _ons(decision, general.id)
+    assert ROLE_FRESH_AIR_INTAKE not in _ons(decision, general.id)
+
+
+def test_parent_outdoor_exchange_settles_tent_intake() -> None:
+    nodes = _layout()
+    by = _by_kind(nodes)
+    fruit = by[KIND_FRUITING]
+    general = by[KIND_GENERAL_ROOM]
+    outdoor = by[KIND_OUTDOOR]
+    decision, _ = _decide(
+        {
+            fruit.id: [
+                SensorSample(ROLE_TEMPERATURE, 22),
+                SensorSample(ROLE_HUMIDITY, 90),
+            ],
+            general.id: [
+                SensorSample(ROLE_TEMPERATURE, 28),
+                SensorSample(ROLE_HUMIDITY, 60),
+            ],
+            outdoor.id: [
+                SensorSample(ROLE_TEMPERATURE, 15),
+                SensorSample(ROLE_HUMIDITY, 55),
+            ],
+        },
+        [
+            _bind(fruit.id, ROLE_INTAKE_FAN, "fan.fruit_in"),
+            _bind(fruit.id, ROLE_EXHAUST_FAN, "fan.fruit_ex"),
+            _bind(fruit.id, ROLE_CIRCULATION_FAN, "fan.fruit_circ"),
+            _bind(general.id, ROLE_FRESH_AIR_INTAKE, "fan.room_oa"),
+            _bind(general.id, ROLE_EXHAUST_FAN, "fan.room_ex"),
+            _bind(general.id, ROLE_AC, "switch.room_ac"),
+        ],
+        nodes=nodes,
+    )
+    assert ROLE_FRESH_AIR_INTAKE in _ons(decision, general.id)
+    assert ROLE_EXHAUST_FAN in _ons(decision, general.id)
+    assert ROLE_INTAKE_FAN not in _ons(decision, fruit.id)
+    assert "settle" in _reason(decision, fruit.id, ROLE_INTAKE_FAN)
+    assert ROLE_CIRCULATION_FAN in _ons(decision, fruit.id)
+    assert ROLE_EXHAUST_FAN in _ons(decision, fruit.id)
+
+
+def test_fruiting_too_dry_turns_humidifier_on() -> None:
+    nodes = _layout()
+    fruit = _by_kind(nodes)[KIND_FRUITING]
+    decision, _ = _decide(
+        {
+            fruit.id: [
+                SensorSample(ROLE_TEMPERATURE, 20),
+                SensorSample(ROLE_HUMIDITY, 80),
+            ]
+        },
+        [
+            _bind(fruit.id, ROLE_HUMIDIFIER, "switch.fruit_hum"),
+            _bind(fruit.id, ROLE_CIRCULATION_FAN, "fan.fruit_circ"),
+        ],
+        nodes=nodes,
+    )
+    assert ROLE_HUMIDIFIER in _ons(decision, fruit.id)
+    assert ROLE_CIRCULATION_FAN in _ons(decision, fruit.id)
+
+
+def test_five_circulation_bindings_all_receive_base_intent() -> None:
+    nodes = _layout()
+    fruit = _by_kind(nodes)[KIND_FRUITING]
+    bindings = [
+        _bind(fruit.id, ROLE_CIRCULATION_FAN, f"fan.fruit_circ_{i}")
+        for i in range(5)
+    ]
+    bindings.extend(
+        [
+            _bind(fruit.id, ROLE_INTAKE_FAN, "fan.fruit_in"),
+            _bind(fruit.id, ROLE_EXHAUST_FAN, "fan.fruit_ex"),
+        ]
+    )
+    decision, _ = _decide(
+        {
+            fruit.id: [
+                SensorSample(ROLE_TEMPERATURE, 20),
+                SensorSample(ROLE_HUMIDITY, 90),
+            ]
+        },
+        bindings,
+        nodes=nodes,
+    )
+    circ_entities = {
+        intent.entity_id
+        for intent in decision.intents
+        if intent.node_id == fruit.id
+        and intent.role == ROLE_CIRCULATION_FAN
+        and intent.turn_on
+    }
+    assert circ_entities == {f"fan.fruit_circ_{i}" for i in range(5)}
 
 
 def test_float_pump_is_independent_and_missing_float_stays_off() -> None:
@@ -542,9 +952,13 @@ def test_dashboard_includes_climate_card(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
     titles = [card.get("title") for card in config["views"][0]["cards"]]
     assert "Climate" in titles
+    climate = next(view for view in config["views"] if view["title"] == "Climate")
+    climate_titles = [card.get("title") for card in climate["cards"]]
+    assert "Room / tent automation settings" in climate_titles
+    assert "Row fan settings" in climate_titles
 
 
-def test_schema_v13_upgrade_preserves_v11(tmp_path: Path) -> None:
+def test_schema_v15_upgrade_preserves_v11(tmp_path: Path) -> None:
     path = tmp_path / "communifarm.db"
     conn = sqlite_db.connect(path)
     for version in range(1, 12):
@@ -576,7 +990,7 @@ def test_schema_v13_upgrade_preserves_v11(tmp_path: Path) -> None:
     conn.commit()
     version = sqlite_db.apply_migrations(conn)
     assert version == sqlite_db.SCHEMA_VERSION
-    assert version == 13
+    assert version == 15
     batch = conn.execute(
         "SELECT name, environment_id FROM batches WHERE stable_id = 'batch_keep'"
     ).fetchone()
@@ -596,9 +1010,106 @@ def test_schema_v13_upgrade_preserves_v11(tmp_path: Path) -> None:
     assert "climate_nodes" in tables
     assert "climate_bindings" in tables
     assert "climate_intents" in tables
+    assert "climate_setting_overrides" in tables
     assert "air_vents" in tables
     assert "tachometer_readings" in tables
     conn.close()
+
+
+@pytest.mark.asyncio
+async def test_climate_setting_overrides_survive_repo_default_refresh_and_reset(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_path = tmp_path / "communifarm_climate_settings.db"
+    monkeypatch.setattr(
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
+        lambda _config_dir: db_path,
+    )
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    bucket = hass.data[DOMAIN][mock_config_entry.entry_id]
+    repo = bucket["climate_repository"]
+    nodes = await repo.async_list_nodes("site_test")
+    fruit = next(node for node in nodes if node.kind == KIND_FRUITING)
+    assert fruit.temperature_target == 20.0
+
+    await repo.async_set_setting_override(
+        SCOPE_NODE, fruit.id, SETTING_TEMPERATURE_TARGET, 23.5
+    )
+    await repo.async_set_setting_override(
+        SCOPE_ROW, "zone_test", SETTING_ROW_FAN_ON_MINUTES, 18
+    )
+    await repo.async_ensure_operator_layout(
+        "site_test",
+        general_room_id="env_test",
+        general_room_name="Test Tent",
+        general_temperature_target=22.0,
+        general_humidity_target=60.0,
+    )
+    refreshed = await repo.async_list_nodes("site_test")
+    assert next(node for node in refreshed if node.id == fruit.id).temperature_target == 23.5
+    assert (
+        await repo.async_get_setting_overrides(SCOPE_ROW, "zone_test")
+    )[SETTING_ROW_FAN_ON_MINUTES] == 18
+
+    await repo.async_clear_setting_overrides(SCOPE_NODE, fruit.id)
+    reset = await repo.async_list_nodes("site_test")
+    assert next(node for node in reset if node.id == fruit.id).temperature_target == 20.0
+
+    from custom_components.communifarm import climate_actions
+
+    monkeypatch.setattr(
+        hass.auth,
+        "async_get_user",
+        AsyncMock(return_value=SimpleNamespace(is_admin=True)),
+    )
+    await climate_actions.async_select_climate_settings_scope(
+        hass, mock_config_entry.entry_id, SCOPE_NODE, fruit.id
+    )
+    await climate_actions.async_set_climate_setting(
+        hass,
+        mock_config_entry.entry_id,
+        scope=SCOPE_NODE,
+        setting_key=SETTING_TEMPERATURE_TARGET,
+        value=24.0,
+        context=Context(user_id="admin"),
+    )
+    await hass.async_block_till_done()
+    ui_value = hass.states.get(ENTITY_CLIMATE_TEMPERATURE_TARGET)
+    assert ui_value is not None
+    assert float(ui_value.state) == 24.0
+    assert ui_value.attributes["value_source"] == "user override"
+
+    await climate_actions.async_reset_climate_settings(
+        hass,
+        mock_config_entry.entry_id,
+        scope=SCOPE_NODE,
+        context=Context(user_id="admin"),
+    )
+    await hass.async_block_till_done()
+    ui_reset = hass.states.get(ENTITY_CLIMATE_TEMPERATURE_TARGET)
+    assert ui_reset is not None
+    assert float(ui_reset.state) == 20.0
+    assert ui_reset.attributes["value_source"] == "repo default"
+
+    row_id = (await bucket["location_repository"].async_list_zones("site_test"))[0].id
+    await repo.async_set_setting_override(
+        SCOPE_ROW, row_id, SETTING_ROW_FAN_ON_MINUTES, 18
+    )
+    await climate_actions.async_select_climate_settings_scope(
+        hass, mock_config_entry.entry_id, SCOPE_ROW, row_id
+    )
+    await hass.async_block_till_done()
+    row_ui = hass.states.get(ENTITY_CLIMATE_ROW_FAN_ON)
+    assert row_ui is not None
+    assert float(row_ui.state) == 18
+    assert row_ui.attributes["value_source"] == "user override"
 
 
 @pytest.mark.asyncio
@@ -624,6 +1135,13 @@ async def test_tick_turns_fruiting_fan_on_then_off(
     seeded = hass.states.get(ENTITY_CLIMATE_STATUS)
     assert seeded is not None
     assert seeded.state == "11 nodes"
+    settings_node = hass.states.get(ENTITY_CLIMATE_SETTINGS_NODE)
+    assert settings_node is not None
+    assert "Test Tent (general room)" in settings_node.attributes["options"]
+    settings_temperature = hass.states.get(ENTITY_CLIMATE_TEMPERATURE_TARGET)
+    assert settings_temperature is not None
+    assert settings_temperature.attributes["value_source"] == "repo default"
+    assert hass.states.get(ENTITY_BTN_CLIMATE_RESET_NODE) is not None
     outdoor = hass.states.get("sensor.communifarm_outdoor_temperature")
     assert outdoor is not None
     assert float(outdoor.state) == 12.0
@@ -699,7 +1217,15 @@ async def test_tick_turns_fruiting_fan_on_then_off(
         hass.states.async_set(entity_id, "20")
     await hass.services.async_call(DOMAIN, SERVICE_TICK_CLIMATE, {}, blocking=True)
     await hass.async_block_till_done()
-    assert hass.states.get("fan.fruiting_circ").state == "off"
+    # Fruiting keeps base circulation while a climate reading exists (naive constant airflow).
+    assert hass.states.get("fan.fruiting_circ").state == "on"
+    recent_in_band = await repo.async_list_recent_intents()
+    assert any(
+        row["entity_id"] == "fan.fruiting_circ"
+        and row["turn_on"]
+        and "base circulation" in (row.get("reason") or "")
+        for row in recent_in_band
+    )
 
     again = await repo.async_list_nodes("site_test")
     assert [node.id for node in again] == [node.id for node in nodes]

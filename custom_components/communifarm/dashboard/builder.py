@@ -26,6 +26,8 @@ from ..const import (
     ENTITY_BATCH_NFC_UID,
     ENTITY_BATCH_STAGE,
     ENTITY_BTN_ACQUIRE_CULTURE,
+    ENTITY_BTN_CLIMATE_RESET_NODE,
+    ENTITY_BTN_CLIMATE_RESET_ROW,
     ENTITY_BTN_COMPLETE_NEW_BATCH,
     ENTITY_BTN_COMPLETELY_MIXED,
     ENTITY_BTN_CREATE_VARIETY,
@@ -49,7 +51,19 @@ from ..const import (
     ENTITY_BTN_STORED_COOLING,
     ENTITY_BTN_WATER_ADDED,
     ENTITY_CATALOG_VARIETY,
+    ENTITY_CLIMATE_CO2_TARGET,
+    ENTITY_CLIMATE_HUMIDITY_DEADBAND,
+    ENTITY_CLIMATE_HUMIDITY_TARGET,
+    ENTITY_CLIMATE_LIGHT_HOURS_OFF,
+    ENTITY_CLIMATE_LIGHT_HOURS_ON,
+    ENTITY_CLIMATE_OCCUPANCY_HOLD,
+    ENTITY_CLIMATE_ROW_FAN_OFF,
+    ENTITY_CLIMATE_ROW_FAN_ON,
+    ENTITY_CLIMATE_SETTINGS_NODE,
+    ENTITY_CLIMATE_SETTINGS_ROW,
     ENTITY_CLIMATE_STATUS,
+    ENTITY_CLIMATE_TEMP_DEADBAND,
+    ENTITY_CLIMATE_TEMPERATURE_TARGET,
     ENTITY_CONTAINER_COUNT,
     ENTITY_CONTAINER_TYPE,
     ENTITY_CULTURE_INVENTORY,
@@ -813,6 +827,46 @@ class DashboardBuilder:
                 ),
             }
         ]
+        cards.extend(
+            [
+                {
+                    "type": "entities",
+                    "title": "Room / tent automation settings",
+                    "show_header_toggle": False,
+                    "entities": [
+                        ENTITY_CLIMATE_SETTINGS_NODE,
+                        ENTITY_CLIMATE_TEMPERATURE_TARGET,
+                        ENTITY_CLIMATE_HUMIDITY_TARGET,
+                        ENTITY_CLIMATE_TEMP_DEADBAND,
+                        ENTITY_CLIMATE_HUMIDITY_DEADBAND,
+                        ENTITY_CLIMATE_CO2_TARGET,
+                        ENTITY_CLIMATE_LIGHT_HOURS_ON,
+                        ENTITY_CLIMATE_LIGHT_HOURS_OFF,
+                        ENTITY_CLIMATE_OCCUPANCY_HOLD,
+                        ENTITY_BTN_CLIMATE_RESET_NODE,
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Row fan settings",
+                    "show_header_toggle": False,
+                    "entities": [
+                        ENTITY_CLIMATE_SETTINGS_ROW,
+                        ENTITY_CLIMATE_ROW_FAN_ON,
+                        ENTITY_CLIMATE_ROW_FAN_OFF,
+                        ENTITY_BTN_CLIMATE_RESET_ROW,
+                    ],
+                },
+                {
+                    "type": "markdown",
+                    "content": (
+                        "Settings show **repo default** or **user override** in their "
+                        "attributes. Changes require an HA administrator. Reset removes "
+                        "overrides so future repository defaults apply automatically."
+                    ),
+                },
+            ]
+        )
         if not points:
             cards.append(
                 {

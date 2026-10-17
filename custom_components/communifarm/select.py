@@ -14,15 +14,19 @@ from .const import (
     ENTITY_ACQUIRE_SOURCE,
     ENTITY_ACTIVE_INOCULUM,
     ENTITY_CATALOG_VARIETY,
+    ENTITY_CLIMATE_SETTINGS_NODE,
+    ENTITY_CLIMATE_SETTINGS_ROW,
     ENTITY_CONTAINER_TYPE,
     ENTITY_CULTURE_VESSEL_STATUS,
     ENTITY_HEAT_TREATMENT,
     ENTITY_PAYMENT_METHOD,
     ENTITY_SALE_BUYER,
     ENTITY_SALE_VENUE,
+    SIGNAL_CLIMATE_SETTINGS_UPDATED,
     SIGNAL_CULTURE_UPDATED,
 )
 from .domain.batch_milestones import HEAT_PASTEURIZED, HEAT_STERILIZED
+from .domain.climate_settings import SCOPE_NODE, SCOPE_ROW
 from .domain.culture import (
     CULTURE_STATUS_READY,
     FORM_AGAR,
@@ -50,6 +54,7 @@ from .domain.sale import (
     PAYMENT_VENMO,
 )
 from .entity import CommunifarmEntity
+from .settings_access import async_require_automation_settings_access
 from .storage.culture_repository import CultureRepository
 
 
@@ -207,9 +212,84 @@ async def async_setup_entry(
             CommunifarmBucketSelect(entry_id, _BUCKET_SELECTS[1]),
             CommunifarmActiveInoculumSelect(entry_id),
             CommunifarmCatalogVarietySelect(entry_id),
+            CommunifarmClimateScopeSelect(
+                entry_id,
+                scope=SCOPE_NODE,
+                name="Climate settings room",
+                entity_id=ENTITY_CLIMATE_SETTINGS_NODE,
+            ),
+            CommunifarmClimateScopeSelect(
+                entry_id,
+                scope=SCOPE_ROW,
+                name="Climate settings row",
+                entity_id=ENTITY_CLIMATE_SETTINGS_ROW,
+            ),
             *[CommunifarmBucketSelect(entry_id, spec) for spec in _BUCKET_SELECTS[2:]],
         ]
     )
+
+
+class CommunifarmClimateScopeSelect(CommunifarmSelect):
+    """Choose which persisted room or row the settings entities edit."""
+
+    _attr_icon = "mdi:map-marker-radius"
+    _attr_options = ["(loading)"]
+
+    def __init__(
+        self, entry_id: str, *, scope: str, name: str, entity_id: str
+    ) -> None:
+        super().__init__(
+            entry_id,
+            name=name,
+            unique_id=f"communifarm_climate_settings_{scope}",
+            entity_id=entity_id,
+        )
+        self._scope = scope
+        self._option_to_id: dict[str, str] = {}
+        self._current: str | None = None
+
+    async def async_added_to_hass(self) -> None:
+        if "climate_settings_values" not in self.bucket():
+            from . import climate_actions
+
+            await climate_actions.async_refresh_climate_settings_editor(
+                self.hass, self._entry_id
+            )
+        await self._async_reload_options()
+        self.listen_entry_signals(
+            SIGNAL_CLIMATE_SETTINGS_UPDATED, method="_async_reload_options"
+        )
+
+    async def _async_reload_options(self) -> None:
+        options_key = f"climate_settings_{self._scope}_options"
+        selected_key = f"climate_settings_{self._scope}_id"
+        self._option_to_id = dict(self.bucket().get(options_key, {}))
+        self._attr_options = list(self._option_to_id) or ["(none available)"]
+        selected_id = self.bucket().get(selected_key)
+        self._current = next(
+            (
+                label
+                for label, scope_id in self._option_to_id.items()
+                if scope_id == selected_id
+            ),
+            None,
+        )
+        self.async_write_ha_state()
+
+    @property
+    def current_option(self) -> str | None:
+        return self._current
+
+    async def async_select_option(self, option: str) -> None:
+        scope_id = self._option_to_id.get(option)
+        if scope_id is None:
+            return
+        await async_require_automation_settings_access(self.hass, self._context)
+        from . import climate_actions
+
+        await climate_actions.async_select_climate_settings_scope(
+            self.hass, self._entry_id, self._scope, scope_id
+        )
 
 
 class CommunifarmActiveInoculumSelect(CommunifarmSelect):

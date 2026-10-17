@@ -32,3 +32,4 @@ Add a row when the first real case for that process exists.
 | process | case file | operator doc |
 |---------|-----------|--------------|
 | Air-exchange tachometer | [air-exchange-tachometer.md](./air-exchange-tachometer.md) | [hardware/air-exchange-tachometer.md](../../hardware/air-exchange-tachometer.md) |
+| Climate automation | [climate-automation.md](./climate-automation.md) | [user/climate.md](../../user/climate.md) |

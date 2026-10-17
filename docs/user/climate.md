@@ -2,7 +2,21 @@
 
 Communifarm can track more than one climate. A room or tent may have its own sensors, borrow the parent room’s reading, or stay unmonitored. Machines run only when a reading says they should, and only if you bound them.
 
+This slice starts **naive**: on/off intents from fresh sensor readings, shipped deadbands, and a short settle rule when the general room exchanges outdoor air. Later versions harden CEA maintenance (timed settle, prefilters, measured CFM, O2) without throwing away the same sensor→actuator path.
+
 Energy estimates and cost of goods are not part of this yet.
+
+## Planned equipment (this site)
+
+| Location | Equipment | Communifarm roles |
+| --- | --- | --- |
+| Outdoors | Temp / humidity / pressure | `temperature`, `humidity`, `pressure` |
+| General room | Outside intake fan, exhaust fan, AC (cool + dehumidify as bound), heater, float + condensate pump | `fresh_air_intake`, `exhaust_fan`, `ac`, `dehumidifier` (if separate), `heater`, `float`, `condensate_pump` |
+| Each tent | 5× circulation, 1× intake (from general), 1× exhaust (to general) | five `circulation_fan` bindings + `intake_fan` + `exhaust_fan` |
+| Fruiting tent | Humidifier (plus the tent fans above) | `humidifier` |
+| Inoculation / incubation | CO2 ppm (O2 not bound yet — high CO2 is the naive proxy for stale air) | `co2_ppm` |
+
+Bind every physical fan/switch you install. Unbound roles never get inventing commands.
 
 ## Seed the layout
 
@@ -57,7 +71,7 @@ Harvest and the storage rooms are names on the drawing only. They are not given 
 
 `communifarm.bind_climate_role` adds another entity on that node and role. Use it when a real sensor or machine should replace the stand-in. The stand-in stays until you remove that binding.
 
-Roles: `temperature`, `humidity`, `pressure`, `co2_ppm`, `circulation_fan`, `intake_fan`, `exhaust_fan`, `fresh_air_intake`, `ac`, `heater`, `humidifier`, `dehumidifier`, `light`, `float`, `condensate_pump`.
+Roles: `temperature`, `humidity`, `pressure`, `co2_ppm`, `occupancy`, `culture_activity`, `circulation_fan`, `intake_fan`, `exhaust_fan`, `fresh_air_intake`, `ac`, `heater`, `humidifier`, `dehumidifier`, `light`, `float`, `condensate_pump`.
 
 You can bind several temperature sensors on one tent. One is enough. The decision uses the median and ignores unavailable sensors.
 
@@ -82,7 +96,102 @@ Every minute, and when you call `tick_climate`, Communifarm reads those entities
 | Float clear, missing, or no climate reading | Pump, heater, AC, humidifier, and dehumidifier stay off |
 | Control off (storage and the like) | No commands, even if you bound a machine |
 
-Deadband starts at ±1°C and ±5% RH so the machines do not chatter.
+Shipped deadbands are ±1°C and ±5% RH (about 5% of a 20°C fruiting target for
+temperature; humidity uses RH points). Administrators can override them on the
+Climate tab; repository defaults still update with each Communifarm version when
+no override is stored.
+
+Exchange air (parent or outdoor) must help **every** active excursion at once.
+Cool-but-wet outdoor air is not used to “fix” a tent that is both too hot and
+too dry.
+
+Fruiting and incubation keep **base circulation** on whenever a climate reading
+exists (near-constant interior airflow). Out-of-band or high CO2 adds high-flow
+reasons on the same fans. Row fans still use stage/variety duty cycles.
+
+When the general room is exchanging outdoor air (fresh-air intake or helpful
+exchange exhaust/intake), tent **intakes settle off** so tents do not pull
+unsettled or dirtier room air. Circulation and tent exhaust may stay on. A
+duct prefilter / timed settle window is the upgrade path; this slice only
+throttles intake while the room exchange is active.
+
+The general-room outside-air intake and exhaust are independent bindings. The
+controller commands each entity separately.
+
+Pressure is displayed but is not a default fan trigger. Safe pressure control
+needs a calibrated differential-pressure sensor, a commissioned target, and a
+known relief path. Two ordinary absolute-pressure sensors are not a cleanroom
+controller, no matter how persuasive the dashboard looks.
+
+## Example control flows (naive)
+
+| Sensor story | Expected actions |
+| --- | --- |
+| Tent CO2 above target | Tent intake + exhaust + circulation on (flush with parent air) |
+| Tent temp/RH beyond deadband; general cooler and drier enough to reach targets | Tent intake + exhaust on; AC off; circulation high-flow |
+| Tent out of band; general also too hot/wet; outdoor unhelpful | Tent exchange off; general AC and/or dehumidifier on; tent humidifier only if too dry |
+| General too hot; outdoor air can reach the room target | General `fresh_air_intake` + exhaust on; tent intakes settle off |
+| Fruiting RH below target − deadband | Fruiting humidifier on; base circulation stays on |
+| Float wet in general room | Condensate pump on (independent of temp) |
+
+O2 is not a bound metric yet. Treat high CO2 as the stale-air signal until an O2 role exists.
+
+## Activity and occupancy
+
+Bind a binary presence entity as `occupancy`. `on` may come from a camera
+presence integration, HC-SR04 occupancy helper, or another HA binary entity.
+Presence turns the bound room light on even outside its normal schedule. After
+the last confirmed presence, the light stays on for 20 minutes and then returns
+to the biological schedule.
+
+For Culture prep or Inoculation, also bind a binary task signal as
+`culture_activity`. The circulation fan runs only when culture activity and
+occupancy are both active (including the vacancy hold). Presence alone does not
+claim that culture work happened.
+
+## Row-specific circulation
+
+Bind a row fan with `communifarm.bind_climate_role`, role
+`circulation_fan`, and that row's `zone_id`. Communifarm resolves the active
+batch assigned to the zone, follows its lifecycle stage, then resolves its
+culture variety.
+
+| crop context | initial fan policy |
+| --- | --- |
+| Blue/white oyster in fruiting or harvesting | 15 minutes on / 5 minutes off |
+| Other/unknown variety in fruiting or harvesting | 10 minutes on / 10 minutes off |
+| Inoculated/incubating, complete, or no active batch | off |
+
+These are commissioning defaults, not proof of airflow. Measure at crop height;
+the Pleurotus study cited below reported its best tested result at 0.3 m/s.
+Room geometry, fan position, and obstructions decide whether an on/off command
+actually produces that.
+
+## Change automation settings in the UI
+
+Open **Communifarm → Climate**. The settings cards use ordinary Home Assistant
+select, number, and button entities:
+
+1. Choose a room/tent or row.
+2. Change the target, deadband, light timing, occupancy hold, or row fan cycle.
+3. The next climate tick uses the saved override.
+4. Press **Reset selected climate … defaults** to remove every override for
+   that selected room or row.
+
+Each number entity has a `value_source` attribute:
+
+| value | meaning |
+| --- | --- |
+| `repo default` | The value comes from the version-controlled Communifarm preset. A future merged default change applies automatically. |
+| `user override` | The local SQLite override wins until an administrator resets it. |
+
+Overrides are per room/tent or row and survive restarts/upgrades. Changing one
+room does not rewrite the global preset or another room. A CO2 target of `0`
+disables CO2-triggered ventilation for the selected node.
+
+Only authenticated Home Assistant administrators may select/edit/reset these
+settings today. A dedicated Communifarm operator role is planned; it is not
+silently approximated by granting every dashboard user control.
 
 ## Lights
 
@@ -134,6 +243,28 @@ The image the layout tab shows is `config/www/communifarm/cea-layout.png` (`/loc
 
 If a sensor is unavailable and there is no parent value, climate machines are not turned on. A missing float turns the condensate pump off. Commands go only to entities you bound. This slice does not add an ESP32 program that keeps running if Home Assistant is down.
 
+## Purchase Checklist
+
+| have | item | level | why | lower-cost substitute | upgrade path |
+| --- | --- | --- | --- | --- | --- |
+| [ ] | General outside intake + exhaust fans | basic | Exchange outdoor air when it helps | One reversible fan | Separate OA intake + exhaust with dampers |
+| [ ] | Per-tent intake + exhaust | basic | Move air vs general room | Shared duct with dampers | Dedicated fans per tent |
+| [ ] | Five circulation fans per tent | reliable home | Near-constant interior mixing | 2–3 clip fans | Row-zoned fans + tach logging |
+| [ ] | Fruiting humidifier | basic | Hold high RH for pinning | Hand mist (higher variance) | Humidistat-linked ultrasonic + RO water |
+| [ ] | General AC / dehumidifier | reliable home | Condition parent air when outdoor will not help | AC only; watch RH | Separate dehumidifier + AC |
+| [ ] | Tent CO2 sensor (inoc/incubate first) | reliable home | Stale-air / exchange trigger | Periodic manual meter | Multi-tent CO2 + future O2 |
+| [ ] | Intake prefilter on general OA | advanced clean | Dirtier outdoor air before tents pull | Settle-only throttle (software today) | MERV/HEPA + timed settle |
+
+## Minimal Process Upgrades
+
+| current setup | smallest upgrade | failure mode reduced | why this first | source |
+| --- | --- | --- | --- | --- |
+| Fans guesswork | Bind sensors; let tick drive on/off | Blind actuation | Readings before more hardware | Operator layout |
+| Tent pulls during room OA exchange | Keep settle throttle (shipped) | Contaminated/unsettled intake | Software before duct rebuild | This doc |
+| Settling only | Add OA prefilter | Dust/spore load on exchange | Filter when exchange is routine | SARE culture-lab notes (V6) |
+| On/off only | Log CFM/RPM per vent | Unproven airflow claims | Measurement before PWM | [air-exchange-tachometer.md](../hardware/air-exchange-tachometer.md) |
+| CO2 proxy only | Add O2 role later | Ambiguous stale-air signal | CO2 evidence first | Zhang et al. 2022 |
+
 ## Sources
 
 | Claim | Source |
@@ -141,3 +272,10 @@ If a sensor is unavailable and there is no parent value, climate machines are no
 | Incubation 20–24°C, fruiting 15–21°C for standard gourmet, tropical fruiting up to about 30°C, colonization 70–80% RH, pinning and fruiting 85–95% RH, harvest 80–90% RH | Operator note, 2026-10-01, captured in `docs/intake/2026-10-01-operator-growing-conditions.md` |
 | Fruiting 12 h on / 12 h off; colonization does not need a fruiting light cycle | Paul Stamets, *Growing Gourmet and Medicinal Mushrooms* |
 | 16 h vegetative photoperiod for leafy greens | Toyoki Kozai, *Plant Factory* |
+| Stage/species-aware ventilation; Agaricus pinning/cropping 1,000–2,500 ppm | Penn State Extension, *Basic Procedures for Agaricus Mushroom Growing* |
+| Fruiting Pleurotus sensitivity to excessive CO2 | Zhang et al., 2022, PMCID PMC9321156 |
+| Tested Pleurotus air-velocity result of 0.3 m/s | Oh et al., *Journal of Mushrooms*, 2019 |
+| 20-minute vacancy timeout used as the occupancy-light default | 2021 IECC occupancy-control summary |
+| Culture labs separated/cleanable; HEPA when advancing | SARE *Specialty Mushroom Farm Book* (intake V6) |
+
+Operator-facing verification: [climate automation test cases](../process/test-cases/climate-automation.md).

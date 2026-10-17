@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 15
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -524,6 +524,29 @@ MIGRATIONS: dict[int, str] = {
       ON tachometer_readings (vent_id, recorded_at);
     CREATE INDEX IF NOT EXISTS idx_tachometer_readings_site_time
       ON tachometer_readings (site_id, recorded_at);
+    """,
+    14: """
+    ALTER TABLE climate_bindings ADD COLUMN zone_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_climate_bindings_zone
+      ON climate_bindings (zone_id, role);
+
+    ALTER TABLE climate_intents ADD COLUMN zone_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_climate_intents_zone_time
+      ON climate_intents (zone_id, recorded_at);
+    """,
+    15: """
+    CREATE TABLE IF NOT EXISTS climate_setting_overrides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope_type TEXT NOT NULL,
+      scope_id TEXT NOT NULL,
+      setting_key TEXT NOT NULL,
+      value REAL NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (scope_type, scope_id, setting_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_climate_setting_overrides_scope
+      ON climate_setting_overrides (scope_type, scope_id);
     """,
 }
 

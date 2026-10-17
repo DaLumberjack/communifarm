@@ -62,6 +62,8 @@ ROLE_TEMPERATURE = "temperature"
 ROLE_HUMIDITY = "humidity"
 ROLE_PRESSURE = "pressure"
 ROLE_CO2_PPM = "co2_ppm"
+ROLE_OCCUPANCY = "occupancy"
+ROLE_CULTURE_ACTIVITY = "culture_activity"
 ROLE_CIRCULATION_FAN = "circulation_fan"
 ROLE_INTAKE_FAN = "intake_fan"
 ROLE_EXHAUST_FAN = "exhaust_fan"
@@ -75,7 +77,15 @@ ROLE_FLOAT = "float"
 ROLE_CONDENSATE_PUMP = "condensate_pump"
 
 SENSOR_ROLES = frozenset(
-    {ROLE_TEMPERATURE, ROLE_HUMIDITY, ROLE_PRESSURE, ROLE_CO2_PPM, ROLE_FLOAT}
+    {
+        ROLE_TEMPERATURE,
+        ROLE_HUMIDITY,
+        ROLE_PRESSURE,
+        ROLE_CO2_PPM,
+        ROLE_OCCUPANCY,
+        ROLE_CULTURE_ACTIVITY,
+        ROLE_FLOAT,
+    }
 )
 ACTUATOR_ROLES = frozenset(
     {
@@ -108,6 +118,7 @@ DEFAULT_TEMP_DEADBAND_C = 1.0
 DEFAULT_HUMIDITY_DEADBAND = 5.0
 DEFAULT_CO2_PPM_TARGET = 1000.0
 LIGHT_GRACE_MINUTES = 15
+OCCUPANCY_HOLD_MINUTES = 20
 
 # Placement shelves are not climate nodes. This only links a shelf to a climate.
 PLACEMENT_AREA_CLIMATE_KIND: dict[str, str] = {
@@ -172,6 +183,9 @@ OPERATOR_SPECS: tuple[ClimateKindSpec, ...] = (
             ROLE_AC,
             ROLE_HEATER,
             ROLE_FRESH_AIR_INTAKE,
+            ROLE_EXHAUST_FAN,
+            ROLE_OCCUPANCY,
+            ROLE_LIGHT,
             ROLE_FLOAT,
             ROLE_CONDENSATE_PUMP,
         ),
@@ -186,7 +200,7 @@ OPERATOR_SPECS: tuple[ClimateKindSpec, ...] = (
         50.0,
         None,
         PHOTOPERIOD_DARK,
-        TENT_ROLES,
+        TENT_ROLES + (ROLE_OCCUPANCY, ROLE_CULTURE_ACTIVITY, ROLE_LIGHT),
     ),
     ClimateKindSpec(
         KIND_INOCULATION,
@@ -198,7 +212,8 @@ OPERATOR_SPECS: tuple[ClimateKindSpec, ...] = (
         50.0,
         DEFAULT_CO2_PPM_TARGET,
         PHOTOPERIOD_DARK,
-        TENT_ROLES + (ROLE_CO2_PPM,),
+        TENT_ROLES
+        + (ROLE_CO2_PPM, ROLE_OCCUPANCY, ROLE_CULTURE_ACTIVITY, ROLE_LIGHT),
     ),
     ClimateKindSpec(
         KIND_INCUBATION,
@@ -210,7 +225,7 @@ OPERATOR_SPECS: tuple[ClimateKindSpec, ...] = (
         75.0,
         DEFAULT_CO2_PPM_TARGET,
         PHOTOPERIOD_DARK,
-        TENT_ROLES + (ROLE_FRESH_AIR_INTAKE, ROLE_CO2_PPM),
+        TENT_ROLES + (ROLE_FRESH_AIR_INTAKE, ROLE_CO2_PPM, ROLE_OCCUPANCY),
     ),
     ClimateKindSpec(
         KIND_FRUITING,
@@ -222,7 +237,8 @@ OPERATOR_SPECS: tuple[ClimateKindSpec, ...] = (
         90.0,
         None,
         PHOTOPERIOD_FRUITING,
-        TENT_ROLES + (ROLE_HUMIDIFIER, ROLE_DEHUMIDIFIER, ROLE_LIGHT),
+        TENT_ROLES
+        + (ROLE_HUMIDIFIER, ROLE_DEHUMIDIFIER, ROLE_LIGHT, ROLE_OCCUPANCY),
     ),
     ClimateKindSpec(
         KIND_HARVEST,
@@ -305,6 +321,7 @@ class ClimateNode:
     co2_ppm_target: float | None = None
     temp_deadband: float = DEFAULT_TEMP_DEADBAND_C
     humidity_deadband: float = DEFAULT_HUMIDITY_DEADBAND
+    occupancy_hold_minutes: float = OCCUPANCY_HOLD_MINUTES
     photoperiod_preset: str | None = None
     light_hours_on: float | None = None
     light_hours_off: float | None = None
@@ -328,6 +345,7 @@ class ClimateBinding:
     entity_id: str | None = None
     id: str = ""
     waste_heat_to_parent: bool = False
+    zone_id: str | None = None
     created_at: str | None = None
 
     def __post_init__(self) -> None:
@@ -385,6 +403,8 @@ def validate_climate_node(node: ClimateNode) -> None:
         raise ValidationError("temp_deadband must be between 0 and 20 °C")
     if not (0.0 < node.humidity_deadband <= 50.0):
         raise ValidationError("humidity_deadband must be between 0 and 50 %")
+    if not (0.0 <= node.occupancy_hold_minutes <= 120.0):
+        raise ValidationError("occupancy_hold_minutes must be between 0 and 120")
     if node.photoperiod_preset and node.photoperiod_preset not in PHOTOPERIOD_HOURS:
         raise ValidationError(f"unknown photoperiod preset: {node.photoperiod_preset}")
 
