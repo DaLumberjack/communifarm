@@ -4,6 +4,48 @@
 
 On this Windows host the executable is **`py`**, not `python`. Local scripts and docs should call `py` / `py -m ...`. (Remote HAOS deploy checks may still use `python3` on the Linux VM.)
 
+## After a Windows reboot
+
+Nothing in this stack starts itself. A reboot stops Docker’s Linux engine, the Home Assistant container, and OpenBao (which also seals). Do the rows in order. Commands that do not exist: `docker:run`, `npm docker:run`, `yarn docker:run`.
+
+Work from `repos/communifarm`. Leave two things running for the rest of the session: the Docker Desktop app, and the terminal that is running `bao server`.
+
+| Step | Turn on | Manual action | Done when |
+| --- | --- | --- | --- |
+| 1 | Docker Desktop | Start menu → **Docker Desktop**. Wait past the UI saying Running. | `docker version` prints a **Server:** block that includes an engine **Version:** |
+| 2 | Home Assistant | `docker compose -f .devcontainer/docker-compose.yml up -d homeassistant` | [http://127.0.0.1:8123](http://127.0.0.1:8123) loads a login page |
+| 3 | OpenBao server | New terminal. Leave it open. Commands in [openbao.md](openbao.md#start-openbao-terminal-1). | Log line `OpenBao server started!` |
+| 4 | Unseal | Second terminal. `bao operator unseal` **three** times (three key shares). | Server log: `vault is unsealed` |
+| 5 | Login | Same second terminal. `bao login`, then `export BAO_NAMESPACE=homelab`. | `bao kv get kv/ha-test` lists field names (do not paste values) |
+
+Then, only if you want the UI: open [http://127.0.0.1:8123](http://127.0.0.1:8123) and log in. Playwright does that itself once steps 1–5 are done. It reads `kv/ha-test` (`username_dev_container` / `password_dev_container`). No extra export.
+
+`devcontainer/ha_config` is a folder on disk, so a reboot does **not** wipe Home Assistant. You should land on the login page. Onboarding (`/onboarding.html`) means that folder was empty or replaced — finish **Create my smart home** or restore a backup. See [local HA bootstrap](../../../../docs/intermediate/local-ha-bootstrap.md) in the workspace.
+
+### Engine 500 (`dockerDesktopLinuxEngine`)
+
+Docker Desktop can say **Running** while the engine is dead. Both of these mean step 1 is not done:
+
+- `docker version` shows **Client:** only, then `500 Internal Server Error` for `dockerDesktopLinuxEngine`
+- `docker compose ... up` fails with `unable to get image 'ghcr.io/home-assistant/home-assistant:stable'` and the same 500
+
+`docker desktop status` can still print `running`. The named pipe is up; the Linux VM behind it is not answering.
+
+1. Whale menu → **Quit Docker Desktop** (closing the window leaves the backend running).
+2. `wsl -t docker-desktop`
+3. If that hangs or compose still 500s: `wsl --shutdown`, then start Docker Desktop again.
+4. Wait until `docker version` shows **Server:** with an engine version. The UI often flips to Running before the engine does.
+5. Retry step 2.
+
+### Leave off unless you need it
+
+| Thing | Start it when |
+| --- | --- |
+| Compose service `dev` (`sleep infinity`) | You use **Reopen in Container**. Day-to-day host tests only need `homeassistant`. `up` with no service name also starts `dev`. |
+| Test VM `192.168.102.20` | T3 only. See [test-vm-deploy.md](test-vm-deploy.md). It is a different machine and does not come back with this PC. |
+| Physical ESPHome devices | You are on live hardware. Local T1 uses mocks already in the HA config. |
+| `yarn provision:ha-token` | First machine setup, or the long-lived token was rotated. Not every boot. |
+
 ## Prerequisite: Docker Desktop must be running
 
 On Windows, the Docker CLI (`docker version` Client) can be installed while the **engine is off**. Local Home Assistant compose needs the Docker Desktop application running.
@@ -16,7 +58,7 @@ On Windows, the Docker CLI (`docker version` Client) can be installed while the 
 docker version
 ```
 
-You must see a **Server:** section. If you only see Client and an error about `dockerDesktopLinuxEngine`, Docker Desktop is not running — compose will fail the same way.
+You must see a **Server:** section **with an engine version**. Client-only output, or `500` on `dockerDesktopLinuxEngine`, means the UI is up and the engine is not. Recovery is in [After a Windows reboot](#after-a-windows-reboot).
 
 Optional service check (PowerShell):
 

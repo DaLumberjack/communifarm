@@ -1,6 +1,6 @@
 # Local Home Assistant fixtures for Communifarm T1/T2
 
-**Prerequisite:** Start the **Docker Desktop** application before `docker compose ... up`. The CLI alone is not enough; `docker version` must show a Server section. Details: [docs/user/local-development.md](../docs/user/local-development.md).
+**Prerequisite:** after a reboot, follow [After a Windows reboot](../../docs/user/local-development.md#after-a-windows-reboot). `docker version` must show a Server engine version. A `500` from `dockerDesktopLinuxEngine` means quit Docker Desktop and start it again — compose will not pull the image until that clears.
 
 ## What is committed vs ignored
 

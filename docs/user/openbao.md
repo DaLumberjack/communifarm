@@ -2,6 +2,8 @@
 
 Playwright T1/T2/T3 and shared HA logins read credentials from OpenBao. **OpenBao must be running and unsealed** or `load_openbao_ha_secrets.sh` / the UI will fail.
 
+After a Windows reboot this is steps 3–5 of the full start order (Docker, then Home Assistant, then OpenBao). Checklist: [local-development.md](local-development.md#after-a-windows-reboot).
+
 ## Secret location
 
 | Item | Value |
