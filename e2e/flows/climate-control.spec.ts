@@ -20,5 +20,19 @@ test.describe("Climate control (T1)", () => {
       "sensor.communifarm_climate_status"
     );
     expect(status).toBe("11 nodes");
+
+    const targetEntity = "number.communifarm_climate_temperature_target";
+    const original = Number.parseFloat(await getStateViaHass(page, targetEntity));
+    expect(Number.isFinite(original)).toBeTruthy();
+    await callServiceViaHass(page, "number", "set_value", {
+      entity_id: targetEntity,
+      value: 23.5,
+    });
+    expect(Number.parseFloat(await getStateViaHass(page, targetEntity))).toBe(23.5);
+
+    await callServiceViaHass(page, "button", "press", {
+      entity_id: "button.communifarm_climate_reset_node",
+    });
+    expect(Number.parseFloat(await getStateViaHass(page, targetEntity))).toBe(original);
   });
 });

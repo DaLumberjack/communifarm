@@ -18,6 +18,12 @@ Estimated power and cost of goods are a later branch.
 4. Control decisions are pure domain code. The adapter reads Home Assistant states (the same states ESPHome publishes) and calls `turn_on` / `turn_off` on bound entities only.
 5. Nodes with `control_enabled` false (harvest, ready to sell, storage) never produce intents.
 6. Fail-safe for this slice is “do not actuate blind.” ESP32 last-state fallback stays a later milestone. No pin maps.
+7. Repository presets remain version-controlled defaults. Schema v15 stores only
+   per-node/per-row overrides in `climate_setting_overrides`; effective value
+   resolution is default then override. Reset deletes overrides.
+8. Native HA select/number/button entities provide the managed settings UI.
+   Persistent changes require an HA administrator until a real Communifarm
+   operator role exists.
 
 ## Consequences
 
@@ -25,3 +31,5 @@ Estimated power and cost of goods are a later branch.
 - A 60-second tick plus `tick_climate` run the same decision function.
 - Dashboard overview shows `sensor.communifarm_climate_status`.
 - Energy dashboard integration is intentionally not in this slice.
+- Merged preset changes reach installations that have not overridden that
+  setting. Local choices survive upgrade without forking repository data.

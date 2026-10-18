@@ -286,6 +286,7 @@ BIND_CLIMATE_ROLE_SCHEMA = vol.Schema(
         vol.Required("entity_id"): cv.entity_id,
         vol.Optional("entity_entry_id"): cv.string,
         vol.Optional("waste_heat_to_parent", default=False): cv.boolean,
+        vol.Optional("zone_id"): cv.string,
     }
 )
 
@@ -702,6 +703,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entity_id=call.data["entity_id"],
             entity_entry_id=call.data.get("entity_entry_id"),
             waste_heat_to_parent=bool(call.data.get("waste_heat_to_parent", False)),
+            zone_id=call.data.get("zone_id"),
         )
 
     async def async_upsert_air_vent(call: ServiceCall) -> None:

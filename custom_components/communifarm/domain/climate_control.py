@@ -8,12 +8,18 @@ from statistics import median
 
 from .climate import (
     ENCLOSURE_OUTDOOR,
+    KIND_CULTURE_PREP,
+    KIND_FRUITING,
+    KIND_GENERAL_ROOM,
+    KIND_INCUBATION,
+    KIND_INOCULATION,
     KIND_OUTDOOR,
     LIGHT_GRACE_MINUTES,
     ROLE_AC,
     ROLE_CIRCULATION_FAN,
     ROLE_CO2_PPM,
     ROLE_CONDENSATE_PUMP,
+    ROLE_CULTURE_ACTIVITY,
     ROLE_DEHUMIDIFIER,
     ROLE_EXHAUST_FAN,
     ROLE_FLOAT,
@@ -33,6 +39,14 @@ from .climate import (
     resolve_effective_readings,
     resolved_photoperiod,
 )
+from .climate_airflow import (
+    CAPABILITY_HUMAN_REQUIRED,
+    CapabilityNotice,
+    EnclosureAirflow,
+    ExchangeProgress,
+    assess_exchange,
+    notice_from_estimate,
+)
 
 _FANS = (
     ROLE_CIRCULATION_FAN,
@@ -41,6 +55,13 @@ _FANS = (
     ROLE_FRESH_AIR_INTAKE,
 )
 
+# Tents that pull conditioned air from the general room.
+_TENT_KINDS = frozenset(
+    {KIND_CULTURE_PREP, KIND_INOCULATION, KIND_INCUBATION, KIND_FRUITING}
+)
+# Naive: keep interior movement on while controlled and a climate reading exists.
+_BASE_CIRCULATION_KINDS = frozenset({KIND_FRUITING, KIND_INCUBATION})
+
 
 @dataclass(slots=True)
 class ObservedState:
@@ -48,6 +69,26 @@ class ObservedState:
 
     light_on: bool = False
     light_on_since: datetime | None = None
+    occupied: bool = False
+    last_occupied_at: datetime | None = None
+    # Smoothed OA / conditioning history for undersize assessment.
+    exchange_or_condition_on_since: datetime | None = None
+    temp_when_action_started: float | None = None
+    humidity_when_action_started: float | None = None
+    outdoor_temp_when_started: float | None = None
+    outdoor_humidity_when_started: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RowControlContext:
+    """Production context for one independently controlled row/zone fan."""
+
+    node_id: str
+    zone_id: str
+    lifecycle_phase: str
+    variety_slug: str | None = None
+    fan_on_minutes: float | None = None
+    fan_off_minutes: float | None = None
 
 
 @dataclass(slots=True)
@@ -59,12 +100,14 @@ class ControlIntent:
     entity_id: str
     turn_on: bool
     reason: str
+    zone_id: str | None = None
 
 
 @dataclass(slots=True)
 class ControlDecision:
     readings: dict[str, dict[str, EffectiveReading]]
     intents: list[ControlIntent]
+    notices: list[CapabilityNotice] | None = None
 
 
 def light_should_be_on(node: ClimateNode, now: datetime) -> bool:
@@ -85,29 +128,55 @@ def decide_control(
     bindings_by_node: dict[str, list[ClimateBinding]],
     observed_by_node: dict[str, ObservedState],
     now: datetime,
+    row_contexts: list[RowControlContext] | None = None,
 ) -> ControlDecision:
     """Return intents for bound actuators only. Uncontrolled nodes stay quiet."""
     readings = resolve_effective_readings(nodes, samples_by_node)
     by_id = {node.id: node for node in nodes}
     desired_light = {node.id: light_should_be_on(node, now) for node in nodes}
-    intents: list[ControlIntent] = []
+    cmds_by_node: dict[str, dict[str, tuple[bool, str]]] = {}
     for node in nodes:
         if not node.control_enabled:
             continue
-        intents.extend(
-            _decide_node(
-                node,
-                nodes,
-                by_id,
-                readings,
-                samples_by_node.get(node.id, []),
-                bindings_by_node,
-                observed_by_node,
-                desired_light,
-                now,
-            )
+        cmds_by_node[node.id] = _decide_node(
+            node,
+            nodes,
+            by_id,
+            readings,
+            samples_by_node.get(node.id, []),
+            bindings_by_node,
+            observed_by_node,
+            desired_light,
+            now,
         )
-    return ControlDecision(readings=readings, intents=intents)
+    if _general_outdoor_exchange_active(nodes, cmds_by_node):
+        for node in nodes:
+            if node.kind not in _TENT_KINDS or node.id not in cmds_by_node:
+                continue
+            _throttle_tent_intake_during_parent_exchange(cmds_by_node[node.id])
+    notices = _capability_notices(
+        nodes,
+        by_id,
+        readings,
+        cmds_by_node,
+        bindings_by_node,
+        observed_by_node,
+        now,
+    )
+    intents: list[ControlIntent] = []
+    for node in nodes:
+        cmds = cmds_by_node.get(node.id)
+        if cmds is None:
+            continue
+        intents.extend(_emit(node.id, bindings_by_node.get(node.id, []), cmds))
+    intents.extend(
+        _decide_row_fans(
+            bindings_by_node,
+            row_contexts or [],
+            now,
+        )
+    )
+    return ControlDecision(readings=readings, intents=intents, notices=notices)
 
 
 def format_decision_summary(
@@ -145,7 +214,92 @@ def format_decision_summary(
         else:
             tail = "Holding."
         lines.append(f"- **{node.name}** — {', '.join(bits)}. {tail}")
+    for notice in decision.notices or []:
+        node = next((item for item in nodes if item.id == notice.node_id), None)
+        label = node.name if node is not None else notice.node_id
+        lines.append(f"- **{label} notice ({notice.code})**: {notice.message}")
     return "\n".join(lines)
+
+
+def _capability_notices(
+    nodes: list[ClimateNode],
+    by_id: dict[str, ClimateNode],
+    readings: dict[str, dict[str, EffectiveReading]],
+    cmds_by_node: dict[str, dict[str, tuple[bool, str]]],
+    bindings_by_node: dict[str, list[ClimateBinding]],
+    observed_by_node: dict[str, ObservedState],
+    now: datetime,
+) -> list[CapabilityNotice]:
+    """OA ACH estimates and human-required notices for controlled nodes."""
+    notices: list[CapabilityNotice] = []
+    for node in nodes:
+        if not node.control_enabled or node.id not in cmds_by_node:
+            continue
+        node_readings = readings.get(node.id, {})
+        temp = _value(node_readings, ROLE_TEMPERATURE)
+        hum = _value(node_readings, ROLE_HUMIDITY)
+        out_temp, out_hum = _outdoor_air(node, by_id, readings)
+        cmds = cmds_by_node[node.id]
+        bindings = bindings_by_node.get(node.id, [])
+        conditioning_bound = _has_binding(bindings, ROLE_AC) or _has_binding(
+            bindings, ROLE_DEHUMIDIFIER
+        )
+        conditioning_on = bool(
+            (cmds.get(ROLE_AC) and cmds[ROLE_AC][0])
+            or (cmds.get(ROLE_DEHUMIDIFIER) and cmds[ROLE_DEHUMIDIFIER][0])
+        )
+        exchange_requested = bool(
+            (cmds.get(ROLE_FRESH_AIR_INTAKE) and cmds[ROLE_FRESH_AIR_INTAKE][0])
+            or (cmds.get(ROLE_INTAKE_FAN) and cmds[ROLE_INTAKE_FAN][0])
+            or (cmds.get(ROLE_EXHAUST_FAN) and cmds[ROLE_EXHAUST_FAN][0])
+        )
+        observed = observed_by_node.get(node.id, ObservedState())
+        progress = ExchangeProgress(
+            exchange_or_condition_on_since=observed.exchange_or_condition_on_since,
+            temp_when_action_started=observed.temp_when_action_started,
+            humidity_when_action_started=observed.humidity_when_action_started,
+            outdoor_temp_when_started=observed.outdoor_temp_when_started,
+            outdoor_humidity_when_started=observed.outdoor_humidity_when_started,
+        )
+        airflow = EnclosureAirflow(
+            volume_m3=node.volume_m3,
+            intake_cfm=node.intake_cfm,
+            exhaust_cfm=node.exhaust_cfm,
+            assess_after_minutes=node.oa_assess_minutes,
+        )
+        estimate = assess_exchange(
+            airflow=airflow,
+            indoor_temp=temp,
+            indoor_humidity=hum,
+            outdoor_temp=out_temp,
+            outdoor_humidity=out_hum,
+            temperature_target=node.temperature_target,
+            humidity_target=node.humidity_target,
+            temp_deadband=node.temp_deadband,
+            humidity_deadband=node.humidity_deadband,
+            minutes_ahead=max(5.0, node.oa_assess_minutes / 2.0),
+            progress=progress,
+            now=now,
+            conditioning_bound=conditioning_bound,
+            conditioning_on=conditioning_on,
+            exchange_requested=exchange_requested,
+        )
+        notice = notice_from_estimate(node.id, estimate)
+        if notice is not None:
+            notices.append(notice)
+        # When OA cannot help and there is no machine path, stop futile exchange.
+        # Undersized cases keep trying while the human is alerted.
+        if (
+            estimate.human_required
+            and estimate.capability == CAPABILITY_HUMAN_REQUIRED
+            and not conditioning_bound
+        ):
+            _note_off(cmds, ROLE_INTAKE_FAN, "human required; machines cannot close gap")
+            _note_off(cmds, ROLE_EXHAUST_FAN, "human required; machines cannot close gap")
+            _note_off(
+                cmds, ROLE_FRESH_AIR_INTAKE, "human required; machines cannot close gap"
+            )
+    return notices
 
 
 def _fmt_metric(label: str, reading: EffectiveReading | None, unit: str) -> str:
@@ -168,9 +322,10 @@ def _decide_node(
     observed_by_node: dict[str, ObservedState],
     desired_light: dict[str, bool],
     now: datetime,
-) -> list[ControlIntent]:
+) -> dict[str, tuple[bool, str]]:
     bindings = bindings_by_node.get(node.id, [])
     observed = observed_by_node.get(node.id, ObservedState())
+    occupied = _occupancy_active(observed, now, node.occupancy_hold_minutes)
     node_readings = readings[node.id]
     temp = _value(node_readings, ROLE_TEMPERATURE)
     hum = _value(node_readings, ROLE_HUMIDITY)
@@ -216,14 +371,37 @@ def _decide_node(
         "no reading" if hum is None or target_h is None else "in band",
     )
 
+    parent_helps = _source_helps_excursions(
+        too_hot,
+        too_cold,
+        too_dry,
+        too_wet,
+        temp,
+        hum,
+        target_t,
+        target_h,
+        source_temp,
+        source_hum,
+    )
+    outdoor_helps = _source_helps_excursions(
+        too_hot,
+        too_cold,
+        too_dry,
+        too_wet,
+        temp,
+        hum,
+        target_t,
+        target_h,
+        out_temp,
+        out_hum,
+    )
+
     if too_hot:
         cmds[ROLE_HEATER] = (False, "too hot")
-        parent_can_cool = _air_can_reach(temp, source_temp, target_t, hot=True)
-        outdoor_can_cool = _air_can_reach(temp, out_temp, target_t, hot=True)
-        if parent_can_cool or outdoor_can_cool:
-            _set_on(cmds, ROLE_EXHAUST_FAN, "too hot; parent air can cool")
-            _set_on(cmds, ROLE_INTAKE_FAN, "too hot; parent air can cool")
-            cmds[ROLE_AC] = (False, "too hot; parent air can cool")
+        if parent_helps or outdoor_helps:
+            _set_on(cmds, ROLE_EXHAUST_FAN, "too hot; helpful exchange air")
+            _set_on(cmds, ROLE_INTAKE_FAN, "too hot; helpful exchange air")
+            cmds[ROLE_AC] = (False, "too hot; helpful exchange air")
         else:
             _note_off(cmds, ROLE_EXHAUST_FAN, "too hot; external air will not help")
             _note_off(cmds, ROLE_INTAKE_FAN, "too hot; external air will not help")
@@ -235,11 +413,9 @@ def _decide_node(
     if too_wet:
         if _has_binding(bindings, ROLE_DEHUMIDIFIER):
             _set_on(cmds, ROLE_DEHUMIDIFIER, "too humid; dehumidifier")
-        elif _air_can_reach(hum, source_hum, target_h, hot=True) or _air_can_reach(
-            hum, out_hum, target_h, hot=True
-        ):
-            _set_on(cmds, ROLE_EXHAUST_FAN, "too humid; external air can dry")
-            _set_on(cmds, ROLE_INTAKE_FAN, "too humid; external air can dry")
+        elif parent_helps or outdoor_helps:
+            _set_on(cmds, ROLE_EXHAUST_FAN, "too humid; helpful exchange air")
+            _set_on(cmds, ROLE_INTAKE_FAN, "too humid; helpful exchange air")
         else:
             _note_off(cmds, ROLE_EXHAUST_FAN, "too humid; external air will not help")
             _note_off(cmds, ROLE_INTAKE_FAN, "too humid; external air will not help")
@@ -250,7 +426,14 @@ def _decide_node(
             _set_on(cmds, ROLE_HUMIDIFIER, "too dry")
 
     if too_hot or too_cold or too_dry or too_wet:
-        _set_on(cmds, ROLE_CIRCULATION_FAN, "out of band")
+        _set_on(cmds, ROLE_CIRCULATION_FAN, "out of band; high flow")
+
+    if (
+        node.kind in _BASE_CIRCULATION_KINDS
+        and not missing_climate
+        and (temp is not None or hum is not None or ppm is not None)
+    ):
+        _set_on(cmds, ROLE_CIRCULATION_FAN, "tent base circulation")
 
     if (
         ppm is not None
@@ -258,6 +441,16 @@ def _decide_node(
         and ppm > node.co2_ppm_target
     ):
         _set_on(cmds, ROLE_INTAKE_FAN, "co2 above target")
+        _set_on(cmds, ROLE_EXHAUST_FAN, "co2 above target")
+        _set_on(cmds, ROLE_CIRCULATION_FAN, "co2 above target")
+
+    culture_activity = _binary_active(samples, ROLE_CULTURE_ACTIVITY)
+    if (
+        node.kind in {KIND_CULTURE_PREP, KIND_INOCULATION}
+        and culture_activity
+        and occupied
+    ):
+        _set_on(cmds, ROLE_CIRCULATION_FAN, "culture activity with occupancy")
 
     if _fresh_air_helps(
         temp, out_temp, target_t, band_t, hum, out_hum, target_h, band_h
@@ -287,12 +480,53 @@ def _decide_node(
     else:
         cmds[ROLE_CONDENSATE_PUMP] = (False, "float clear or missing")
 
-    if desired_light[node.id]:
-        cmds[ROLE_LIGHT] = (True, "photoperiod on")
+    if desired_light[node.id] or occupied:
+        reason = (
+            "occupancy override"
+            if occupied and not desired_light[node.id]
+            else "photoperiod on"
+        )
+        cmds[ROLE_LIGHT] = (True, reason)
     else:
         cmds[ROLE_LIGHT] = (False, "photoperiod off")
 
-    return _emit(node.id, bindings, cmds)
+    return cmds
+
+
+def _general_outdoor_exchange_active(
+    nodes: list[ClimateNode],
+    cmds_by_node: dict[str, dict[str, tuple[bool, str]]],
+) -> bool:
+    """True when the general room is pulling or dumping outdoor air."""
+    for node in nodes:
+        if node.kind != KIND_GENERAL_ROOM:
+            continue
+        cmds = cmds_by_node.get(node.id)
+        if not cmds:
+            continue
+        fresh = cmds.get(ROLE_FRESH_AIR_INTAKE)
+        if fresh and fresh[0]:
+            return True
+        for role in (ROLE_EXHAUST_FAN, ROLE_INTAKE_FAN, ROLE_FRESH_AIR_INTAKE):
+            cmd = cmds.get(role)
+            if not cmd or not cmd[0]:
+                continue
+            reason = cmd[1]
+            if (
+                "helpful exchange air" in reason
+                or "parent air" in reason
+                or "external air" in reason
+                or "fresh air" in reason
+            ):
+                return True
+    return False
+
+
+def _throttle_tent_intake_during_parent_exchange(
+    cmds: dict[str, tuple[bool, str]],
+) -> None:
+    """Naive settle: do not pull unsettled general-room air into tents."""
+    cmds[ROLE_INTAKE_FAN] = (False, "parent outdoor exchange; settle")
 
 
 def _emit(
@@ -303,7 +537,7 @@ def _emit(
     intents: list[ControlIntent] = []
     for role, (turn_on, reason) in cmds.items():
         for binding in bindings:
-            if binding.role != role or not binding.entity_id:
+            if binding.role != role or not binding.entity_id or binding.zone_id:
                 continue
             intents.append(
                 ControlIntent(
@@ -373,6 +607,32 @@ def _outdoor_air(
     return None, None
 
 
+def _source_helps_excursions(
+    too_hot: bool,
+    too_cold: bool,
+    too_dry: bool,
+    too_wet: bool,
+    temp: float | None,
+    hum: float | None,
+    target_t: float | None,
+    target_h: float | None,
+    source_temp: float | None,
+    source_hum: float | None,
+) -> bool:
+    """Exchange air must help every active excursion; mixed air is rejected."""
+    if not (too_hot or too_cold or too_dry or too_wet):
+        return False
+    if too_hot and not _air_can_reach(temp, source_temp, target_t, hot=True):
+        return False
+    if too_cold and not _air_can_reach(temp, source_temp, target_t, hot=False):
+        return False
+    if too_wet and not _air_can_reach(hum, source_hum, target_h, hot=True):
+        return False
+    if too_dry and not _air_can_reach(hum, source_hum, target_h, hot=False):
+        return False
+    return True
+
+
 def _air_can_reach(
     local: float | None,
     source: float | None,
@@ -420,6 +680,97 @@ def _float_active(samples: list[SensorSample]) -> bool | None:
     if not values:
         return None
     return float(median(values)) >= 0.5
+
+
+def _binary_active(samples: list[SensorSample], role: str) -> bool:
+    values = [
+        float(sample.value)
+        for sample in samples
+        if sample.role == role and not sample.stale and sample.value is not None
+    ]
+    return bool(values) and float(median(values)) >= 0.5
+
+
+def _occupancy_active(
+    observed: ObservedState, now: datetime, hold_minutes: float
+) -> bool:
+    if observed.occupied:
+        return True
+    if observed.last_occupied_at is None:
+        return False
+    return now - observed.last_occupied_at < timedelta(minutes=hold_minutes)
+
+
+def _decide_row_fans(
+    bindings_by_node: dict[str, list[ClimateBinding]],
+    row_contexts: list[RowControlContext],
+    now: datetime,
+) -> list[ControlIntent]:
+    """Control zone fans from assigned batch stage and variety.
+
+    Duty cycles are conservative commissioning defaults. They do not claim a
+    measured air velocity; a tachometer/anemometer check is still required.
+    """
+    by_zone: dict[str, list[RowControlContext]] = {}
+    for context in row_contexts:
+        by_zone.setdefault(context.zone_id, []).append(context)
+
+    intents: list[ControlIntent] = []
+    for node_id, bindings in bindings_by_node.items():
+        for binding in bindings:
+            if (
+                binding.role != ROLE_CIRCULATION_FAN
+                or not binding.entity_id
+                or not binding.zone_id
+            ):
+                continue
+            contexts = [
+                context
+                for context in by_zone.get(binding.zone_id, [])
+                if context.node_id == node_id
+            ]
+            active = [_row_fan_request(context, now) for context in contexts]
+            turn_on = any(request[0] for request in active)
+            reasons = [request[1] for request in active if request[0]]
+            if reasons:
+                reason = "; ".join(sorted(set(reasons)))
+            elif contexts:
+                reason = "assigned crop stage does not request circulation"
+            else:
+                reason = "no active batch assigned to row"
+            intents.append(
+                ControlIntent(
+                    node_id=node_id,
+                    role=ROLE_CIRCULATION_FAN,
+                    entity_id=binding.entity_id,
+                    turn_on=turn_on,
+                    reason=reason,
+                    zone_id=binding.zone_id,
+                )
+            )
+    return intents
+
+
+def _row_fan_request(
+    context: RowControlContext, now: datetime
+) -> tuple[bool, str]:
+    if context.lifecycle_phase not in {"fruiting", "harvesting"}:
+        return False, f"{context.lifecycle_phase} stage"
+    on_minutes, off_minutes = resolved_row_fan_cycle(context)
+    minute = now.hour * 60 + now.minute
+    on = minute % (on_minutes + off_minutes) < on_minutes
+    variety = context.variety_slug or "generic"
+    return on, f"{variety} {context.lifecycle_phase} row duty cycle"
+
+
+def resolved_row_fan_cycle(context: RowControlContext) -> tuple[float, float]:
+    """Return user overrides over the repository-owned variety defaults."""
+    oyster = context.variety_slug in {"blue_oyster", "white_oyster"}
+    default_on, default_off = (15.0, 5.0) if oyster else (10.0, 10.0)
+    return (
+        context.fan_on_minutes or default_on,
+        context.fan_off_minutes or default_off,
+    )
 
 
 def _in_light_grace(observed: ObservedState, now: datetime) -> bool:

@@ -31,6 +31,8 @@ Recording scale weights (NFC-selected ingredient + mass) is the first Communifar
 12. **Varieties + vessel state (schema v11)**: `varieties` catalog (seed mushroom names + custom); `culture_lots.variety_id`; forms include `grain_spawn`; LC/grain vessel statuses `colonizing`/`ready`/`drawing`/`exhausted` (+ contaminated/retired). One jar/vial = one culture row (UID). Services `create_variety` / `retire_variety` / `set_culture_status`; Culture dashboard tab.
 13. **Climate tree (schema v12)**: see ADR 0004 — `climate_nodes`, `climate_bindings`, `climate_intents`.
 14. **Manual air-exchange tachometer (schema v13)**: `air_vents` (labeled vents per site) + append-only `tachometer_readings` (`value`, `unit` rpm/cfm/fpm, `recorded_at`). Services `upsert_air_vent` / `record_tachometer`. ACH math deferred.
+15. **Row climate bindings (schema v14)**: optional `zone_id` on climate bindings/intents allows independently controlled row fans.
+16. **Climate setting overrides (schema v15)**: `climate_setting_overrides` stores only per-node/per-row deviations from repository defaults. Reset deletes rows so merged defaults become effective.
 15. Do **not** create custom tables inside Recorder’s database.
 16. Cloud later: replicate/migrate the same relational model to an open-source server DB (e.g. PostgreSQL); keep domain repositories abstract so backends can swap.
 
@@ -38,7 +40,7 @@ Recording scale weights (NFC-selected ingredient + mass) is the first Communifar
 
 - Weigh “Record” persists via Communifarm (service + scale button hook), not only ESPHome `last_recorded` text.
 - SQLite I/O runs off the event loop (`async_add_executor_job`).
-- Schema versioned with tested migrations (current: **v13**, climate tree in ADR 0004; air vents + tachometer readings for manual air-exchange logging).
+- Schema versioned with tested migrations (current: **v15**; climate control and settings are detailed in ADR 0004).
 - Env metric rollups remain a later table family; raw high-frequency sensor history stays Recorder’s job.
 - Selling / production statistics tables must FK `batches.stable_id` — do not invent parallel batch ids.
 - Culture media must not reuse production `batches` rows for agar/LC prep.

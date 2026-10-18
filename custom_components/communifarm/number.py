@@ -13,6 +13,20 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    ENTITY_CLIMATE_CO2_TARGET,
+    ENTITY_CLIMATE_EXHAUST_CFM,
+    ENTITY_CLIMATE_HUMIDITY_DEADBAND,
+    ENTITY_CLIMATE_HUMIDITY_TARGET,
+    ENTITY_CLIMATE_INTAKE_CFM,
+    ENTITY_CLIMATE_LIGHT_HOURS_OFF,
+    ENTITY_CLIMATE_LIGHT_HOURS_ON,
+    ENTITY_CLIMATE_OA_ASSESS,
+    ENTITY_CLIMATE_OCCUPANCY_HOLD,
+    ENTITY_CLIMATE_ROW_FAN_OFF,
+    ENTITY_CLIMATE_ROW_FAN_ON,
+    ENTITY_CLIMATE_TEMP_DEADBAND,
+    ENTITY_CLIMATE_TEMPERATURE_TARGET,
+    ENTITY_CLIMATE_VOLUME_M3,
     ENTITY_CONTAINER_COUNT,
     ENTITY_HARVEST_MASS_G,
     ENTITY_HUMIDITY_TARGET,
@@ -22,7 +36,14 @@ from .const import (
     ENTITY_SUBSTRATE_G,
     ENTITY_TEMPERATURE_TARGET,
     SIGNAL_BATCH_UPDATED,
+    SIGNAL_CLIMATE_SETTINGS_UPDATED,
     SIGNAL_WEIGH_SESSION_UPDATED,
+)
+from .domain.climate_settings import (
+    NODE_SETTING_SPECS,
+    ROW_SETTING_SPECS,
+    SCOPE_NODE,
+    ClimateSettingSpec,
 )
 from .domain.models import CommunifarmState
 from .domain.recipe import clamp_recipe_scale
@@ -118,6 +139,92 @@ class CommunifarmBucketNumber(CommunifarmNumber):
             self._value = clamped
             self.bucket()[self._spec.bucket_key] = self._value
         self.async_write_ha_state()
+
+
+_CLIMATE_SETTING_ENTITY_IDS = {
+    "temperature_target": ENTITY_CLIMATE_TEMPERATURE_TARGET,
+    "humidity_target": ENTITY_CLIMATE_HUMIDITY_TARGET,
+    "temp_deadband": ENTITY_CLIMATE_TEMP_DEADBAND,
+    "humidity_deadband": ENTITY_CLIMATE_HUMIDITY_DEADBAND,
+    "co2_ppm_target": ENTITY_CLIMATE_CO2_TARGET,
+    "light_hours_on": ENTITY_CLIMATE_LIGHT_HOURS_ON,
+    "light_hours_off": ENTITY_CLIMATE_LIGHT_HOURS_OFF,
+    "occupancy_hold_minutes": ENTITY_CLIMATE_OCCUPANCY_HOLD,
+    "volume_m3": ENTITY_CLIMATE_VOLUME_M3,
+    "intake_cfm": ENTITY_CLIMATE_INTAKE_CFM,
+    "exhaust_cfm": ENTITY_CLIMATE_EXHAUST_CFM,
+    "oa_assess_minutes": ENTITY_CLIMATE_OA_ASSESS,
+    "row_fan_on_minutes": ENTITY_CLIMATE_ROW_FAN_ON,
+    "row_fan_off_minutes": ENTITY_CLIMATE_ROW_FAN_OFF,
+}
+
+
+class CommunifarmClimateSettingNumber(CommunifarmNumber):
+    """Native HA editor for one setting on the selected node or row."""
+
+    _attr_mode = NumberMode.BOX
+
+    def __init__(self, entry_id: str, spec: ClimateSettingSpec) -> None:
+        super().__init__(
+            entry_id,
+            name=spec.name,
+            unique_id=f"communifarm_climate_setting_{spec.key}",
+            entity_id=_CLIMATE_SETTING_ENTITY_IDS[spec.key],
+            icon="mdi:tune-vertical",
+        )
+        self._spec = spec
+        self._attr_native_min_value = spec.minimum
+        self._attr_native_max_value = spec.maximum
+        self._attr_native_step = spec.step
+        if spec.unit:
+            self._attr_native_unit_of_measurement = spec.unit
+
+    async def async_added_to_hass(self) -> None:
+        if "climate_settings_values" not in self.bucket():
+            from . import climate_actions
+
+            await climate_actions.async_refresh_climate_settings_editor(
+                self.hass, self._entry_id
+            )
+        self.listen_entry_signals(
+            SIGNAL_CLIMATE_SETTINGS_UPDATED, method="_write_current_state"
+        )
+
+    def _write_current_state(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        selected_key = (
+            "climate_settings_node_id"
+            if self._spec.scope == SCOPE_NODE
+            else "climate_settings_row_id"
+        )
+        return bool(self.bucket().get(selected_key))
+
+    @property
+    def native_value(self) -> float | None:
+        value = self.bucket().get("climate_settings_values", {}).get(self._spec.key)
+        return float(value) if value is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        overridden = self._spec.key in self.bucket().get(
+            "climate_settings_override_keys", {}
+        ).get(self._spec.scope, set())
+        return {"value_source": "user override" if overridden else "repo default"}
+
+    async def async_set_native_value(self, value: float) -> None:
+        from . import climate_actions
+
+        await climate_actions.async_set_climate_setting(
+            self.hass,
+            self._entry_id,
+            scope=self._spec.scope,
+            setting_key=self._spec.key,
+            value=value,
+            context=self._context,
+        )
 
 
 def _draft(
@@ -234,6 +341,10 @@ async def async_setup_entry(
             CommunifarmHumidityTarget(entry, state, repo),
             CommunifarmRecipeScale(entry, state, repo),
             *[CommunifarmBucketNumber(entry.entry_id, spec) for spec in _DRAFT_NUMBERS],
+            *[
+                CommunifarmClimateSettingNumber(entry.entry_id, spec)
+                for spec in (*NODE_SETTING_SPECS, *ROW_SETTING_SPECS)
+            ],
         ]
     )
 

@@ -337,9 +337,9 @@ bind_climate_role:
       name: Role
       required: true
       description: >
-        temperature, humidity, pressure, co2_ppm, circulation_fan, intake_fan,
-        exhaust_fan, fresh_air_intake, ac, heater, humidifier, dehumidifier,
-        light, float, or condensate_pump.
+        temperature, humidity, pressure, co2_ppm, occupancy, culture_activity,
+        circulation_fan, intake_fan, exhaust_fan, fresh_air_intake, ac, heater,
+        humidifier, dehumidifier, light, float, or condensate_pump.
     entity_id:
       name: Entity ID
       required: true
@@ -352,6 +352,11 @@ bind_climate_role:
       default: false
       selector:
         boolean:
+    zone_id:
+      name: Row / zone ID
+      description: >
+        Optional placement-zone ID. A circulation fan with a zone ID is
+        controlled from the batch species and lifecycle stage assigned there.
 
 set_batch_location:
   name: Set batch location

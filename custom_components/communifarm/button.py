@@ -12,6 +12,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     ENTITY_BTN_ACQUIRE_CULTURE,
+    ENTITY_BTN_CLIMATE_RESET_NODE,
+    ENTITY_BTN_CLIMATE_RESET_ROW,
     ENTITY_BTN_COMPLETE_NEW_BATCH,
     ENTITY_BTN_COMPLETELY_MIXED,
     ENTITY_BTN_CONFIRM_CONTAINER_HARVEST,
@@ -49,6 +51,7 @@ from .domain.batch_milestones import (
     MILESTONE_STORED_FOR_COOLING,
     MILESTONE_WATER_ADDED,
 )
+from .domain.climate_settings import SCOPE_NODE, SCOPE_ROW
 from .domain.culture import CULTURE_STATUS_READY, FORM_LIQUID_CULTURE, SOURCE_PURCHASED
 from .domain.nfc import ACTIVITY_HARVEST
 from .domain.production import (
@@ -113,6 +116,35 @@ class CommunifarmAdvanceStageButton(CommunifarmButton):
 
         await production_actions.async_advance_production_stage(
             self.hass, self._entry_id, target_stage=self._target_stage
+        )
+
+
+class CommunifarmClimateResetButton(CommunifarmButton):
+    """Clear user overrides for the selected room or row."""
+
+    def __init__(self, entry_id: str, scope: str) -> None:
+        entity_id = (
+            ENTITY_BTN_CLIMATE_RESET_NODE
+            if scope == SCOPE_NODE
+            else ENTITY_BTN_CLIMATE_RESET_ROW
+        )
+        super().__init__(
+            entry_id,
+            name=f"Reset selected climate {scope} defaults",
+            unique_id=f"communifarm_climate_reset_{scope}",
+            entity_id=entity_id,
+            icon="mdi:restore",
+        )
+        self._scope = scope
+
+    async def async_press(self) -> None:
+        from . import climate_actions
+
+        await climate_actions.async_reset_climate_settings(
+            self.hass,
+            self._entry_id,
+            scope=self._scope,
+            context=self._context,
         )
 
 
@@ -201,6 +233,8 @@ async def async_setup_entry(
                 MILESTONE_PRODUCTION_CYCLE_STARTED,
             ),
             CommunifarmCompleteAndNewBatchButton(entry_id),
+            CommunifarmClimateResetButton(entry_id, SCOPE_NODE),
+            CommunifarmClimateResetButton(entry_id, SCOPE_ROW),
             CommunifarmSelectInoculumFromNfcButton(entry_id),
             CommunifarmInoculateButton(entry_id),
             CommunifarmAdvanceStageButton(
