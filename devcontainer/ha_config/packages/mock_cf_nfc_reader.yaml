@@ -11,6 +11,19 @@ input_text:
     name: "cf-lab-nfc-write01 Last NFC UID"
     initial: ""
     max: 64
+  cf_lab_nfc_write01_pending_ndef:
+    name: "cf-lab-nfc-write01 Pending NDEF"
+    initial: ""
+    max: 255
+
+input_number:
+  cf_mixroom_field_capacity_pct:
+    name: "cf-mixroom Field capacity %"
+    min: 0
+    max: 100
+    step: 0.5
+    initial: 55
+    unit_of_measurement: "%"
 
 input_button:
   cf_mixroom_nfc_scan01_simulate_scan:
@@ -26,6 +39,10 @@ template:
       - name: "cf-lab-nfc-write01 Last NFC UID"
         unique_id: cf_lab_nfc_write01_last_nfc_uid_sensor
         state: "{{ states('input_text.cf_lab_nfc_write01_last_nfc_uid') }}"
+      - name: "cf-mixroom Field capacity %"
+        unique_id: cf_mixroom_field_capacity_pct
+        unit_of_measurement: "%"
+        state: "{{ states('input_number.cf_mixroom_field_capacity_pct') }}"
   - button:
       - name: "cf-lab-nfc-write01 Prepare NDEF Write"
         unique_id: cf_lab_nfc_write01_prepare_ndef_write
@@ -35,8 +52,9 @@ template:
             data:
               title: "cf-lab-nfc-write01 mock NDEF"
               message: >-
-                Mock only. Real NDEF write belongs on PN532 ESPHome firmware.
-                Tags must store stable refs only.
+                Pending payload:
+                {{ states('input_text.cf_lab_nfc_write01_pending_ndef') }}.
+                Communifarm prepare_nfc_write / confirm_nfc_write own the bind.
 
 automation:
   - id: cf_nfc_scan01_simulate_echo

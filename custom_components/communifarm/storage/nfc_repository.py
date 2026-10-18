@@ -11,6 +11,9 @@ from ..domain.nfc import (
     OBJECT_BATCH,
     OBJECT_CONTAINER,
     OBJECT_CULTURE,
+    OBJECT_EMPLOYEE,
+    OBJECT_INVENTORY,
+    OBJECT_LOCATION,
     OBJECT_MEDIA,
     OBJECT_UNKNOWN,
     NfcCheckin,
@@ -36,15 +39,18 @@ class NfcRepository(SqliteRepository):
         container_repo: ContainerRepository,
         batch_repo: Any,
         culture_repo: Any,
+        inventory_repo: Any | None = None,
+        location_repo: Any | None = None,
     ) -> None:
         super().__init__(hass)
         self._containers = container_repo
         self._batches = batch_repo
         self._cultures = culture_repo
+        self._inventory = inventory_repo
+        self._locations = location_repo
 
     def bind_connection(self, conn: Any) -> None:
         self._conn = conn
-
 
     async def async_resolve(self, nfc_uid: str) -> NfcResolution:
         return await self._hass.async_add_executor_job(self._locked, self._resolve_sync, nfc_uid)
@@ -112,6 +118,45 @@ class NfcRepository(SqliteRepository):
                 found=True,
                 detail={"status": media.status, "recipe_key": media.recipe_key},
             )
+
+        if self._inventory is not None:
+            lot = self._inventory._get_lot_by_nfc_sync(nfc_uid)
+            if lot is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_INVENTORY,
+                    object_id=lot.id,
+                    label=lot.label,
+                    found=True,
+                    detail={
+                        "ingredient_key": lot.ingredient_key,
+                        "water_kind": lot.water_kind,
+                        "ndef_payload": lot.ndef_payload,
+                    },
+                )
+            badge = self._inventory._get_employee_by_nfc_sync(nfc_uid)
+            if badge is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_EMPLOYEE,
+                    object_id=badge.id,
+                    label=badge.label,
+                    found=True,
+                    detail={"ndef_payload": badge.ndef_payload},
+                )
+
+        if self._locations is not None:
+            zone = self._locations._get_zone_by_nfc_sync(nfc_uid)
+            if zone is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_LOCATION,
+                    object_id=zone.id,
+                    label=zone.name,
+                    zone_id=zone.id,
+                    found=True,
+                    detail={"ndef_payload": zone.ndef_payload},
+                )
 
         return NfcResolution(
             nfc_uid=nfc_uid,

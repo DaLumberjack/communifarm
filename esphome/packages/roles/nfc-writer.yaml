@@ -1,5 +1,6 @@
-# Bench NFC writer / R/W experiments.
-# Prefer PN532 for NDEF write. RC522 ESPHome path is primarily UID read.
+# Bench NFC writer / R/W — PN532 SPI.
+# Tags receive typed Communifarm NDEF identity JSON (stable refs only).
+# Pending payload is pushed from HA via text sensor / homeassistant text entity.
 spi:
   clk_pin: ${spi_clk_pin}
   mosi_pin: ${spi_mosi_pin}
@@ -21,6 +22,10 @@ text_sensor:
     name: "Last NFC UID"
     id: cf_last_nfc_uid_writer
     icon: mdi:nfc
+  - platform: template
+    name: "Pending NDEF"
+    id: cf_pending_ndef_writer
+    icon: mdi:nfc-variant
 
 button:
   - platform: template
@@ -28,4 +33,9 @@ button:
     icon: mdi:nfc-tap
     on_press:
       then:
-        - logger.log: "Use PN532 NDEF write lambda from ESPHome docs; tags must store stable refs only."
+        - logger.log:
+            format: "Communifarm NDEF write armed. Pending=%s UID=%s"
+            args:
+              - id(cf_pending_ndef_writer).state.c_str()
+              - id(cf_last_nfc_uid_writer).state.c_str()
+        - logger.log: "Apply PN532 NDEF write lambda from ESPHome docs with cf_pending_ndef_writer payload."

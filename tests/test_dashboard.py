@@ -17,7 +17,7 @@ def test_dashboard_includes_bound_sensors_and_batch(sample_state) -> None:
     }
     config = DashboardBuilder().build(sample_state, resolved)
     assert config["title"] == "Communifarm"
-    assert len(config["views"]) == 9
+    assert len(config["views"]) == 11
     cards = config["views"][0]["cards"]
     titles = [card.get("title") for card in cards]
     assert "Current settings" in titles
@@ -27,36 +27,13 @@ def test_dashboard_includes_bound_sensors_and_batch(sample_state) -> None:
     assert "Production" in titles
 
 
-def test_dashboard_includes_weigh_tab_with_scale_and_nfc(sample_state) -> None:
+def test_dashboard_weigh_tab_redirects_to_mix(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
     weigh = next(view for view in config["views"] if view.get("path") == "weigh")
     assert weigh["title"] == "Weigh"
-    titles = [card.get("title") for card in weigh["cards"]]
-    assert "Ingredient (NFC)" in titles
-    assert "Scale" in titles
-    assert "Recipe scale" in titles
-    assert "This session" in titles
-    assert "Mix milestones (weigh)" in titles
-    mix = next(
-        card for card in weigh["cards"] if card.get("title") == "Mix milestones (weigh)"
+    assert any(
+        "Moved to **Mix**" in (card.get("content") or "") for card in weigh["cards"]
     )
-    mix_ids = [row["entity"] for row in mix["entities"]]
-    assert "button.communifarm_water_added" in mix_ids
-    assert "button.communifarm_field_capacity_reached" in mix_ids
-    scale = next(card for card in weigh["cards"] if card.get("title") == "Scale")
-    entity_ids = [
-        row["entity"] if isinstance(row, dict) else row for row in scale["entities"]
-    ]
-    assert "sensor.esp32dev_calibrated_g" in entity_ids
-    assert "button.esp32dev_tare" in entity_ids
-    assert "button.esp32dev_record_weight" in entity_ids
-    nfc = next(card for card in weigh["cards"] if card.get("title") == "Ingredient (NFC)")
-    assert nfc["entities"][0]["entity"] == "input_select.esp32dev_selected_ingredient"
-    recipe = next(card for card in weigh["cards"] if card.get("title") == "Recipe scale")
-    recipe_ids = [row["entity"] for row in recipe["entities"]]
-    assert "number.communifarm_recipe_scale" in recipe_ids
-    assert "sensor.communifarm_weigh_session" in recipe_ids
-    assert "sensor.communifarm_batch_nfc_uid" in recipe_ids
 
 
 def test_dashboard_current_settings_use_live_entity_templates(sample_state) -> None:
@@ -77,6 +54,35 @@ def test_dashboard_targets_card_is_interactive(sample_state) -> None:
     assert ENTITY_TEMPERATURE_TARGET in entity_ids
     assert ENTITY_HUMIDITY_TARGET in entity_ids
     assert targets.get("show_header_toggle") is False
+
+
+def test_dashboard_includes_mix_and_nfc_write_tabs(sample_state) -> None:
+    config = DashboardBuilder().build(sample_state, {})
+    mix = next(view for view in config["views"] if view.get("path") == "mix")
+    assert mix["title"] == "Mix"
+    mix_titles = [card.get("title") for card in mix["cards"]]
+    assert "Focus — now / last / next" in mix_titles
+    assert "Dry progress" in mix_titles
+    assert "Water progress" in mix_titles
+    assert "Scale (drys)" in mix_titles
+    assert "Scale (water pours)" in mix_titles
+    assert "Finish checkpoints" in mix_titles
+    finish = next(
+        card for card in mix["cards"] if card.get("title") == "Finish checkpoints"
+    )
+    finish_ids = [row["entity"] for row in finish["entities"]]
+    assert "button.communifarm_relocate_for_sterilization" in finish_ids
+    water = next(
+        card for card in mix["cards"] if card.get("title") == "Scale (water pours)"
+    )
+    water_ids = [row["entity"] for row in water["entities"]]
+    assert "button.communifarm_record_water_pour" in water_ids
+    assert "button.esp32dev_location_tare" in water_ids
+
+    nfc = next(view for view in config["views"] if view.get("path") == "nfc-write")
+    assert nfc["title"] == "NFC Write"
+    nfc_titles = [card.get("title") for card in nfc["cards"]]
+    assert "Write target" in nfc_titles
 
 
 def test_dashboard_includes_batches_tab(sample_state) -> None:

@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 16
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -525,7 +525,123 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_tachometer_readings_site_time
       ON tachometer_readings (site_id, recorded_at);
     """,
+    14: """
+    CREATE TABLE IF NOT EXISTS inventory_lots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      ingredient_key TEXT NOT NULL,
+      label TEXT NOT NULL,
+      water_kind TEXT,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_site_key
+      ON inventory_lots (site_id, ingredient_key, status);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_nfc
+      ON inventory_lots (nfc_uid);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_label
+      ON inventory_lots (label COLLATE NOCASE, created_at);
+
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_employees_site
+      ON employees (site_id, status);
+    CREATE INDEX IF NOT EXISTS idx_employees_nfc
+      ON employees (nfc_uid);
+
+    ALTER TABLE zones ADD COLUMN nfc_uid TEXT;
+    ALTER TABLE zones ADD COLUMN ndef_payload TEXT;
+    CREATE INDEX IF NOT EXISTS idx_zones_nfc ON zones (nfc_uid);
+
+    ALTER TABLE weight_events ADD COLUMN inventory_lot_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_weight_events_inventory
+      ON weight_events (inventory_lot_id, recorded_at);
+    """,
+    # Repair path for DBs that recorded schema 15 without inventory tables
+    # (empty / mismatched prior migrations on shared PHCC testing_config).
+    16: """
+    CREATE TABLE IF NOT EXISTS inventory_lots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      ingredient_key TEXT NOT NULL,
+      label TEXT NOT NULL,
+      water_kind TEXT,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_site_key
+      ON inventory_lots (site_id, ingredient_key, status);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_nfc
+      ON inventory_lots (nfc_uid);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_label
+      ON inventory_lots (label COLLATE NOCASE, created_at);
+
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_employees_site
+      ON employees (site_id, status);
+    CREATE INDEX IF NOT EXISTS idx_employees_nfc
+      ON employees (nfc_uid);
+    """,
 }
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def ensure_inventory_columns(conn: sqlite3.Connection) -> None:
+    """Add inventory NFC columns when older DBs skipped ALTER migrations."""
+    if "zones" in {
+        str(r[0])
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }:
+        zone_cols = _table_columns(conn, "zones")
+        if "nfc_uid" not in zone_cols:
+            conn.execute("ALTER TABLE zones ADD COLUMN nfc_uid TEXT")
+        if "ndef_payload" not in zone_cols:
+            conn.execute("ALTER TABLE zones ADD COLUMN ndef_payload TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_zones_nfc ON zones (nfc_uid)")
+
+    weight_cols = _table_columns(conn, "weight_events")
+    if "inventory_lot_id" not in weight_cols:
+        conn.execute("ALTER TABLE weight_events ADD COLUMN inventory_lot_id TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_weight_events_inventory "
+        "ON weight_events (inventory_lot_id, recorded_at)"
+    )
+    conn.commit()
 
 
 def db_path_for_config_dir(config_dir: str | Path) -> Path:
@@ -584,4 +700,6 @@ def apply_migrations(conn: sqlite3.Connection) -> int:
         )
         conn.commit()
         current = version
+    # Idempotent column repair for polluted DBs that jumped past v14.
+    ensure_inventory_columns(conn)
     return current

@@ -16,20 +16,28 @@ from .const import (
     ENTITY_BTN_COMPLETELY_MIXED,
     ENTITY_BTN_CONFIRM_CONTAINER_HARVEST,
     ENTITY_BTN_CONFIRM_FINAL_CONTAINER_HARVEST,
+    ENTITY_BTN_CONFIRM_NFC_WRITE,
+    ENTITY_BTN_CREATE_INVENTORY_LOT,
     ENTITY_BTN_CREATE_VARIETY,
     ENTITY_BTN_DRY_WET_MIX,
+    ENTITY_BTN_DRYS_COMBINED,
     ENTITY_BTN_FIELD_CAPACITY,
     ENTITY_BTN_FINAL_HARVEST,
     ENTITY_BTN_HEAT_TREATED,
     ENTITY_BTN_INOCULATE,
+    ENTITY_BTN_MIX_STEP_FROM_BADGE,
+    ENTITY_BTN_RECORD_WATER_POUR,
     ENTITY_BTN_MOVE_FRUITING,
     ENTITY_BTN_MOVE_HARVEST,
     ENTITY_BTN_MOVE_INCUBATION,
     ENTITY_BTN_NFC_CHECKIN_HARVEST,
+    ENTITY_BTN_PREPARE_NFC_WRITE,
     ENTITY_BTN_PRODUCTION_START,
     ENTITY_BTN_RECORD_HARVEST,
     ENTITY_BTN_RECORD_SALE,
     ENTITY_BTN_RECORD_SALE_CLEANUP,
+    ENTITY_BTN_RELOCATE_STERILE,
+    ENTITY_BTN_REMAINING_WATER,
     ENTITY_BTN_RETIRE_VARIETY,
     ENTITY_BTN_SELECT_INOCULUM_NFC,
     ENTITY_BTN_SEPARATE_CONTAINERS,
@@ -37,14 +45,20 @@ from .const import (
     ENTITY_BTN_SETTLING,
     ENTITY_BTN_STORED_COOLING,
     ENTITY_BTN_WATER_ADDED,
+    ENTITY_FIELD_CAPACITY_RAW,
+    ENTITY_SCALE_NFC_UID,
+    FIELD_CAPACITY_MAX_OK,
+    FIELD_CAPACITY_MIN_OK,
 )
 from .domain.batch_milestones import (
     MILESTONE_COMPLETELY_MIXED,
     MILESTONE_CONTAINERS_SEPARATED,
     MILESTONE_DRY_WET_MIX_STARTED,
+    MILESTONE_DRYS_COMBINED,
     MILESTONE_FIELD_CAPACITY_REACHED,
     MILESTONE_HEAT_TREATED,
     MILESTONE_PRODUCTION_CYCLE_STARTED,
+    MILESTONE_REMAINING_WATER_ADDED,
     MILESTONE_SETTLING_STARTED,
     MILESTONE_STORED_FOR_COOLING,
     MILESTONE_WATER_ADDED,
@@ -131,6 +145,16 @@ async def async_setup_entry(
             CommunifarmMilestoneButton(
                 entry_id,
                 _spec(
+                    "Mix all drys together",
+                    "communifarm_drys_combined",
+                    ENTITY_BTN_DRYS_COMBINED,
+                    "mdi:shaker",
+                ),
+                MILESTONE_DRYS_COMBINED,
+            ),
+            CommunifarmMilestoneButton(
+                entry_id,
+                _spec(
                     "Water added",
                     "communifarm_water_added",
                     ENTITY_BTN_WATER_ADDED,
@@ -151,23 +175,24 @@ async def async_setup_entry(
             CommunifarmMilestoneButton(
                 entry_id,
                 _spec(
-                    "Settling",
+                    "Remaining water added",
+                    "communifarm_remaining_water_added",
+                    ENTITY_BTN_REMAINING_WATER,
+                    "mdi:water-plus",
+                ),
+                MILESTONE_REMAINING_WATER_ADDED,
+            ),
+            CommunifarmMilestoneButton(
+                entry_id,
+                _spec(
+                    "Settling / incorporate",
                     "communifarm_settling_started",
                     ENTITY_BTN_SETTLING,
                     "mdi:timer-sand",
                 ),
                 MILESTONE_SETTLING_STARTED,
             ),
-            CommunifarmMilestoneButton(
-                entry_id,
-                _spec(
-                    "Reached field capacity",
-                    "communifarm_field_capacity_reached",
-                    ENTITY_BTN_FIELD_CAPACITY,
-                    "mdi:water-check",
-                ),
-                MILESTONE_FIELD_CAPACITY_REACHED,
-            ),
+            CommunifarmFieldCapacityButton(entry_id),
             CommunifarmMilestoneButton(
                 entry_id,
                 _spec(
@@ -179,6 +204,12 @@ async def async_setup_entry(
                 MILESTONE_COMPLETELY_MIXED,
             ),
             CommunifarmSeparateContainersButton(entry_id),
+            CommunifarmRelocateSterileButton(entry_id),
+            CommunifarmRecordWaterPourButton(entry_id),
+            CommunifarmCreateInventoryLotButton(entry_id),
+            CommunifarmPrepareNfcWriteButton(entry_id),
+            CommunifarmConfirmNfcWriteButton(entry_id),
+            CommunifarmMixStepFromBadgeButton(entry_id),
             CommunifarmHeatTreatedButton(entry_id),
             CommunifarmMilestoneButton(
                 entry_id,
@@ -246,6 +277,155 @@ async def async_setup_entry(
             CommunifarmRecordSaleCleanupButton(entry_id),
         ]
     )
+
+
+class CommunifarmFieldCapacityButton(CommunifarmButton):
+    """Mark field capacity; sample capacitance sensor when present."""
+
+    _attr_name = "Reached field capacity"
+    _attr_unique_id = "communifarm_field_capacity_reached"
+    _attr_icon = "mdi:water-check"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_FIELD_CAPACITY)
+
+    async def async_press(self) -> None:
+        from . import batch_actions
+        from .inventory_actions import assess_field_capacity_reading
+
+        raw = None
+        state = self.hass.states.get(ENTITY_FIELD_CAPACITY_RAW)
+        if state is not None and state.state not in ("unknown", "unavailable", ""):
+            try:
+                raw = float(state.state)
+            except (TypeError, ValueError):
+                raw = None
+        ok, warning = assess_field_capacity_reading(
+            raw, min_ok=FIELD_CAPACITY_MIN_OK, max_ok=FIELD_CAPACITY_MAX_OK
+        )
+        self.bucket()["field_capacity_ok"] = ok
+        detail: dict = {"source": "operator"}
+        if raw is not None:
+            detail["capacitance_pct"] = raw
+        if warning:
+            detail["warning"] = warning
+        await batch_actions.async_record_milestone(
+            self.hass,
+            self._entry_id,
+            MILESTONE_FIELD_CAPACITY_REACHED,
+            detail=detail,
+        )
+
+
+class CommunifarmRelocateSterileButton(CommunifarmButton):
+    _attr_name = "Relocate for sterilization"
+    _attr_unique_id = "communifarm_relocate_for_sterilization"
+    _attr_icon = "mdi:map-marker-path"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_RELOCATE_STERILE)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions, nfc_actions
+        from .domain.nfc import OBJECT_BATCH, OBJECT_CONTAINER, OBJECT_LOCATION
+
+        # Stash last scan when present — never call resolve with an empty UID.
+        bucket = self.bucket()
+        last = self.hass.states.get(ENTITY_SCALE_NFC_UID)
+        raw = None
+        if last is not None and last.state not in ("", "unknown", "unavailable"):
+            raw = str(last.state)
+        if raw:
+            resolution = await nfc_actions.async_resolve_nfc(
+                self.hass, self._entry_id, nfc_uid=raw
+            )
+            if resolution.found and resolution.object_type in {
+                OBJECT_CONTAINER,
+                OBJECT_BATCH,
+            }:
+                bucket["relocate_bag_nfc_uid"] = resolution.nfc_uid
+            elif resolution.found and resolution.object_type == OBJECT_LOCATION:
+                bucket["relocate_location_nfc_uid"] = resolution.nfc_uid
+        await inventory_actions.async_relocate_for_sterilization(
+            self.hass, self._entry_id
+        )
+
+
+class CommunifarmRecordWaterPourButton(CommunifarmButton):
+    """Record scale mass as a water pour (sums toward 10200 g)."""
+
+    _attr_name = "Record water pour"
+    _attr_unique_id = "communifarm_record_water_pour"
+    _attr_icon = "mdi:cup-water"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_RECORD_WATER_POUR)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_record_water_pour(self.hass, self._entry_id)
+
+
+class CommunifarmCreateInventoryLotButton(CommunifarmButton):
+    _attr_name = "Create inventory lot (new UUID)"
+    _attr_unique_id = "communifarm_create_inventory_lot"
+    _attr_icon = "mdi:barcode-plus"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_CREATE_INVENTORY_LOT)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        label = self.bucket().get("nfc_write_label") or "hardwood pellets"
+        await inventory_actions.async_create_inventory_lot(
+            self.hass, self._entry_id, label=str(label)
+        )
+
+
+class CommunifarmPrepareNfcWriteButton(CommunifarmButton):
+    _attr_name = "Prepare NDEF write"
+    _attr_unique_id = "communifarm_prepare_nfc_write"
+    _attr_icon = "mdi:nfc-tap"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_PREPARE_NFC_WRITE)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_prepare_nfc_write(self.hass, self._entry_id)
+
+
+class CommunifarmConfirmNfcWriteButton(CommunifarmButton):
+    _attr_name = "Confirm NFC write"
+    _attr_unique_id = "communifarm_confirm_nfc_write"
+    _attr_icon = "mdi:nfc-check"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_CONFIRM_NFC_WRITE)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_confirm_nfc_write(self.hass, self._entry_id)
+
+
+class CommunifarmMixStepFromBadgeButton(CommunifarmButton):
+    _attr_name = "Complete mix step from badge"
+    _attr_unique_id = "communifarm_mix_step_from_badge"
+    _attr_icon = "mdi:badge-account"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_MIX_STEP_FROM_BADGE)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_complete_mix_step_from_badge(
+            self.hass, self._entry_id
+        )
 
 
 class CommunifarmSeparateContainersButton(CommunifarmButton):

@@ -12,6 +12,9 @@ OBJECT_CONTAINER = "container"
 OBJECT_BATCH = "batch"
 OBJECT_CULTURE = "culture"
 OBJECT_MEDIA = "media"
+OBJECT_INVENTORY = "inventory"
+OBJECT_EMPLOYEE = "employee"
+OBJECT_LOCATION = "location"
 OBJECT_UNKNOWN = "unknown"
 
 NFC_OBJECT_TYPES = frozenset(
@@ -20,6 +23,9 @@ NFC_OBJECT_TYPES = frozenset(
         OBJECT_BATCH,
         OBJECT_CULTURE,
         OBJECT_MEDIA,
+        OBJECT_INVENTORY,
+        OBJECT_EMPLOYEE,
+        OBJECT_LOCATION,
     }
 )
 

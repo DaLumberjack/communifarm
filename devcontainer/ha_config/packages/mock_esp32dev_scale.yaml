@@ -92,6 +92,11 @@ input_select:
       - "coco coir"
       - "gypsum"
       - "potash"
+      - "water"
+      - "water (tap)"
+      - "water (filtered)"
+      - "water (warm, tap)"
+      - "water (warm, filtered)"
     initial: "(none)"
 
 input_button:
@@ -314,6 +319,34 @@ automation:
                   entity_id: input_select.esp32dev_selected_ingredient
                 data:
                   option: "potash"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-water-tap' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "water (tap)"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-water-filtered' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "water (filtered)"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-water-warm-tap' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "water (warm, tap)"
+          - conditions: "{{ states('input_text.esp32dev_last_nfc_uid') == 'nfc-water-warm-filtered' }}"
+            sequence:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.esp32dev_selected_ingredient
+                data:
+                  option: "water (warm, filtered)"
         default:
           - action: persistent_notification.create
             data:

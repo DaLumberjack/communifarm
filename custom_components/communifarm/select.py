@@ -17,10 +17,18 @@ from .const import (
     ENTITY_CONTAINER_TYPE,
     ENTITY_CULTURE_VESSEL_STATUS,
     ENTITY_HEAT_TREATMENT,
+    ENTITY_NFC_WRITE_LABEL,
+    ENTITY_NFC_WRITE_OBJECT_TYPE,
     ENTITY_PAYMENT_METHOD,
     ENTITY_SALE_BUYER,
     ENTITY_SALE_VENUE,
     SIGNAL_CULTURE_UPDATED,
+)
+from .domain.inventory import (
+    OBJECT_EMPLOYEE,
+    OBJECT_INVENTORY,
+    OBJECT_LOCATION,
+    inventory_write_choices,
 )
 from .domain.batch_milestones import HEAT_PASTEURIZED, HEAT_STERILIZED
 from .domain.culture import (
@@ -191,6 +199,24 @@ _BUCKET_SELECTS: tuple[_SelectSpec, ...] = (
         ("Walk-up", "CSA member", "Restaurant", "Wholesale", "Other"),
         "sale_buyer_label",
         "Walk-up",
+    ),
+    _spec(
+        "NFC write object type",
+        "communifarm_nfc_write_object_type",
+        ENTITY_NFC_WRITE_OBJECT_TYPE,
+        "mdi:nfc",
+        (OBJECT_INVENTORY, OBJECT_EMPLOYEE, OBJECT_LOCATION),
+        "nfc_write_object_type",
+        OBJECT_INVENTORY,
+    ),
+    _spec(
+        "NFC write ingredient / label",
+        "communifarm_nfc_write_label",
+        ENTITY_NFC_WRITE_LABEL,
+        "mdi:tag-text",
+        tuple(inventory_write_choices()),
+        "nfc_write_label",
+        "hardwood pellets",
     ),
 )
 

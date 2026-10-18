@@ -27,6 +27,7 @@ class WeightEvent:
     ingredient_label: str | None = None
     source_entity_id: str | None = None
     nfc_uid: str | None = None
+    inventory_lot_id: str | None = None
     unit: str = "g"
     recipe_scale: float | None = None
     target_amount: float | None = None

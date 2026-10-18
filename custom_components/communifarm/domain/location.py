@@ -105,6 +105,8 @@ class Zone:
     slot_index: int
     id: str = ""
     created_at: str | None = None
+    nfc_uid: str | None = None
+    ndef_payload: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id:

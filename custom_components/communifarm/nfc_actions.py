@@ -17,12 +17,16 @@ from .const import (
     SIGNAL_NFC_CHECKIN_UPDATED,
 )
 from .domain.container import rebind_container_nfc
+from .domain.inventory import NdefIdentity
 from .domain.nfc import (
     ACTIVITY_HARVEST,
     ACTIVITY_MOVE,
     OBJECT_BATCH,
     OBJECT_CONTAINER,
     OBJECT_CULTURE,
+    OBJECT_EMPLOYEE,
+    OBJECT_INVENTORY,
+    OBJECT_LOCATION,
     OBJECT_MEDIA,
     NfcCheckin,
     NfcResolution,
@@ -254,9 +258,56 @@ async def async_bind_nfc(
             recipe_scale=batch.recipe_scale,
             recipe_key=batch.recipe_key,
         )
+    elif ot == OBJECT_INVENTORY:
+        inv = hass.data[DOMAIN][entry_id].get("inventory_repository")
+        if inv is None:
+            raise HomeAssistantError("Inventory repository is not available")
+        lot = await inv.async_get_lot(oid)
+        if lot is None:
+            raise HomeAssistantError(f"unknown inventory lot: {oid}")
+        lot.nfc_uid = uid
+        identity = NdefIdentity(
+            object_type=OBJECT_INVENTORY,
+            object_id=lot.id,
+            label=lot.label,
+            ingredient_key=lot.ingredient_key,
+            water_kind=lot.water_kind,
+        )
+        lot.ndef_payload = identity.to_payload()
+        await inv.async_update_lot(lot)
+    elif ot == OBJECT_EMPLOYEE:
+        inv = hass.data[DOMAIN][entry_id].get("inventory_repository")
+        if inv is None:
+            raise HomeAssistantError("Inventory repository is not available")
+        badge = await inv.async_get_employee(oid)
+        if badge is None:
+            raise HomeAssistantError(f"unknown employee: {oid}")
+        badge.nfc_uid = uid
+        identity = NdefIdentity(
+            object_type=OBJECT_EMPLOYEE,
+            object_id=badge.id,
+            label=badge.label,
+        )
+        badge.ndef_payload = identity.to_payload()
+        await inv.async_update_employee(badge)
+    elif ot == OBJECT_LOCATION:
+        loc = hass.data[DOMAIN][entry_id].get("location_repository")
+        if loc is None:
+            raise HomeAssistantError("Location repository is not available")
+        zone = await loc.async_get_zone(oid)
+        if zone is None:
+            raise HomeAssistantError(f"unknown zone_id: {oid}")
+        identity = NdefIdentity(
+            object_type=OBJECT_LOCATION,
+            object_id=zone.id,
+            label=zone.name,
+            zone_id=zone.id,
+        )
+        await loc.async_bind_zone_nfc(zone.id, uid, identity.to_payload())
     else:
         raise HomeAssistantError(
-            f"bind_nfc for {ot} not implemented in this slice (container/batch only)"
+            f"bind_nfc for {ot} not implemented "
+            "(container/batch/inventory/employee/location)"
         )
 
     await async_resolve_nfc(hass, entry_id, nfc_uid=uid)

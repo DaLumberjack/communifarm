@@ -31,4 +31,5 @@ Add a row when the first real case for that process exists.
 
 | process | case file | operator doc |
 |---------|-----------|--------------|
+| Mixing batch / NFC inventory | [mixing-batch.md](./mixing-batch.md) | [mixing-batch.md](../mixing-batch.md) |
 | Air-exchange tachometer | [air-exchange-tachometer.md](./air-exchange-tachometer.md) | [hardware/air-exchange-tachometer.md](../../hardware/air-exchange-tachometer.md) |

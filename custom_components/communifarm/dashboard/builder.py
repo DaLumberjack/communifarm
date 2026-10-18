@@ -15,6 +15,8 @@ from ..const import (
     DASHBOARD_VIEW_OVERVIEW,
     DASHBOARD_VIEW_POS,
     DASHBOARD_VIEW_PRODUCTION,
+    DASHBOARD_VIEW_MIX,
+    DASHBOARD_VIEW_NFC_WRITE,
     DASHBOARD_VIEW_WEIGH,
     ENTITY_ACQUIRE_FORM,
     ENTITY_ACQUIRE_SOURCE,
@@ -29,11 +31,19 @@ from ..const import (
     ENTITY_BTN_COMPLETE_NEW_BATCH,
     ENTITY_BTN_COMPLETELY_MIXED,
     ENTITY_BTN_CREATE_VARIETY,
+    ENTITY_BTN_CONFIRM_NFC_WRITE,
+    ENTITY_BTN_CREATE_INVENTORY_LOT,
     ENTITY_BTN_DRY_WET_MIX,
+    ENTITY_BTN_DRYS_COMBINED,
     ENTITY_BTN_FIELD_CAPACITY,
     ENTITY_BTN_FINAL_HARVEST,
     ENTITY_BTN_HEAT_TREATED,
     ENTITY_BTN_INOCULATE,
+    ENTITY_BTN_MIX_STEP_FROM_BADGE,
+    ENTITY_BTN_PREPARE_NFC_WRITE,
+    ENTITY_BTN_RECORD_WATER_POUR,
+    ENTITY_BTN_RELOCATE_STERILE,
+    ENTITY_BTN_REMAINING_WATER,
     ENTITY_BTN_MOVE_FRUITING,
     ENTITY_BTN_MOVE_HARVEST,
     ENTITY_BTN_MOVE_INCUBATION,
@@ -49,6 +59,11 @@ from ..const import (
     ENTITY_BTN_STORED_COOLING,
     ENTITY_BTN_WATER_ADDED,
     ENTITY_CATALOG_VARIETY,
+    ENTITY_FIELD_CAPACITY,
+    ENTITY_MIX_PROTOCOL,
+    ENTITY_NFC_WRITE_LABEL,
+    ENTITY_NFC_WRITE_OBJECT_TYPE,
+    ENTITY_NFC_WRITE_STATUS,
     ENTITY_CLIMATE_STATUS,
     ENTITY_CONTAINER_COUNT,
     ENTITY_CONTAINER_TYPE,
@@ -116,6 +131,8 @@ class DashboardBuilder:
                 self._climate_layout_view(points),
                 self._climate_status_view(points),
                 self._weigh_view(state),
+                self._mix_view(state),
+                self._nfc_write_view(state),
                 self._batches_view(state),
                 self._culture_view(state),
                 self._production_view(state),
@@ -135,7 +152,8 @@ class DashboardBuilder:
                     f"Site: **{state.site.name}**\n"
                     f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
                     "Floor plan? **Layout** · Gauges and fans? **Climate** · "
-                    "Weighing? **Weigh** · Mix history? **Batches** · "
+                    "Batch mixing? **Mix** · Tag writing? **NFC Write** · "
+                    "History? **Batches** · "
                     "Culture / varieties? **Culture** · "
                     "Inoculate? **Production** · Pick / fridge? **Harvest** · "
                     "Sell? **POS**."
@@ -236,7 +254,7 @@ class DashboardBuilder:
         }
 
     def _weigh_view(self, state: CommunifarmState) -> dict[str, Any]:
-        """Activity tab for scale tare / NFC ingredient / record during weighing."""
+        """Legacy path — mixing lives on Mix."""
         return {
             "title": "Weigh",
             "path": DASHBOARD_VIEW_WEIGH,
@@ -245,13 +263,38 @@ class DashboardBuilder:
                 {
                     "type": "markdown",
                     "content": (
-                        f"## Weigh station\n"
+                        f"## Moved to **Mix**\n"
+                        f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
+                        "The standalone mixing process (drys → wets → field capacity "
+                        "→ bag → sterilize) is on the **Mix** tab: "
+                        "`/communifarm/mix`.\n"
+                    ),
+                },
+            ],
+        }
+
+    def _mix_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Standalone mix process: focus → drys → wets → finish."""
+        return {
+            "title": "Mix",
+            "path": DASHBOARD_VIEW_MIX,
+            "icon": "mdi:blender",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "content": (
+                        f"## Mixing batch\n"
                         f"Batch: **{state.batch.name}** ({state.batch.stage})\n"
-                        f"NFC UID: `{state.batch.nfc_uid}`\n\n"
-                        "First recorded ingredient **auto-starts dry mixing**.\n"
-                        "1. Set recipe scale if needed\n"
-                        "2. Scan NFC (or pick ingredient)\n"
-                        "3. Tare → add material → Record\n"
+                        f"Batch NFC: `{state.batch.nfc_uid}`\n\n"
+                        "Scroll top → bottom: **drys**, then **wets**, then "
+                        "**finish** when field capacity is met.\n"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Focus — now / last / next",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_MIX_PROTOCOL}', 'focus_text') }}}}"
                     ),
                 },
                 {
@@ -268,34 +311,29 @@ class DashboardBuilder:
                             "name": "Batch NFC UID",
                         },
                         {
-                            "entity": ENTITY_WEIGH_SESSION,
-                            "name": "Session progress",
+                            "entity": ENTITY_MIX_PROTOCOL,
+                            "name": "Mix protocol",
+                        },
+                        {
+                            "entity": ENTITY_BTN_MIX_STEP_FROM_BADGE,
+                            "name": "Badge: complete next checkpoint",
                         },
                     ],
                 },
+                # --- DRY SECTION ---
                 {
                     "type": "markdown",
-                    "title": "This session",
                     "content": (
-                        f"{{{{ state_attr('{ENTITY_WEIGH_SESSION}', 'progress_text') }}}}"
+                        "## 1 · Dry ingredients\n"
+                        "Scan NFC or pick ingredient → Tare → add → **Record weight**."
                     ),
                 },
                 {
-                    "type": "entities",
-                    "title": "Mix milestones (weigh)",
-                    "show_header_toggle": False,
-                    "entities": [
-                        {"entity": ENTITY_BTN_WATER_ADDED, "name": "Added water"},
-                        {
-                            "entity": ENTITY_BTN_DRY_WET_MIX,
-                            "name": "Started dry/wet mix",
-                        },
-                        {"entity": ENTITY_BTN_SETTLING, "name": "Settling"},
-                        {
-                            "entity": ENTITY_BTN_FIELD_CAPACITY,
-                            "name": "Reached field capacity",
-                        },
-                    ],
+                    "type": "markdown",
+                    "title": "Dry progress",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_WEIGH_SESSION}', 'dry_progress_text') }}}}"
+                    ),
                 },
                 {
                     "type": "markdown",
@@ -326,7 +364,7 @@ class DashboardBuilder:
                 },
                 {
                     "type": "entities",
-                    "title": "Scale",
+                    "title": "Scale (drys)",
                     "show_header_toggle": False,
                     "entities": [
                         {
@@ -339,10 +377,6 @@ class DashboardBuilder:
                         },
                         {"entity": ENTITY_ESP32DEV_TARE, "name": "Tare"},
                         {
-                            "entity": ENTITY_ESP32DEV_LOCATION_TARE,
-                            "name": "Location tare",
-                        },
-                        {
                             "entity": ENTITY_ESP32DEV_RECORD_WEIGHT,
                             "name": "Record weight",
                         },
@@ -351,6 +385,196 @@ class DashboardBuilder:
                             "name": "Last recorded (g)",
                         },
                     ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Dry checkpoint",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_BTN_DRYS_COMBINED,
+                            "name": "Mix all drys together",
+                        },
+                    ],
+                },
+                # --- WET SECTION ---
+                {
+                    "type": "markdown",
+                    "content": (
+                        "## 2 · Water / wets\n"
+                        "Water target **10200 g** (pours sum). "
+                        "**Location tare** the mix vessel → add pour → "
+                        "**Record water pour**. Then incorporate / remaining / "
+                        "field capacity."
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Water progress",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_WEIGH_SESSION}', 'wet_progress_text') }}}}"
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Scale (water pours)",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_ESP32DEV_CALIBRATED_G,
+                            "name": "Current mass (g)",
+                        },
+                        {
+                            "entity": ENTITY_ESP32DEV_LOCATION_TARE,
+                            "name": "Location tare (mix vessel)",
+                        },
+                        {
+                            "entity": ENTITY_ESP32DEV_SELECTED_INGREDIENT,
+                            "name": "Water type (optional)",
+                        },
+                        {
+                            "entity": ENTITY_BTN_RECORD_WATER_POUR,
+                            "name": "Record water pour",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Wet checkpoints",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_BTN_WATER_ADDED,
+                            "name": "First water pour done",
+                        },
+                        {
+                            "entity": ENTITY_BTN_DRY_WET_MIX,
+                            "name": "Incorporate",
+                        },
+                        {
+                            "entity": ENTITY_BTN_REMAINING_WATER,
+                            "name": "Remaining water done",
+                        },
+                        {
+                            "entity": ENTITY_BTN_SETTLING,
+                            "name": "Incorporate remaining",
+                        },
+                        {
+                            "entity": ENTITY_FIELD_CAPACITY,
+                            "name": "Field capacity reading",
+                        },
+                        {
+                            "entity": ENTITY_BTN_FIELD_CAPACITY,
+                            "name": "Reached field capacity",
+                        },
+                    ],
+                },
+                # --- FINISH SECTION ---
+                {
+                    "type": "markdown",
+                    "content": (
+                        "## 3 · Finish\n"
+                        "Completely mixed → bag/bin → scan **at least one** "
+                        "bag/bin NFC → **Relocate for sterilization** "
+                        "(documents the whole batch moved)."
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Finish checkpoints",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_BTN_COMPLETELY_MIXED,
+                            "name": "Completely mixed",
+                        },
+                        {
+                            "entity": ENTITY_CONTAINER_COUNT,
+                            "name": "Container count",
+                        },
+                        {
+                            "entity": ENTITY_BTN_SEPARATE_CONTAINERS,
+                            "name": "Bag / bin",
+                        },
+                        {
+                            "entity": ENTITY_BTN_RELOCATE_STERILE,
+                            "name": "Relocate for sterilization",
+                        },
+                    ],
+                },
+                {
+                    "type": "markdown",
+                    "title": "Full checklist",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_MIX_PROTOCOL}', 'progress_text') }}}}"
+                    ),
+                },
+            ],
+        }
+
+    def _nfc_write_view(self, state: CommunifarmState) -> dict[str, Any]:
+        """Write Communifarm identity NDEF onto physical NFC tags."""
+        return {
+            "title": "NFC Write",
+            "path": DASHBOARD_VIEW_NFC_WRITE,
+            "icon": "mdi:nfc",
+            "cards": [
+                {
+                    "type": "markdown",
+                    "content": (
+                        f"## NFC write station\n"
+                        f"Site: **{state.site.name}**\n\n"
+                        "Create inventory lots (same name, new UUID for each bag), "
+                        "employee badges, or location tags. Prepare NDEF, present "
+                        "the tag to the lab writer, then confirm.\n\n"
+                        "Payload is typed JSON identity (`cf://type/id`); "
+                        "SQLite remains the source of truth after bind.\n"
+                    ),
+                },
+                {
+                    "type": "entities",
+                    "title": "Write target",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_NFC_WRITE_OBJECT_TYPE,
+                            "name": "Object type",
+                        },
+                        {
+                            "entity": ENTITY_NFC_WRITE_LABEL,
+                            "name": "Ingredient / water / label",
+                        },
+                        {
+                            "entity": ENTITY_BTN_CREATE_INVENTORY_LOT,
+                            "name": "New inventory UUID (same name OK)",
+                        },
+                        {
+                            "entity": ENTITY_BTN_PREPARE_NFC_WRITE,
+                            "name": "Prepare NDEF write",
+                        },
+                        {
+                            "entity": ENTITY_BTN_CONFIRM_NFC_WRITE,
+                            "name": "Confirm write (bind chip UID)",
+                        },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "Writer status",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_NFC_WRITE_STATUS,
+                            "name": "Write status",
+                        },
+                    ],
+                },
+                {
+                    "type": "markdown",
+                    "title": "Pending NDEF",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_NFC_WRITE_STATUS}', 'progress_text') }}}}"
+                    ),
                 },
             ],
         }
@@ -366,8 +590,7 @@ class DashboardBuilder:
                     "content": (
                         f"## Batches\n"
                         f"Active: **{state.batch.name}** (`{state.batch.id}`)\n\n"
-                        "Complete mix process here. After cooling, use the "
-                        "**Production** tab to inoculate culture into containers."
+                        "History and heat/cooling. Live mix protocol is on **Mix**."
                     ),
                 },
                 {

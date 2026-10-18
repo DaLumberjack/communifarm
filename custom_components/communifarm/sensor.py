@@ -23,7 +23,13 @@ from .const import (
     ENTITY_SALES_STATUS,
     ENTITY_TACHOMETER_STATUS,
     ENTITY_VARIETY_LIST,
+    ENTITY_FIELD_CAPACITY,
+    ENTITY_FIELD_CAPACITY_RAW,
+    ENTITY_MIX_PROTOCOL,
+    ENTITY_NFC_WRITE_STATUS,
     ENTITY_WEIGH_SESSION,
+    FIELD_CAPACITY_MAX_OK,
+    FIELD_CAPACITY_MIN_OK,
     ROLE_HUMIDITY,
     ROLE_TEMPERATURE,
     SIGNAL_BATCH_UPDATED,
@@ -71,6 +77,9 @@ async def async_setup_entry(
             CommunifarmEnvironmentStatusSensor(entry_id, state),
             CommunifarmBatchNfcUidSensor(entry_id, state),
             CommunifarmWeighSessionSensor(entry_id, state),
+            CommunifarmMixProtocolSensor(entry_id, state),
+            CommunifarmNfcWriteStatusSensor(entry_id),
+            CommunifarmFieldCapacitySensor(entry_id),
             CommunifarmBatchListSensor(entry_id),
             CommunifarmBatchMilestonesSensor(entry_id),
             CommunifarmProductionStatusSensor(entry_id),
@@ -222,6 +231,8 @@ class CommunifarmWeighSessionSensor(CommunifarmSensor):
             "total": progress.total,
             "next_label": progress.next_label,
             "progress_text": self._progress_text,
+            "dry_progress_text": progress.dry_progress_text(),
+            "wet_progress_text": progress.wet_progress_text(),
             "lines": [line.to_attr_dict() for line in progress.lines],
             "warnings": warnings,
             "warning": warnings[0] if warnings else None,
@@ -234,6 +245,140 @@ class CommunifarmWeighSessionSensor(CommunifarmSensor):
     @property
     def native_value(self) -> str:
         return str(self._attrs.get("summary", "0/0 lines recorded"))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmMixProtocolSensor(CommunifarmSensor):
+    """Ordered mix-batch checklist (task-focused, not general scale use)."""
+
+    _attr_name = "Mix protocol"
+    _attr_unique_id = "communifarm_mix_protocol"
+    _attr_icon = "mdi:format-list-checks"
+
+    def __init__(self, entry_id: str, state: CommunifarmState) -> None:
+        super().__init__(entry_id, state, entity_id=ENTITY_MIX_PROTOCOL)
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.listen_entry_signals(
+            SIGNAL_BATCH_UPDATED,
+            SIGNAL_WEIGH_SESSION_UPDATED,
+            method="async_refresh",
+        )
+
+    async def async_refresh(self) -> None:
+        from . import inventory_actions
+
+        progress = await inventory_actions.async_mix_protocol_snapshot(
+            self.hass, self._entry_id
+        )
+        self._attrs = {
+            "summary": progress.summary,
+            "batch_id": progress.batch_id,
+            "completed": progress.completed,
+            "total": progress.total,
+            "section": progress.section,
+            "next_key": progress.next_key,
+            "next_label": progress.next_label,
+            "last_done_key": progress.last_done_key,
+            "last_done_label": progress.last_done_label,
+            "dry_weigh_done": progress.dry_weigh_done,
+            "field_capacity_ok": progress.field_capacity_ok,
+            "focus_text": progress.focus_text(),
+            "progress_text": progress.progress_text(),
+            "steps": [s.to_attr_dict() for s in progress.steps],
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return str(self._attrs.get("summary", "0/0 mix steps"))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmNfcWriteStatusSensor(CommunifarmSensor):
+    """Pending NDEF payload for the lab NFC writer."""
+
+    _attr_name = "NFC write status"
+    _attr_unique_id = "communifarm_nfc_write_status"
+    _attr_icon = "mdi:nfc-variant"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_NFC_WRITE_STATUS)
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.listen_entry_signals(SIGNAL_NFC_CHECKIN_UPDATED, method="async_refresh")
+
+    async def async_refresh(self) -> None:
+        pending = dict(self.bucket().get("pending_nfc_write") or {})
+        self._attrs = pending
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return str(self._attrs.get("status") or "idle")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmFieldCapacitySensor(CommunifarmSensor):
+    """Mirror mix-room capacitance reading + calibration band status."""
+
+    _attr_name = "Field capacity"
+    _attr_unique_id = "communifarm_field_capacity"
+    _attr_icon = "mdi:water-percent"
+    _attr_native_unit_of_measurement = "%"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_FIELD_CAPACITY)
+        self._value: float | None = None
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.listen_entry_signals(SIGNAL_BATCH_UPDATED, method="async_refresh")
+
+    async def async_refresh(self) -> None:
+        from .inventory_actions import assess_field_capacity_reading
+
+        raw = None
+        state = self.hass.states.get(ENTITY_FIELD_CAPACITY_RAW)
+        if state is not None and state.state not in ("unknown", "unavailable", ""):
+            try:
+                raw = float(state.state)
+            except (TypeError, ValueError):
+                raw = None
+        ok, warning = assess_field_capacity_reading(
+            raw, min_ok=FIELD_CAPACITY_MIN_OK, max_ok=FIELD_CAPACITY_MAX_OK
+        )
+        self.bucket()["field_capacity_ok"] = ok
+        self._value = raw
+        self._attrs = {
+            "in_band": ok,
+            "warning": warning,
+            "min_ok": FIELD_CAPACITY_MIN_OK,
+            "max_ok": FIELD_CAPACITY_MAX_OK,
+            "note": (
+                "Salts skew capacitance; calibrate band for this substrate before "
+                "trusting field-capacity automation."
+            ),
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> float | None:
+        return self._value
 
     @property
     def extra_state_attributes(self) -> dict:

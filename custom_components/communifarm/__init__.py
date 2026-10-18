@@ -24,6 +24,7 @@ from . import (
     batch_actions,
     climate_actions,
     culture_actions,
+    inventory_actions,
     location_actions,
     nfc_actions,
     production_actions,
@@ -48,12 +49,17 @@ from .const import (
     SERVICE_BIND_NFC,
     SERVICE_CHECK_IN,
     SERVICE_COMPLETE_AND_NEW_BATCH,
+    SERVICE_COMPLETE_MIX_STEP_FROM_BADGE,
+    SERVICE_CONFIRM_NFC_WRITE,
+    SERVICE_CREATE_EMPLOYEE_BADGE,
+    SERVICE_CREATE_INVENTORY_LOT,
     SERVICE_CREATE_MEDIA_BATCH,
     SERVICE_CREATE_VARIETY,
     SERVICE_ENSURE_CLIMATE_LAYOUT,
     SERVICE_ENSURE_PLACEMENT_LAYOUT,
     SERVICE_INOCULATE_BATCH,
     SERVICE_INTRODUCE_CULTURE,
+    SERVICE_PREPARE_NFC_WRITE,
     SERVICE_RECORD_BATCH_MILESTONE,
     SERVICE_RECORD_CONTAINER_HARVEST,
     SERVICE_RECORD_HARVEST,
@@ -63,6 +69,7 @@ from .const import (
     SERVICE_RECORD_SALE_CLEANUP,
     SERVICE_RECORD_TACHOMETER,
     SERVICE_RECORD_WEIGHT,
+    SERVICE_RELOCATE_FOR_STERILIZATION,
     SERVICE_RESOLVE_NFC,
     SERVICE_RETIRE_VARIETY,
     SERVICE_SET_BATCH_LOCATION,
@@ -74,6 +81,7 @@ from .const import (
     SERVICE_TRANSITION_BATCH,
     SERVICE_UPSERT_AIR_VENT,
     SIGNAL_WEIGH_SESSION_UPDATED,
+    WATER_OVERADD_FACTOR,
     new_weigh_session_tracker,
 )
 from .dashboard.provisioner import async_provision_dashboard
@@ -115,11 +123,13 @@ from .domain.validation import (
     validate_nfc_uid,
     validate_recipe_unit,
 )
-from .domain.weight import WeightEvent, ingredient_key_from_label
+from .domain.inventory import recipe_ingredient_key
+from .domain.weight import WeightEvent
 from .storage.batch_repository import BatchRepository
 from .storage.climate_repository import ClimateRepository
 from .storage.container_repository import ContainerRepository
 from .storage.culture_repository import CultureRepository
+from .storage.inventory_repository import InventoryRepository
 from .storage.location_repository import LocationRepository
 from .storage.nfc_repository import NfcRepository
 from .storage.repository import CommunifarmRepository
@@ -328,6 +338,37 @@ BIND_NFC_SCHEMA = vol.Schema(
     }
 )
 
+CREATE_INVENTORY_LOT_SCHEMA = vol.Schema(
+    {
+        vol.Required("label"): cv.string,
+        vol.Optional("water_kind"): cv.string,
+    }
+)
+
+CREATE_EMPLOYEE_BADGE_SCHEMA = vol.Schema({vol.Required("label"): cv.string})
+
+PREPARE_NFC_WRITE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("object_type"): cv.string,
+        vol.Optional("object_id"): cv.string,
+        vol.Optional("label"): cv.string,
+        vol.Optional("zone_id"): cv.string,
+    }
+)
+
+CONFIRM_NFC_WRITE_SCHEMA = vol.Schema({vol.Optional("nfc_uid"): cv.string})
+
+COMPLETE_MIX_STEP_FROM_BADGE_SCHEMA = vol.Schema(
+    {vol.Optional("nfc_uid"): cv.string}
+)
+
+RELOCATE_FOR_STERILIZATION_SCHEMA = vol.Schema(
+    {
+        vol.Optional("bag_nfc_uid"): cv.string,
+        vol.Optional("location_nfc_uid"): cv.string,
+    }
+)
+
 RECORD_CONTAINER_HARVEST_SCHEMA = vol.Schema(
     {
         vol.Required("mass_g"): vol.Coerce(float),
@@ -433,11 +474,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await container_repo.async_setup()
     sale_repo = SaleRepository(hass, path=weight_repo.path)
     await sale_repo.async_setup()
+    inventory_repo = InventoryRepository(hass)
+    inventory_repo.bind_connection(weight_repo._conn)
     nfc_repo = NfcRepository(
         hass,
         container_repo=container_repo,
         batch_repo=batch_repo,
         culture_repo=culture_repo,
+        inventory_repo=inventory_repo,
+        location_repo=location_repo,
     )
     await location_repo.async_ensure_default_layout(state.site.id)
     await batch_repo.async_ensure_batch(
@@ -470,9 +515,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "container_repository": container_repo,
         "sale_repository": sale_repo,
         "nfc_repository": nfc_repo,
+        "inventory_repository": inventory_repo,
         "state": state,
         "weigh_session": new_weigh_session_tracker(),
         "nfc_session": nfc_actions.new_nfc_session(),
+        "pending_nfc_write": inventory_actions.new_pending_nfc_write(),
+        "nfc_write_object_type": "inventory",
+        "nfc_write_label": "hardwood pellets",
+        "nfc_write_object_id": None,
+        "nfc_write_zone_id": None,
+        "field_capacity_ok": None,
+        "relocate_bag_nfc_uid": None,
+        "relocate_location_nfc_uid": None,
         "container_count": 1,
         "heat_treatment": "pasteurized",
         "active_media_batch_id": None,
@@ -776,6 +830,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             nfc_uid=call.data.get("nfc_uid"),
         )
 
+    async def async_create_inventory_lot(call: ServiceCall) -> None:
+        await inventory_actions.async_create_inventory_lot(
+            hass,
+            entry.entry_id,
+            label=call.data["label"],
+            water_kind=call.data.get("water_kind"),
+        )
+
+    async def async_create_employee_badge(call: ServiceCall) -> None:
+        await inventory_actions.async_create_employee_badge(
+            hass, entry.entry_id, label=call.data["label"]
+        )
+
+    async def async_prepare_nfc_write(call: ServiceCall) -> None:
+        await inventory_actions.async_prepare_nfc_write(
+            hass,
+            entry.entry_id,
+            object_type=call.data.get("object_type"),
+            object_id=call.data.get("object_id"),
+            label=call.data.get("label"),
+            zone_id=call.data.get("zone_id"),
+        )
+
+    async def async_confirm_nfc_write(call: ServiceCall) -> None:
+        await inventory_actions.async_confirm_nfc_write(
+            hass, entry.entry_id, nfc_uid=call.data.get("nfc_uid")
+        )
+
+    async def async_complete_mix_step_from_badge(call: ServiceCall) -> None:
+        await inventory_actions.async_complete_mix_step_from_badge(
+            hass, entry.entry_id, nfc_uid=call.data.get("nfc_uid")
+        )
+
+    async def async_relocate_for_sterilization(call: ServiceCall) -> None:
+        await inventory_actions.async_relocate_for_sterilization(
+            hass,
+            entry.entry_id,
+            bag_nfc_uid=call.data.get("bag_nfc_uid"),
+            location_nfc_uid=call.data.get("location_nfc_uid"),
+        )
+
     async def async_record_container_harvest(call: ServiceCall) -> None:
         await production_actions.async_record_container_harvest(
             hass,
@@ -1022,6 +1117,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async_bind_nfc,
             schema=BIND_NFC_SCHEMA,
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_CREATE_INVENTORY_LOT):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CREATE_INVENTORY_LOT,
+            async_create_inventory_lot,
+            schema=CREATE_INVENTORY_LOT_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_CREATE_EMPLOYEE_BADGE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CREATE_EMPLOYEE_BADGE,
+            async_create_employee_badge,
+            schema=CREATE_EMPLOYEE_BADGE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_PREPARE_NFC_WRITE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_PREPARE_NFC_WRITE,
+            async_prepare_nfc_write,
+            schema=PREPARE_NFC_WRITE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_CONFIRM_NFC_WRITE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CONFIRM_NFC_WRITE,
+            async_confirm_nfc_write,
+            schema=CONFIRM_NFC_WRITE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_COMPLETE_MIX_STEP_FROM_BADGE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_COMPLETE_MIX_STEP_FROM_BADGE,
+            async_complete_mix_step_from_badge,
+            schema=COMPLETE_MIX_STEP_FROM_BADGE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_RELOCATE_FOR_STERILIZATION):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RELOCATE_FOR_STERILIZATION,
+            async_relocate_for_sterilization,
+            schema=RELOCATE_FOR_STERILIZATION_SCHEMA,
+        )
     if not hass.services.has_service(DOMAIN, SERVICE_RECORD_CONTAINER_HARVEST):
         hass.services.async_register(
             DOMAIN,
@@ -1123,7 +1260,16 @@ async def _async_persist_weight_event(
             raise HomeAssistantError(str(err)) from err
         return
 
-    key = ingredient_key_from_label(label) if label else None
+    inventory_lot_id = data.get("inventory_lot_id")
+    if nfc_uid and not inventory_lot_id:
+        inv_repo = bucket.get("inventory_repository")
+        if inv_repo is not None:
+            lot = await inv_repo.async_get_lot_by_nfc(str(nfc_uid))
+            if lot is not None:
+                inventory_lot_id = lot.id
+                if label is None:
+                    label = lot.label
+    key = recipe_ingredient_key(label) if label else None
     scale = clamp_recipe_scale(state.recipe_scale)
     target_amount = None
     recipe_unit = "g"
@@ -1158,6 +1304,27 @@ async def _async_persist_weight_event(
             raise HomeAssistantError(assessment.reject_reason or "invalid mass")
         return
 
+    # Water must not over-add past recipe target × WATER_OVERADD_FACTOR.
+    if key == "water" and target_amount is not None:
+        prior = await weight_repo.async_list_for_batch(state.batch.id)
+        prior_water = sum(
+            float(ev.mass_g) for ev in prior if ev.ingredient_key == "water"
+        )
+        projected = prior_water + float(assessment.mass_g)
+        limit = float(target_amount) * WATER_OVERADD_FACTOR
+        if projected > limit + 1e-6:
+            reason = (
+                f"water over-add rejected: {projected:g} g would exceed "
+                f"{limit:g} g (target {target_amount:g} g × {WATER_OVERADD_FACTOR})"
+            )
+            session["last_reject"] = reason
+            session["warnings"] = []
+            _LOGGER.warning("record_weight rejected: %s", reason)
+            async_dispatcher_send(hass, SIGNAL_WEIGH_SESSION_UPDATED, entry_id)
+            if raise_on_reject:
+                raise HomeAssistantError(reason)
+            return
+
     warnings.extend(assessment.warnings)
     if recipe_unit:
         try:
@@ -1178,6 +1345,7 @@ async def _async_persist_weight_event(
         ingredient_key=key,
         source_entity_id=ENTITY_SCALE_MASS_G,
         nfc_uid=nfc_uid,
+        inventory_lot_id=inventory_lot_id,
         recorded_at=datetime.now(tz=UTC).isoformat(),
         recipe_scale=scale,
         target_amount=target_amount,
@@ -1294,6 +1462,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_RESOLVE_NFC,
                 SERVICE_CHECK_IN,
                 SERVICE_BIND_NFC,
+                SERVICE_CREATE_INVENTORY_LOT,
+                SERVICE_CREATE_EMPLOYEE_BADGE,
+                SERVICE_PREPARE_NFC_WRITE,
+                SERVICE_CONFIRM_NFC_WRITE,
+                SERVICE_COMPLETE_MIX_STEP_FROM_BADGE,
+                SERVICE_RELOCATE_FOR_STERILIZATION,
                 SERVICE_RECORD_CONTAINER_HARVEST,
                 SERVICE_RECORD_SALE,
                 SERVICE_RECORD_SALE_CLEANUP,
