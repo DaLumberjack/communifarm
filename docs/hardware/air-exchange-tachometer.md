@@ -22,7 +22,7 @@ GPIO pulse tachometers can come later on AIO868 / ESP nodes. Semi-frequent air-e
 | basic | Label vents; log when air smells stale or CO2 looks high | Any unit; services above |
 | reliable home | Same vents on a schedule; prefer CFM | Compare readings over time on the status sensor |
 | advanced clean | Re-measure after layout or filter changes | Treat readings as commissioning evidence |
-| lab-quality CEA | Calibrated meter, duct area, ACH tied to batch records | Still store raw samples here; ACH product math is later |
+| lab-quality CEA | Calibrated meter, duct area, ACH tied to batch CPP records | Enter volume + CFM on Climate settings; compare progress to τ |
 
 ## Workflow
 
@@ -44,7 +44,7 @@ GPIO pulse tachometers can come later on AIO868 / ESP nodes. Semi-frequent air-e
 | `cfm` | Direct airflow (preferred for air-exchange math later) |
 | `fpm` | Face velocity; convert with duct area later |
 
-ACH / room-volume math is deferred. Store the raw samples first.
+ACH estimates live in climate automation when the same enclosure has **volume_m³** and intake/exhaust **CFM** commissioned (`docs/user/climate.md`). Prefer logging CFM here so those settings stay truthful. RPM-only logs still help trend fans but do not drive ACH until converted.
 
 ## Purchase Checklist
 

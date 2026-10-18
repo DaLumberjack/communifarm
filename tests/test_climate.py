@@ -362,7 +362,8 @@ def test_humidity_dehumidifier_and_external_air() -> None:
         nodes=nodes,
     )
     assert ROLE_EXHAUST_FAN not in _ons(wet_blocked, fruit.id)
-    assert "will not help" in _reason(wet_blocked, fruit.id, ROLE_EXHAUST_FAN)
+    reason = _reason(wet_blocked, fruit.id, ROLE_EXHAUST_FAN)
+    assert "will not help" in reason or "human required" in reason
 
     dehum, _ = _decide(
         {fruit.id: [SensorSample(ROLE_HUMIDITY, 98)]},
@@ -716,7 +717,8 @@ def test_co2_opens_intake_and_fresh_air_checks_outdoor() -> None:
         nodes=nodes,
     )
     assert ROLE_FRESH_AIR_INTAKE not in _ons(useless, general.id)
-    assert "will not help" in _reason(useless, general.id, ROLE_FRESH_AIR_INTAKE)
+    reason = _reason(useless, general.id, ROLE_FRESH_AIR_INTAKE)
+    assert "will not help" in reason or "human required" in reason
 
 
 def test_fruiting_keeps_base_circulation_while_in_band() -> None:
@@ -872,6 +874,42 @@ def test_fruiting_too_dry_turns_humidifier_on() -> None:
     )
     assert ROLE_HUMIDIFIER in _ons(decision, fruit.id)
     assert ROLE_CIRCULATION_FAN in _ons(decision, fruit.id)
+
+
+def test_oa_estimate_notice_and_human_required_when_outdoor_cannot_help() -> None:
+    nodes = _layout()
+    by = _by_kind(nodes)
+    general = by[KIND_GENERAL_ROOM]
+    outdoor = by[KIND_OUTDOOR]
+    general.volume_m3 = 40.0
+    general.intake_cfm = 200.0
+    general.exhaust_cfm = 200.0
+    decision, _ = _decide(
+        {
+            general.id: [
+                SensorSample(ROLE_TEMPERATURE, 28),
+                SensorSample(ROLE_HUMIDITY, 70),
+            ],
+            outdoor.id: [
+                SensorSample(ROLE_TEMPERATURE, 32),
+                SensorSample(ROLE_HUMIDITY, 80),
+            ],
+        },
+        [
+            _bind(general.id, ROLE_FRESH_AIR_INTAKE, "fan.room_oa"),
+            _bind(general.id, ROLE_EXHAUST_FAN, "fan.room_ex"),
+        ],
+        nodes=nodes,
+    )
+    assert decision.notices
+    assert any(notice.code == "human_required" for notice in decision.notices)
+    assert ROLE_FRESH_AIR_INTAKE not in _ons(decision, general.id)
+    summary = __import__(
+        "custom_components.communifarm.domain.climate_control",
+        fromlist=["format_decision_summary"],
+    ).format_decision_summary(nodes, decision)
+    assert "notice" in summary.lower()
+    assert "operator" in summary.lower()
 
 
 def test_five_circulation_bindings_all_receive_base_intent() -> None:

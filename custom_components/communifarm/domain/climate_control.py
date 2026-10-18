@@ -39,6 +39,14 @@ from .climate import (
     resolve_effective_readings,
     resolved_photoperiod,
 )
+from .climate_airflow import (
+    CAPABILITY_HUMAN_REQUIRED,
+    CapabilityNotice,
+    EnclosureAirflow,
+    ExchangeProgress,
+    assess_exchange,
+    notice_from_estimate,
+)
 
 _FANS = (
     ROLE_CIRCULATION_FAN,
@@ -63,6 +71,12 @@ class ObservedState:
     light_on_since: datetime | None = None
     occupied: bool = False
     last_occupied_at: datetime | None = None
+    # Smoothed OA / conditioning history for undersize assessment.
+    exchange_or_condition_on_since: datetime | None = None
+    temp_when_action_started: float | None = None
+    humidity_when_action_started: float | None = None
+    outdoor_temp_when_started: float | None = None
+    outdoor_humidity_when_started: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +107,7 @@ class ControlIntent:
 class ControlDecision:
     readings: dict[str, dict[str, EffectiveReading]]
     intents: list[ControlIntent]
+    notices: list[CapabilityNotice] | None = None
 
 
 def light_should_be_on(node: ClimateNode, now: datetime) -> bool:
@@ -139,6 +154,15 @@ def decide_control(
             if node.kind not in _TENT_KINDS or node.id not in cmds_by_node:
                 continue
             _throttle_tent_intake_during_parent_exchange(cmds_by_node[node.id])
+    notices = _capability_notices(
+        nodes,
+        by_id,
+        readings,
+        cmds_by_node,
+        bindings_by_node,
+        observed_by_node,
+        now,
+    )
     intents: list[ControlIntent] = []
     for node in nodes:
         cmds = cmds_by_node.get(node.id)
@@ -152,7 +176,7 @@ def decide_control(
             now,
         )
     )
-    return ControlDecision(readings=readings, intents=intents)
+    return ControlDecision(readings=readings, intents=intents, notices=notices)
 
 
 def format_decision_summary(
@@ -190,7 +214,92 @@ def format_decision_summary(
         else:
             tail = "Holding."
         lines.append(f"- **{node.name}** — {', '.join(bits)}. {tail}")
+    for notice in decision.notices or []:
+        node = next((item for item in nodes if item.id == notice.node_id), None)
+        label = node.name if node is not None else notice.node_id
+        lines.append(f"- **{label} notice ({notice.code})**: {notice.message}")
     return "\n".join(lines)
+
+
+def _capability_notices(
+    nodes: list[ClimateNode],
+    by_id: dict[str, ClimateNode],
+    readings: dict[str, dict[str, EffectiveReading]],
+    cmds_by_node: dict[str, dict[str, tuple[bool, str]]],
+    bindings_by_node: dict[str, list[ClimateBinding]],
+    observed_by_node: dict[str, ObservedState],
+    now: datetime,
+) -> list[CapabilityNotice]:
+    """OA ACH estimates and human-required notices for controlled nodes."""
+    notices: list[CapabilityNotice] = []
+    for node in nodes:
+        if not node.control_enabled or node.id not in cmds_by_node:
+            continue
+        node_readings = readings.get(node.id, {})
+        temp = _value(node_readings, ROLE_TEMPERATURE)
+        hum = _value(node_readings, ROLE_HUMIDITY)
+        out_temp, out_hum = _outdoor_air(node, by_id, readings)
+        cmds = cmds_by_node[node.id]
+        bindings = bindings_by_node.get(node.id, [])
+        conditioning_bound = _has_binding(bindings, ROLE_AC) or _has_binding(
+            bindings, ROLE_DEHUMIDIFIER
+        )
+        conditioning_on = bool(
+            (cmds.get(ROLE_AC) and cmds[ROLE_AC][0])
+            or (cmds.get(ROLE_DEHUMIDIFIER) and cmds[ROLE_DEHUMIDIFIER][0])
+        )
+        exchange_requested = bool(
+            (cmds.get(ROLE_FRESH_AIR_INTAKE) and cmds[ROLE_FRESH_AIR_INTAKE][0])
+            or (cmds.get(ROLE_INTAKE_FAN) and cmds[ROLE_INTAKE_FAN][0])
+            or (cmds.get(ROLE_EXHAUST_FAN) and cmds[ROLE_EXHAUST_FAN][0])
+        )
+        observed = observed_by_node.get(node.id, ObservedState())
+        progress = ExchangeProgress(
+            exchange_or_condition_on_since=observed.exchange_or_condition_on_since,
+            temp_when_action_started=observed.temp_when_action_started,
+            humidity_when_action_started=observed.humidity_when_action_started,
+            outdoor_temp_when_started=observed.outdoor_temp_when_started,
+            outdoor_humidity_when_started=observed.outdoor_humidity_when_started,
+        )
+        airflow = EnclosureAirflow(
+            volume_m3=node.volume_m3,
+            intake_cfm=node.intake_cfm,
+            exhaust_cfm=node.exhaust_cfm,
+            assess_after_minutes=node.oa_assess_minutes,
+        )
+        estimate = assess_exchange(
+            airflow=airflow,
+            indoor_temp=temp,
+            indoor_humidity=hum,
+            outdoor_temp=out_temp,
+            outdoor_humidity=out_hum,
+            temperature_target=node.temperature_target,
+            humidity_target=node.humidity_target,
+            temp_deadband=node.temp_deadband,
+            humidity_deadband=node.humidity_deadband,
+            minutes_ahead=max(5.0, node.oa_assess_minutes / 2.0),
+            progress=progress,
+            now=now,
+            conditioning_bound=conditioning_bound,
+            conditioning_on=conditioning_on,
+            exchange_requested=exchange_requested,
+        )
+        notice = notice_from_estimate(node.id, estimate)
+        if notice is not None:
+            notices.append(notice)
+        # When OA cannot help and there is no machine path, stop futile exchange.
+        # Undersized cases keep trying while the human is alerted.
+        if (
+            estimate.human_required
+            and estimate.capability == CAPABILITY_HUMAN_REQUIRED
+            and not conditioning_bound
+        ):
+            _note_off(cmds, ROLE_INTAKE_FAN, "human required; machines cannot close gap")
+            _note_off(cmds, ROLE_EXHAUST_FAN, "human required; machines cannot close gap")
+            _note_off(
+                cmds, ROLE_FRESH_AIR_INTAKE, "human required; machines cannot close gap"
+            )
+    return notices
 
 
 def _fmt_metric(label: str, reading: EffectiveReading | None, unit: str) -> str:

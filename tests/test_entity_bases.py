@@ -82,6 +82,22 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
             "communifarm_climate_setting_occupancy_hold_minutes",
         ),
         (
+            "number.communifarm_climate_volume_m3",
+            "communifarm_climate_setting_volume_m3",
+        ),
+        (
+            "number.communifarm_climate_intake_cfm",
+            "communifarm_climate_setting_intake_cfm",
+        ),
+        (
+            "number.communifarm_climate_exhaust_cfm",
+            "communifarm_climate_setting_exhaust_cfm",
+        ),
+        (
+            "number.communifarm_climate_oa_assess",
+            "communifarm_climate_setting_oa_assess_minutes",
+        ),
+        (
             "number.communifarm_climate_row_fan_on",
             "communifarm_climate_setting_row_fan_on_minutes",
         ),

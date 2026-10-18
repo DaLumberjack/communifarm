@@ -18,6 +18,10 @@ SETTING_CO2_PPM_TARGET = "co2_ppm_target"
 SETTING_LIGHT_HOURS_ON = "light_hours_on"
 SETTING_LIGHT_HOURS_OFF = "light_hours_off"
 SETTING_OCCUPANCY_HOLD_MINUTES = "occupancy_hold_minutes"
+SETTING_VOLUME_M3 = "volume_m3"
+SETTING_INTAKE_CFM = "intake_cfm"
+SETTING_EXHAUST_CFM = "exhaust_cfm"
+SETTING_OA_ASSESS_MINUTES = "oa_assess_minutes"
 SETTING_ROW_FAN_ON_MINUTES = "row_fan_on_minutes"
 SETTING_ROW_FAN_OFF_MINUTES = "row_fan_off_minutes"
 
@@ -61,6 +65,24 @@ NODE_SETTING_SPECS: tuple[ClimateSettingSpec, ...] = (
         "Occupancy light hold",
         0,
         120,
+        1,
+        "min",
+    ),
+    ClimateSettingSpec(
+        SETTING_VOLUME_M3, SCOPE_NODE, "Enclosure volume", 0.1, 5000, 0.1, "m³"
+    ),
+    ClimateSettingSpec(
+        SETTING_INTAKE_CFM, SCOPE_NODE, "Intake fan CFM", 0, 50000, 1, "cfm"
+    ),
+    ClimateSettingSpec(
+        SETTING_EXHAUST_CFM, SCOPE_NODE, "Exhaust fan CFM", 0, 50000, 1, "cfm"
+    ),
+    ClimateSettingSpec(
+        SETTING_OA_ASSESS_MINUTES,
+        SCOPE_NODE,
+        "OA assess after",
+        1,
+        480,
         1,
         "min",
     ),

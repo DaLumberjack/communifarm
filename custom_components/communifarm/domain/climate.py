@@ -325,6 +325,11 @@ class ClimateNode:
     photoperiod_preset: str | None = None
     light_hours_on: float | None = None
     light_hours_off: float | None = None
+    # Commissioned airflow (overrides only; not cloned from kind presets).
+    volume_m3: float | None = None
+    intake_cfm: float | None = None
+    exhaust_cfm: float | None = None
+    oa_assess_minutes: float = 30.0
     created_at: str | None = None
 
     def __post_init__(self) -> None:
@@ -405,6 +410,14 @@ def validate_climate_node(node: ClimateNode) -> None:
         raise ValidationError("humidity_deadband must be between 0 and 50 %")
     if not (0.0 <= node.occupancy_hold_minutes <= 120.0):
         raise ValidationError("occupancy_hold_minutes must be between 0 and 120")
+    if node.volume_m3 is not None and not (0.1 <= node.volume_m3 <= 5000.0):
+        raise ValidationError("volume_m3 must be between 0.1 and 5000")
+    if node.intake_cfm is not None and not (0.0 <= node.intake_cfm <= 50000.0):
+        raise ValidationError("intake_cfm must be between 0 and 50000")
+    if node.exhaust_cfm is not None and not (0.0 <= node.exhaust_cfm <= 50000.0):
+        raise ValidationError("exhaust_cfm must be between 0 and 50000")
+    if not (1.0 <= node.oa_assess_minutes <= 480.0):
+        raise ValidationError("oa_assess_minutes must be between 1 and 480")
     if node.photoperiod_preset and node.photoperiod_preset not in PHOTOPERIOD_HOURS:
         raise ValidationError(f"unknown photoperiod preset: {node.photoperiod_preset}")
 

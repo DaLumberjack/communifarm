@@ -453,6 +453,10 @@ async def async_refresh_climate_settings_editor(
             fan_off_minutes=row_overrides.get(SETTING_ROW_FAN_OFF_MINUTES),
         )
     fan_on, fan_off = resolved_row_fan_cycle(row_context)
+    if SETTING_ROW_FAN_ON_MINUTES in row_overrides:
+        fan_on = float(row_overrides[SETTING_ROW_FAN_ON_MINUTES])
+    if SETTING_ROW_FAN_OFF_MINUTES in row_overrides:
+        fan_off = float(row_overrides[SETTING_ROW_FAN_OFF_MINUTES])
     values[SETTING_ROW_FAN_ON_MINUTES] = fan_on
     values[SETTING_ROW_FAN_OFF_MINUTES] = fan_off
 

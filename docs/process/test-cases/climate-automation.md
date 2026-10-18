@@ -179,8 +179,43 @@ refresh, and can be reset without freezing an old default.
 | pass does not mean | Future operator-role implementation or live actuator commissioning |
 | related batches | Batches assigned to the selected room/row |
 
+## OA ACH estimate and smoothed projection
+
+When enclosure volume and fan CFM are commissioned, these tests verify ACH/τ math and that indoor projections approach outdoor gradually (not instantly).
+
+| field | value |
+|-------|-------|
+| CQA | Operators see a credible time scale for OA exchange |
+| CPP / gate | volume_m³ > 0; intake/exhaust CFM > 0 |
+| acceptance | ACH = CFM×60/(volume_ft³); early projection still near indoor |
+| flaw this case is built to catch | Treating a fan-on tick as a completed air change |
+| loop | `control` |
+| stage | T0 |
+| pytest or spec | `tests/test_climate_airflow.py::test_ach_from_volume_and_cfm`; `tests/test_climate_airflow.py::test_projection_is_smoothed_not_instant` |
+| pass means | Domain math matches the commissioned size/CFM model |
+| pass does not mean | Live duct CFM equals the nameplate |
+| related batches | Batches in the commissioned enclosure |
+
+## Human-required when machines cannot close the gap
+
+When outdoor air cannot reach the target and no AC/dehumidifier is bound, or when progress lags the ACH expectation past the assess window, these tests verify a human-required / undersized notice.
+
+| field | value |
+|-------|-------|
+| CQA | Excursions that hardware cannot fix are visible deviations, not silent green |
+| CPP / gate | Outdoor vs target; optional conditioning bound; elapsed action time |
+| acceptance | `human_required` or `undersized` notice; futile OA exchange stops when no conditioning path |
+| flaw this case is built to catch | Automation keeps thrashing fans forever or pretends capacity appeared |
+| loop | `control` |
+| stage | T0 |
+| pytest or spec | `tests/test_climate_airflow.py::test_oa_cannot_reach_without_conditioning_requires_human`; `tests/test_climate_airflow.py::test_undersized_oa_when_progress_lags_estimate`; `tests/test_climate.py::test_oa_estimate_notice_and_human_required_when_outdoor_cannot_help` |
+| pass means | Domain escalates to the operator; setpoints are not silently rewritten |
+| pass does not mean | The operator’s physical fix is automated |
+| related batches | All active batches in the affected node |
+
 ## Sources
 
 - `docs/intake/2026-10-06-cea-ventilation-occupancy-controls.md` (V1–V8)
 - `docs/intermediate/climate-control.md`
+- `docs/intermediate/air-exchange-measurement.md`
 - Operator equipment plan: per-tent 5× circulation + intake/exhaust; general OA + AC/dehumidifier; fruiting humidifier

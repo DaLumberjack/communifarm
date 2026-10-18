@@ -2,7 +2,7 @@
 
 Communifarm can track more than one climate. A room or tent may have its own sensors, borrow the parent room’s reading, or stay unmonitored. Machines run only when a reading says they should, and only if you bound them.
 
-This slice starts **naive**: on/off intents from fresh sensor readings, shipped deadbands, and a short settle rule when the general room exchanges outdoor air. Later versions harden CEA maintenance (timed settle, prefilters, measured CFM, O2) without throwing away the same sensor→actuator path.
+This slice starts **naive** on/off intents, then adds **smoothed OA estimates** when you commission enclosure volume and fan CFM. Nothing is treated as instantaneous: mixing follows a first-order lag (ACH from CFM ÷ volume). When outdoor air and bound machines cannot create the needed change, Communifarm raises a **human-required** notice — automation does not invent capacity or rewrite setpoints.
 
 Energy estimates and cost of goods are not part of this yet.
 
@@ -133,8 +133,42 @@ controller, no matter how persuasive the dashboard looks.
 | General too hot; outdoor air can reach the room target | General `fresh_air_intake` + exhaust on; tent intakes settle off |
 | Fruiting RH below target − deadband | Fruiting humidifier on; base circulation stays on |
 | Float wet in general room | Condensate pump on (independent of temp) |
+| Outdoor cannot reach target and no AC/dehumidifier bound | Stop futile exchange; **human-required** notice |
+| OA/conditioning on past assess window with far less progress than ACH predicts | Keep trying; **undersized** notice — operator inspects fans/ducts/capacity |
 
 O2 is not a bound metric yet. Treat high CO2 as the stale-air signal until an O2 role exists.
+
+## OA exchange estimates (volume × CFM)
+
+Commission per room/tent on the Climate settings cards (or overrides):
+
+| Setting | Unit | Use |
+| --- | --- | --- |
+| Enclosure volume | m³ | Tent/room size (L×W×H) |
+| Intake fan CFM | cfm | Nameplate or tachometer-derived |
+| Exhaust fan CFM | cfm | Same; estimate uses the **limiting** of intake vs exhaust |
+| OA assess after | min | Floor time before undersize assessment (also waits ≈2×τ) |
+
+| Estimate | Formula (naive) |
+| --- | --- |
+| ACH | `CFM × 60 / (volume_m³ × 35.315)` |
+| Time constant τ | `60 / ACH` minutes (≈63% of the outdoor–indoor gap) |
+| Projected indoor | first-order mix toward outdoor over the assess horizon |
+
+Responses are **smoothed**: a 2-minute tick will not look like a finished air change. Outside temperature/RH and time of day change the outdoor source the projection uses; history (when exchange/conditioning started vs current indoor) decides waiting vs undersized.
+
+### Human-required (machines stop pretending)
+
+Automation can request fans and AC. It cannot:
+
+- Resize undersized fans or AC
+- Clear a blocked filter/duct
+- Decide that a crop load is too high for the room
+- Silently move your targets so the chart looks green
+
+When the estimate says the bound hardware cannot close the gap, the status summary shows a **notice** and, if there is no conditioning path, stops futile OA exchange. A person must inspect, repair, add capacity, change load, or accept a different setpoint.
+
+Tachometer CFM logs ([air-exchange-tachometer.md](../hardware/air-exchange-tachometer.md)) are the measurement trail that keeps these estimates honest.
 
 ## Activity and occupancy
 
@@ -222,7 +256,7 @@ For semi-frequent air-exchange checks, label each vent and log a timestamped rea
 | `communifarm.upsert_air_vent` | Create/update a vent label + role |
 | `communifarm.record_tachometer` | Store value (`rpm` / `cfm` / `fpm`) + timestamp |
 
-Status: `sensor.communifarm_tachometer_status`. Operator helpers and detail: [air-exchange-tachometer.md](../hardware/air-exchange-tachometer.md). ACH math from CFM × room volume is later.
+Status: `sensor.communifarm_tachometer_status`. Operator helpers and detail: [air-exchange-tachometer.md](../hardware/air-exchange-tachometer.md). Pair CFM logs with Climate volume settings for ACH estimates above.
 
 ## Layout and Climate tabs
 
@@ -254,6 +288,7 @@ If a sensor is unavailable and there is no parent value, climate machines are no
 | [ ] | General AC / dehumidifier | reliable home | Condition parent air when outdoor will not help | AC only; watch RH | Separate dehumidifier + AC |
 | [ ] | Tent CO2 sensor (inoc/incubate first) | reliable home | Stale-air / exchange trigger | Periodic manual meter | Multi-tent CO2 + future O2 |
 | [ ] | Intake prefilter on general OA | advanced clean | Dirtier outdoor air before tents pull | Settle-only throttle (software today) | MERV/HEPA + timed settle |
+| [ ] | Tent/room L×W×H in Climate volume | reliable home | ACH + smoothed projections | Paper note only | Calibrated volume + logged CFM |
 
 ## Minimal Process Upgrades
 
@@ -262,7 +297,8 @@ If a sensor is unavailable and there is no parent value, climate machines are no
 | Fans guesswork | Bind sensors; let tick drive on/off | Blind actuation | Readings before more hardware | Operator layout |
 | Tent pulls during room OA exchange | Keep settle throttle (shipped) | Contaminated/unsettled intake | Software before duct rebuild | This doc |
 | Settling only | Add OA prefilter | Dust/spore load on exchange | Filter when exchange is routine | SARE culture-lab notes (V6) |
-| On/off only | Log CFM/RPM per vent | Unproven airflow claims | Measurement before PWM | [air-exchange-tachometer.md](../hardware/air-exchange-tachometer.md) |
+| On/off only | Log CFM/RPM per vent + set volume | Unproven airflow / instant expectations | Measurement before PWM | [air-exchange-tachometer.md](../hardware/air-exchange-tachometer.md) |
+| Fans on forever, still out of band | Treat human-required notice as the gate | Silent undersize | Machines cannot invent capacity | This doc; CEA oracle |
 | CO2 proxy only | Add O2 role later | Ambiguous stale-air signal | CO2 evidence first | Zhang et al. 2022 |
 
 ## Sources
