@@ -83,7 +83,7 @@ test.describe("Weigh process workflow (T1)", () => {
     await expect(page.getByText(/mixing batch|dry ingredients/i).first()).toBeVisible({
       timeout: STEP_MS,
     });
-    await expect(page.getByText(/this session|session progress/i).first()).toBeVisible({
+    await expect(page.getByText(/dry progress|water \(pours|wet progress/i).first()).toBeVisible({
       timeout: STEP_MS,
     });
   });
