@@ -30,7 +30,11 @@ async function assertRecipeLinesRecorded(
   }>) ?? [];
   expect(lines).toHaveLength(steps.length);
   for (const step of steps) {
-    const row = lines.find((l) => l.label === step.label);
+    const row = lines.find(
+      (l) =>
+        l.label === step.label ||
+        (step.label.startsWith("water") && l.label === "water")
+    );
     expect(row, `missing ${step.label}`).toBeTruthy();
     expect(row!.status).not.toBe("pending");
     assertAmountWithinTolerance(row!.recorded_amount, step.amountG, step.label);

@@ -66,7 +66,12 @@ test.describe("Weigh process workflow (T1)", () => {
     const lines = (attrs.lines as SessionLine[]) ?? [];
     expect(lines).toHaveLength(total);
     for (const step of WOOD_LOVER_WEIGH_STEPS) {
-      const row = lines.find((l) => l.label === step.label);
+      const row = lines.find(
+        (l) =>
+          l.label === step.label ||
+          (step.label.startsWith("water") &&
+            (l.label === "water" || l.key === "water"))
+      );
       expect(row, `missing session line for ${step.label}`).toBeTruthy();
       expect(row!.status).not.toBe("pending");
       assertAmountWithinTolerance(row!.recorded_amount, step.amountG, step.label);

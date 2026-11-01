@@ -10,10 +10,21 @@ import { STEP_MS } from "../fixtures/timeouts";
 export const WEIGH_AMOUNT_TOLERANCE_PCT = 5;
 
 type SessionLine = {
+  key?: string;
   label: string;
   status: string;
   recorded_amount: number | null;
 };
+
+/** Recipe session uses label ``water``; mock NFC / selects use ``water (tap)``. */
+function sessionLineMatches(row: SessionLine, label: string): boolean {
+  if (row.label === label) {
+    return true;
+  }
+  const rowIsWater = row.key === "water" || row.label === "water";
+  const wantWater = label === "water" || label.startsWith("water ");
+  return rowIsWater && wantWater;
+}
 
 /**
  * Start a fresh production batch and wait until the weigh session is empty
@@ -94,7 +105,7 @@ export async function expectSessionLineRecorded(
           "sensor.communifarm_weigh_session"
         );
         const lines = (attrs.lines as SessionLine[]) ?? [];
-        const row = lines.find((r) => r.label === label);
+        const row = lines.find((r) => sessionLineMatches(r, label));
         return row?.recorded_amount ?? null;
       },
       { timeout: STEP_MS }
@@ -103,6 +114,6 @@ export async function expectSessionLineRecorded(
 
   const attrs = await getAttributesViaHass(page, "sensor.communifarm_weigh_session");
   const lines = (attrs.lines as SessionLine[]) ?? [];
-  const row = lines.find((r) => r.label === label);
+  const row = lines.find((r) => sessionLineMatches(r, label));
   assertAmountWithinTolerance(row?.recorded_amount, expectedG, label);
 }
