@@ -8,8 +8,8 @@ After Communifarm setup finishes, open **Communifarm** in the sidebar (`/communi
 | Layout | `/communifarm/climate-layout` | Full-width desktop floor plan. A phone layout is later |
 | Climate | `/communifarm/climate-status` | Gauges, 24h history, machine on/off |
 | Weigh | `/communifarm/weigh` | Redirect — use **Mix** |
-| Mix | `/communifarm/mix` | Standalone mix: focus card → drys → water pours → finish / relocate |
-| NFC Write | `/communifarm/nfc-write` | Inventory / employee / location NDEF write station |
+| Mix | `/communifarm/mix` | Standalone mix: focus → drys → water pours → finish / relocate |
+| Intake | `/communifarm/intake` | Process modes: **combined** / **mark_tags** / **purchase_intake** (same page; shipment seed + NFC write + purchases) |
 | Batches | `/communifarm/batches` | Batch list, complete/new, heat/cooling history |
 | Culture | `/communifarm/culture` | Variety catalog CRUD, acquire LC/grain vessels, vessel status |
 | Production | `/communifarm/production` | Culture inoculate, incubation/fruiting, batch harvest (shared entities) |
@@ -27,6 +27,7 @@ The overview **Climate** card shows the seeded rooms. See [climate.md](climate.m
 | Progress (this batch) | `sensor.communifarm_weigh_session` |
 | Ingredient dropdown | `input_select.esp32dev_selected_ingredient` (includes water types) |
 | Current mass / tare / record | `esp32dev_*` scale entities |
+| Manual weigh (g) | `number.communifarm_manual_weigh_g` (−1 = use scale; 0 = not in recipe; ≥0 overrides) |
 
 First successful weigh-in **auto-records** `dry_mixing_started`. Water target is **10200 g** (summed pours; over-add rejected).
 
@@ -38,20 +39,35 @@ First successful weigh-in **auto-records** `dry_mixing_started`. Water target is
 | Dry / water tables | `sensor.communifarm_weigh_session` → `dry_progress_text` / `wet_progress_text` |
 | Record water pour | `button.communifarm_record_water_pour` (after Location tare) |
 | Field capacity | `sensor.communifarm_field_capacity` |
-| Relocate | Scan ≥1 bag/bin NFC, then `button.communifarm_relocate_for_sterilization` |
-| Badge complete next | `button.communifarm_mix_step_from_badge` |
+| Tag source | `select.communifarm_intake_tag_uid` |
+| Scan NFC tag | `button.communifarm_apply_tag_source_scan` (applies Tag source → last-NFC) |
+| Badge complete next | Tag source → employee → Scan NFC → `button.communifarm_mix_step_from_badge` |
+| Relocate (last step) | Storage shelf + bag/batch NFC → `button.communifarm_relocate_for_sterilization` (not badge); bags show on Production → Storage |
+| Production placement | `sensor.communifarm_placement_{storage,cold_storage,fruiting_tent,inoculation_tent}` |
 
 See [mixing-batch.md](../process/mixing-batch.md).
 
-### NFC write
+### Intake (NFC mark + purchase)
+
+Path: `/communifarm/intake` (alias of former `nfc-write`). SQLite is source of truth after bind; see [nfc-schema.md](../architecture/nfc-schema.md).
 
 | Control | Entity |
 | --- | --- |
+| Process mode | `select.communifarm_intake_process_mode` (`combined` / `mark_tags` / `purchase_intake`) |
+| Tag source | `select.communifarm_intake_tag_uid` |
+| Scan mode | `select.communifarm_nfc_scan_mode` |
 | Object type | `select.communifarm_nfc_write_object_type` |
 | Ingredient / label | `select.communifarm_nfc_write_label` |
 | New inventory UUID | `button.communifarm_create_inventory_lot` |
 | Prepare / confirm | `button.communifarm_prepare_nfc_write`, `confirm_nfc_write` |
 | Status + NDEF | `sensor.communifarm_nfc_write_status` |
+| Last resolve context | `sensor.communifarm_nfc_checkin` (attrs: label, zone, amount, `scan_event_id`) |
+
+| Mode | Visible groups |
+| --- | --- |
+| `combined` | Shipment / mark-tags / purchase (bootstrap) |
+| `mark_tags` | Shipment, scanner, write targets |
+| `purchase_intake` | Asset purchase only |
 
 ### Batches tab
 

@@ -37,6 +37,19 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
         ("sensor.communifarm_batch_list", "communifarm_batch_list"),
         ("sensor.communifarm_batch_milestones", "communifarm_batch_milestones"),
         ("sensor.communifarm_production_status", "communifarm_production_status"),
+        ("sensor.communifarm_placement_storage", "communifarm_placement_storage"),
+        (
+            "sensor.communifarm_placement_cold_storage",
+            "communifarm_placement_cold_storage",
+        ),
+        (
+            "sensor.communifarm_placement_fruiting_tent",
+            "communifarm_placement_fruiting_tent",
+        ),
+        (
+            "sensor.communifarm_placement_inoculation_tent",
+            "communifarm_placement_inoculation_tent",
+        ),
         ("sensor.communifarm_active_culture_id", "communifarm_active_culture_id"),
         ("sensor.communifarm_variety_list", "communifarm_variety_list"),
         ("sensor.communifarm_culture_inventory", "communifarm_culture_inventory"),
@@ -47,6 +60,7 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
         ("number.communifarm_temperature_target", "communifarm_temperature_target"),
         ("number.communifarm_humidity_target", "communifarm_humidity_target"),
         ("number.communifarm_recipe_scale", "communifarm_recipe_scale"),
+        ("number.communifarm_manual_weigh_g", "communifarm_manual_weigh_g"),
         ("number.communifarm_container_count", "communifarm_container_count"),
         ("number.communifarm_substrate_g_per_container", "communifarm_substrate_g_per_container"),
         ("number.communifarm_harvest_mass_g", "communifarm_harvest_mass_g"),
@@ -70,7 +84,24 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
         ("button.communifarm_prepare_nfc_write", "communifarm_prepare_nfc_write"),
         ("button.communifarm_confirm_nfc_write", "communifarm_confirm_nfc_write"),
         ("button.communifarm_mix_step_from_badge", "communifarm_mix_step_from_badge"),
+        (
+            "button.communifarm_apply_tag_source_scan",
+            "communifarm_apply_tag_source_scan",
+        ),
         ("button.communifarm_record_water_pour", "communifarm_record_water_pour"),
+        (
+            "button.communifarm_register_production_block",
+            "communifarm_register_production_block",
+        ),
+        (
+            "button.communifarm_seed_shipment_nfc_tags",
+            "communifarm_seed_shipment_nfc_tags",
+        ),
+        (
+            "button.communifarm_import_nfc_from_entity",
+            "communifarm_import_nfc_from_entity",
+        ),
+        ("select.communifarm_intake_tag_uid", "communifarm_intake_tag_uid"),
         ("button.communifarm_heat_treated", "communifarm_heat_treated"),
         ("button.communifarm_stored_for_cooling", "communifarm_stored_for_cooling"),
         ("button.communifarm_production_cycle_started", "communifarm_production_cycle_started"),
@@ -109,7 +140,33 @@ EXPECTED_ENTITIES: frozenset[tuple[str, str]] = frozenset(
             "communifarm_nfc_write_object_type",
         ),
         ("select.communifarm_nfc_write_label", "communifarm_nfc_write_label"),
+        ("select.communifarm_nfc_scan_mode", "communifarm_nfc_scan_mode"),
+        ("select.communifarm_intake_process_mode", "communifarm_intake_process_mode"),
+        ("select.communifarm_intake_amount_unit", "communifarm_intake_amount_unit"),
+        (
+            "select.communifarm_intake_payment_location",
+            "communifarm_intake_payment_location",
+        ),
+        ("select.communifarm_intake_tracked", "communifarm_intake_tracked"),
+        (
+            "select.communifarm_intake_receipt_tracked",
+            "communifarm_intake_receipt_tracked",
+        ),
+        ("select.communifarm_intake_zone", "communifarm_intake_zone"),
+        ("select.communifarm_relocate_zone", "communifarm_relocate_zone"),
+        ("number.communifarm_intake_amount", "communifarm_intake_amount"),
+        ("number.communifarm_intake_cost", "communifarm_intake_cost"),
         ("text.communifarm_variety_name", "communifarm_variety_name"),
+        (
+            "text.communifarm_intake_purchase_location",
+            "communifarm_intake_purchase_location",
+        ),
+        ("text.communifarm_intake_purchase_date", "communifarm_intake_purchase_date"),
+        ("text.communifarm_intake_machine_label", "communifarm_intake_machine_label"),
+        (
+            "text.communifarm_intake_employee_label",
+            "communifarm_intake_employee_label",
+        ),
     }
 )
 

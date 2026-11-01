@@ -20,7 +20,9 @@ Next developer: `docker compose -f .devcontainer/docker-compose.yml up -d homeas
 | Mocked ESP set | `sensor.mock_temperature`, `sensor.mock_humidity`, `fan.mock_circulation_fan`, `switch.mock_exhaust` |
 | Tent sensor (S3) | calibrated BME/SHT/OneWire + offsets — `packages/mock_cf_tent_sensor.yaml` |
 | AIO868 machines | `switch.cf_lab_aio868_*` — `packages/mock_cf_aio868.yaml` |
-| Dedicated NFC | `cf_mixroom_nfc_scan01_*` / `cf_lab_nfc_write01_*` — `packages/mock_cf_nfc_reader.yaml` |
+| Dedicated NFC | `cf_mixroom_nfc_scan01_*` / `cf_lab_nfc_write01_*` + kit picker `input_select.cf_sandbox_shipment_nfc_uid` — `packages/mock_cf_nfc_reader.yaml` |
+
+**Sandbox vs production:** mock packages **should** create fake sensors and injectors for T1/UX. The Communifarm custom component must **not** create those entities when shipped to production HA — only read/bind real ESPHome last-NFC sensors and seed its own SQLite tag pool.
 | Manual tachometer | vent label / value / timestamp helpers — `packages/mock_cf_tachometer.yaml` |
 | Mocked scale + NFC stub | `esp32dev_*` live-shaped entities — see [docs/user/mock-scale.md](../docs/user/mock-scale.md) |
 | Seeded state | Local-only `.storage` or restored backup — not committed |

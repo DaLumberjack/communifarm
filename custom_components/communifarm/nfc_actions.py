@@ -30,10 +30,17 @@ from .domain.nfc import (
     OBJECT_MEDIA,
     NfcCheckin,
     NfcResolution,
+    NfcScanEvent,
     format_resolution_markdown,
     parse_nfc_uid,
     validate_activity,
     validate_bind_target,
+)
+from .domain.nfc_bind import (
+    SCAN_SOURCE_BIND,
+    SCAN_SOURCE_RESOLVE,
+    PoolBindTarget,
+    pool_should_align_on_resolve,
 )
 from .domain.validation import ValidationError
 from .storage.container_repository import ContainerRepository
@@ -68,8 +75,11 @@ def new_nfc_session() -> dict[str, Any]:
         "lifecycle_phase": None,
         "flush_count": None,
         "max_flushes": None,
+        "amount": None,
+        "amount_unit": None,
         "found": False,
         "checkin_id": None,
+        "scan_event_id": None,
         "progress_text": "Scan a tag with the handheld reader.",
     }
 
@@ -86,11 +96,92 @@ def _read_last_nfc_entity(hass: HomeAssistant) -> str | None:
     return str(state.state)
 
 
+def _session_from_resolution(
+    resolution: NfcResolution, *, scan_event_id: str | None = None
+) -> dict[str, Any]:
+    detail = resolution.detail or {}
+    return {
+        "nfc_uid": resolution.nfc_uid,
+        "object_type": resolution.object_type,
+        "object_id": resolution.object_id,
+        "batch_id": resolution.batch_id,
+        "zone_id": resolution.zone_id,
+        "label": resolution.label,
+        "lifecycle_phase": resolution.lifecycle_phase,
+        "flush_count": resolution.flush_count,
+        "max_flushes": resolution.max_flushes,
+        "amount": detail.get("amount"),
+        "amount_unit": detail.get("amount_unit"),
+        "found": resolution.found,
+        "scan_event_id": scan_event_id,
+        "progress_text": format_resolution_markdown(resolution),
+    }
+
+
+async def async_dual_write_pool_bind(
+    hass: HomeAssistant,
+    entry_id: str,
+    *,
+    nfc_uid: str,
+    object_type: str,
+    object_id: str,
+    label: str | None = None,
+) -> None:
+    """Update ``nfc_tag_pool`` to match an entity ``nfc_uid`` bind (dual-write)."""
+    bucket = hass.data[DOMAIN][entry_id]
+    pool = bucket.get("nfc_tag_pool_repository")
+    if pool is None:
+        return
+    state = bucket["state"]
+    await pool.async_dual_write_bind(
+        state.site.id,
+        PoolBindTarget(
+            nfc_uid=nfc_uid,
+            object_type=object_type,
+            object_id=object_id,
+            label=label,
+        ),
+    )
+
+
+async def _align_pool_after_resolve(
+    hass: HomeAssistant,
+    entry_id: str,
+    resolution: NfcResolution,
+) -> None:
+    """Fix drift on already-bound pool rows; never auto-bind available chips."""
+    if not resolution.found or not resolution.object_id:
+        return
+    bucket = hass.data[DOMAIN][entry_id]
+    pool = bucket.get("nfc_tag_pool_repository")
+    if pool is None:
+        return
+    site_id = bucket["state"].site.id
+    entry = await pool.async_get_by_uid(site_id, resolution.nfc_uid)
+    if entry is None:
+        return
+    if pool_should_align_on_resolve(
+        pool_status=entry.status,
+        pool_bound_object_id=entry.bound_object_id,
+        pool_bound_object_type=entry.bound_object_type,
+        resolved_object_id=resolution.object_id,
+        resolved_object_type=resolution.object_type,
+    ):
+        await pool.async_mark_bound(
+            site_id,
+            resolution.nfc_uid,
+            resolution.object_id,
+            resolution.object_type,
+        )
+
+
 async def async_resolve_nfc(
     hass: HomeAssistant,
     entry_id: str,
     *,
     nfc_uid: str | None = None,
+    scan_source: str = SCAN_SOURCE_RESOLVE,
+    audit: bool = True,
 ) -> NfcResolution:
     raw = nfc_uid or _read_last_nfc_entity(hass)
     try:
@@ -101,22 +192,47 @@ async def async_resolve_nfc(
     repo = _nfc_repo(hass, entry_id)
     resolution = await repo.async_resolve(uid)
     bucket = hass.data[DOMAIN][entry_id]
+    # Scan mode 3A: unknown UID while registering production blocks → bind new container.
+    if (
+        not resolution.found
+        and bucket.get("nfc_scan_mode") == "register_production_block"
+    ):
+        from . import inventory_actions
+
+        cont = await inventory_actions.async_register_production_block(
+            hass, entry_id, nfc_uid=uid
+        )
+        resolution = await repo.async_resolve(uid)
+        if not resolution.found:
+            resolution = NfcResolution(
+                nfc_uid=uid,
+                object_type=OBJECT_CONTAINER,
+                object_id=cont.id,
+                label=f"{cont.container_type} #{cont.container_index}",
+                batch_id=cont.batch_id,
+                zone_id=cont.zone_id,
+                found=True,
+            )
+
+    scan_event_id: str | None = None
+    if audit:
+        when = datetime.now(tz=UTC).isoformat()
+        event = NfcScanEvent(
+            site_id=bucket["state"].site.id,
+            nfc_uid=resolution.nfc_uid,
+            recorded_at=when,
+            object_type=resolution.object_type if resolution.found else None,
+            object_id=resolution.object_id,
+            found=resolution.found,
+            source=scan_source,
+        )
+        await repo.async_insert_scan_event(event)
+        scan_event_id = event.id
+
+    await _align_pool_after_resolve(hass, entry_id, resolution)
+
     session = bucket.setdefault("nfc_session", new_nfc_session())
-    session.update(
-        {
-            "nfc_uid": resolution.nfc_uid,
-            "object_type": resolution.object_type,
-            "object_id": resolution.object_id,
-            "batch_id": resolution.batch_id,
-            "zone_id": resolution.zone_id,
-            "label": resolution.label,
-            "lifecycle_phase": resolution.lifecycle_phase,
-            "flush_count": resolution.flush_count,
-            "max_flushes": resolution.max_flushes,
-            "found": resolution.found,
-            "progress_text": format_resolution_markdown(resolution),
-        }
-    )
+    session.update(_session_from_resolution(resolution, scan_event_id=scan_event_id))
     _notify(hass, entry_id)
     return resolution
 
@@ -237,6 +353,7 @@ async def async_bind_nfc(
         raise HomeAssistantError(str(err)) from err
     assert uid is not None
 
+    bind_label: str | None = None
     if ot == OBJECT_CONTAINER:
         repo = _container_repo(hass, entry_id)
         cont = await repo.async_get(oid)
@@ -244,6 +361,7 @@ async def async_bind_nfc(
             raise HomeAssistantError(f"unknown container_id: {oid}")
         updated = rebind_container_nfc(cont, uid)
         await repo.async_update(updated)
+        bind_label = f"{updated.container_type} #{updated.container_index}"
     elif ot == OBJECT_BATCH:
         batch_repo = hass.data[DOMAIN][entry_id]["batch_repository"]
         batch = await batch_repo.async_get_batch(oid)
@@ -258,6 +376,7 @@ async def async_bind_nfc(
             recipe_scale=batch.recipe_scale,
             recipe_key=batch.recipe_key,
         )
+        bind_label = batch.name
     elif ot == OBJECT_INVENTORY:
         inv = hass.data[DOMAIN][entry_id].get("inventory_repository")
         if inv is None:
@@ -275,6 +394,7 @@ async def async_bind_nfc(
         )
         lot.ndef_payload = identity.to_payload()
         await inv.async_update_lot(lot)
+        bind_label = lot.label
     elif ot == OBJECT_EMPLOYEE:
         inv = hass.data[DOMAIN][entry_id].get("inventory_repository")
         if inv is None:
@@ -290,6 +410,7 @@ async def async_bind_nfc(
         )
         badge.ndef_payload = identity.to_payload()
         await inv.async_update_employee(badge)
+        bind_label = badge.label
     elif ot == OBJECT_LOCATION:
         loc = hass.data[DOMAIN][entry_id].get("location_repository")
         if loc is None:
@@ -304,12 +425,23 @@ async def async_bind_nfc(
             zone_id=zone.id,
         )
         await loc.async_bind_zone_nfc(zone.id, uid, identity.to_payload())
+        bind_label = zone.name
     else:
         raise HomeAssistantError(
             f"bind_nfc for {ot} not implemented "
             "(container/batch/inventory/employee/location)"
         )
 
-    await async_resolve_nfc(hass, entry_id, nfc_uid=uid)
+    await async_dual_write_pool_bind(
+        hass,
+        entry_id,
+        nfc_uid=uid,
+        object_type=ot,
+        object_id=oid,
+        label=bind_label,
+    )
+    await async_resolve_nfc(
+        hass, entry_id, nfc_uid=uid, scan_source=SCAN_SOURCE_BIND
+    )
     _LOGGER.info("Bound NFC %s → %s %s", uid, ot, oid)
     return uid

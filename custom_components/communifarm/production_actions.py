@@ -32,7 +32,14 @@ from .domain.container import (
     require_confirm,
 )
 from .domain.culture import EVENT_CULTURE_INOCULATED_BATCH, CultureEvent
+from .domain.inventory import OBJECT_CONTAINER
+from .domain.location import suggest_area_kind_for_production_stage
 from .domain.models import CommunifarmState
+from .domain.placement_inventory import (
+    PlacementContainerRow,
+    filter_rows_for_area_kind,
+    format_placement_inventory_markdown,
+)
 from .domain.production import (
     DEFAULT_MAX_FLUSHES,
     STAGE_FRUITING,
@@ -234,7 +241,11 @@ async def async_advance_production_stage(
     *,
     target_stage: str | None = None,
     zone_id: str | None = None,
+    nfc_uid: str | None = None,
 ) -> str:
+    """Advance active batch stage; optional bag NFC moves only that container (4B)."""
+    from . import inventory_actions, location_actions, nfc_actions
+
     state = _state(hass, entry_id)
     batch_repo = _batch_repo(hass, entry_id)
     batch = await batch_repo.async_get_batch(state.batch.id)
@@ -245,16 +256,51 @@ async def async_advance_production_stage(
     except ValidationError as err:
         raise HomeAssistantError(str(err)) from err
 
+    cont_repo = _container_repo(hass, entry_id)
+    scanned_container = None
+    raw = nfc_uid or inventory_actions.resolve_tag_source_uid(hass, entry_id)
+    if raw:
+        resolution = await nfc_actions.async_resolve_nfc(
+            hass, entry_id, nfc_uid=str(raw)
+        )
+        if (
+            resolution.found
+            and resolution.object_type == OBJECT_CONTAINER
+            and resolution.object_id
+        ):
+            scanned_container = await cont_repo.async_get(str(resolution.object_id))
+            if (
+                scanned_container is not None
+                and scanned_container.batch_id != batch.id
+            ):
+                raise HomeAssistantError(
+                    "scanned bag belongs to another batch — switch active batch "
+                    "or clear Tag source"
+                )
+
+    dest_zone = str(zone_id).strip() if zone_id else None
+    if not dest_zone:
+        kind = suggest_area_kind_for_production_stage(resolved)
+        if kind:
+            dest_zone = await location_actions.async_first_zone_for_area_kind(
+                hass, entry_id, kind
+            )
+
     when = datetime.now(tz=UTC).isoformat()
     milestone = _ADVANCE_MILESTONE[resolved]
     detail: dict = {"from": batch.lifecycle_phase, "to": resolved}
-    if zone_id:
-        from . import location_actions
-
+    if dest_zone:
         await location_actions.async_set_batch_location(
-            hass, entry_id, zone_id=zone_id, batch_id=batch.id
+            hass, entry_id, zone_id=dest_zone, batch_id=batch.id
         )
-        detail["zone_id"] = str(zone_id).strip()
+        detail["zone_id"] = dest_zone
+    if scanned_container is not None:
+        detail["scope"] = "container"
+        detail["container_id"] = scanned_container.id
+        detail["container_nfc_uid"] = scanned_container.nfc_uid
+    else:
+        detail["scope"] = "entire_batch"
+
     await batch_repo.async_insert_milestone(
         batch_id=batch.id,
         event_type=milestone,
@@ -263,17 +309,86 @@ async def async_advance_production_stage(
     )
     phase = MILESTONE_TO_PHASE.get(milestone, resolved)
     await batch_repo.async_set_lifecycle_phase(batch.id, phase)
-    # Keep active containers in lockstep with batch stage advances.
-    cont_repo = _container_repo(hass, entry_id)
-    for cont in await cont_repo.async_list_for_batch(batch.id):
-        if cont.status != CONTAINER_STATUS_COMPLETE:
-            cont.lifecycle_phase = phase
-            if zone_id:
-                cont.zone_id = str(zone_id).strip()
-            await cont_repo.async_update(cont)
-    _LOGGER.info("Batch %s advanced %s → %s", batch.id, batch.lifecycle_phase, phase)
+
+    if scanned_container is not None:
+        scanned_container.lifecycle_phase = phase
+        if dest_zone:
+            scanned_container.zone_id = dest_zone
+        await cont_repo.async_update(scanned_container)
+    else:
+        for cont in await cont_repo.async_list_for_batch(batch.id):
+            if cont.status != CONTAINER_STATUS_COMPLETE:
+                cont.lifecycle_phase = phase
+                if dest_zone:
+                    cont.zone_id = dest_zone
+                await cont_repo.async_update(cont)
+
+    _LOGGER.info(
+        "Batch %s advanced %s → %s scope=%s",
+        batch.id,
+        batch.lifecycle_phase,
+        phase,
+        detail["scope"],
+    )
     _notify_batch(hass, entry_id)
     return phase
+
+
+async def async_placement_inventory_rows(
+    hass: HomeAssistant, entry_id: str
+) -> list[PlacementContainerRow]:
+    """Active placed containers with zone / batch / stage for Production cards."""
+    bucket = hass.data[DOMAIN][entry_id]
+    state = _state(hass, entry_id)
+    cont_repo = _container_repo(hass, entry_id)
+    loc_repo = bucket["location_repository"]
+    batch_repo = _batch_repo(hass, entry_id)
+    await loc_repo.async_ensure_default_layout(state.site.id)
+
+    areas = {a.id: a for a in await loc_repo.async_list_areas(state.site.id)}
+    zones = {z.id: z for z in await loc_repo.async_list_zones(state.site.id)}
+    batch_names: dict[str, str] = {}
+    rows: list[PlacementContainerRow] = []
+    for cont in await cont_repo.async_list_active_placed():
+        zone = zones.get(cont.zone_id or "")
+        if zone is None:
+            continue
+        area = areas.get(zone.area_id)
+        if area is None:
+            continue
+        if cont.batch_id not in batch_names:
+            batch = await batch_repo.async_get_batch(cont.batch_id)
+            batch_names[cont.batch_id] = (
+                batch.name if batch is not None else cont.batch_id
+            )
+        rows.append(
+            PlacementContainerRow(
+                area_kind=area.area_kind,
+                area_name=area.name,
+                zone_name=zone.name,
+                zone_id=zone.id,
+                batch_id=cont.batch_id,
+                batch_name=batch_names[cont.batch_id],
+                container_index=cont.container_index,
+                container_type=cont.container_type,
+                lifecycle_phase=cont.lifecycle_phase,
+                nfc_uid=cont.nfc_uid or "",
+                container_id=cont.id,
+            )
+        )
+    return rows
+
+
+async def async_placement_section(
+    hass: HomeAssistant, entry_id: str, area_kind: str, area_title: str
+) -> tuple[str, str, list[dict]]:
+    """native_value count label, markdown, and row dicts for one area sensor."""
+    rows = filter_rows_for_area_kind(
+        await async_placement_inventory_rows(hass, entry_id), area_kind
+    )
+    value = f"{len(rows)} units"
+    markdown = format_placement_inventory_markdown(area_title, rows)
+    return value, markdown, [r.to_dict() for r in rows]
 
 
 async def async_record_container_harvest(

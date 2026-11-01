@@ -74,7 +74,8 @@ input_text:
     max: 120
   esp32dev_last_nfc_uid:
     name: "esp32dev Last NFC UID (mock only)"
-    initial: ""
+    # Sandbox default matches shipment kit bag chip (see mock_cf_nfc_reader.yaml).
+    initial: "nfc-bag-01"
     max: 64
 
 # Mimics NFC scan → dropdown (Simpler Wood Lover Recipe).

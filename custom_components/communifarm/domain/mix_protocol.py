@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
 
 from .batch_milestones import (
     MILESTONE_COMPLETELY_MIXED,
@@ -205,8 +204,8 @@ def build_mix_protocol_progress(
         )
     elif next_key == "relocate_sterile":
         focus_hint = (
-            "Scan at least one bag/bin NFC tag, then press "
-            "**Relocate for sterilization** (documents the whole batch moved)."
+            "Select sterilization location, optionally scan a bag/bin "
+            "(or use the batch NFC), then press **Relocate for sterilization**."
         )
 
     return MixProtocolProgress(

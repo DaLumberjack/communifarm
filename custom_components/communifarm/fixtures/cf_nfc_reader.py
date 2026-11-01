@@ -21,7 +21,9 @@ CF_NFC_MOCK_INJECTORS: tuple[str, ...] = (
     "input_text.cf_mixroom_nfc_scan01_last_nfc_uid",
     "input_text.cf_lab_nfc_write01_last_nfc_uid",
     "input_text.cf_lab_nfc_write01_pending_ndef",
+    "input_select.cf_sandbox_shipment_nfc_uid",
     "input_number.cf_mixroom_field_capacity_pct",
     "input_button.cf_mixroom_nfc_scan01_simulate_scan",
     "input_button.cf_lab_nfc_write01_simulate_scan",
+    "input_button.cf_sandbox_apply_shipment_nfc",
 )

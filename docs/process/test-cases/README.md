@@ -31,5 +31,9 @@ Add a row when the first real case for that process exists.
 
 | process | case file | operator doc |
 |---------|-----------|--------------|
+| Operator personas (95% / 40%) | [operator-personas.md](./operator-personas.md) | [mixing-batch.md](../mixing-batch.md), [production-inoculate.md](../production-inoculate.md) |
 | Mixing batch / NFC inventory | [mixing-batch.md](./mixing-batch.md) | [mixing-batch.md](../mixing-batch.md) |
+| Production inoculate / placement | [production-inoculate.md](./production-inoculate.md) | [production-inoculate.md](../production-inoculate.md) |
 | Air-exchange tachometer | [air-exchange-tachometer.md](./air-exchange-tachometer.md) | [hardware/air-exchange-tachometer.md](../../hardware/air-exchange-tachometer.md) |
+
+Suite commands for agents: workspace `docs/intermediate/operator-persona-test-matrix.md`.

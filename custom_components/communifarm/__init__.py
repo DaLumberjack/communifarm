@@ -35,16 +35,19 @@ from .const import (
     ALLOWED_BATCH_TRANSITIONS,
     CLIMATE_TICK_SECONDS,
     DOMAIN,
+    ENTITY_MANUAL_WEIGH_G,
     ENTITY_SCALE_LOCATION_TARE_BUTTON,
     ENTITY_SCALE_MASS_G,
     ENTITY_SCALE_NFC_UID,
     ENTITY_SCALE_RECORD_BUTTON,
     ENTITY_SCALE_SELECTED_INGREDIENT,
     ENTITY_SCALE_TARE_BUTTON,
+    MANUAL_WEIGH_OMIT_G,
     PLATFORMS,
     SERVICE_ACQUIRE_CULTURE,
     SERVICE_ADD_BATCH_NOTE,
     SERVICE_ADVANCE_PRODUCTION_STAGE,
+    SERVICE_APPLY_TAG_SOURCE_SCAN,
     SERVICE_BIND_CLIMATE_ROLE,
     SERVICE_BIND_NFC,
     SERVICE_CHECK_IN,
@@ -57,6 +60,7 @@ from .const import (
     SERVICE_CREATE_VARIETY,
     SERVICE_ENSURE_CLIMATE_LAYOUT,
     SERVICE_ENSURE_PLACEMENT_LAYOUT,
+    SERVICE_IMPORT_NFC_FROM_ENTITY,
     SERVICE_INOCULATE_BATCH,
     SERVICE_INTRODUCE_CULTURE,
     SERVICE_PREPARE_NFC_WRITE,
@@ -72,6 +76,7 @@ from .const import (
     SERVICE_RELOCATE_FOR_STERILIZATION,
     SERVICE_RESOLVE_NFC,
     SERVICE_RETIRE_VARIETY,
+    SERVICE_SEED_SHIPMENT_NFC_TAGS,
     SERVICE_SET_BATCH_LOCATION,
     SERVICE_SET_CHECK_REMINDER,
     SERVICE_SET_CULTURE_LOCATION,
@@ -101,6 +106,7 @@ from .domain.culture import (
     MEDIA_RECIPES,
     SOURCE_TYPES,
 )
+from .domain.inventory import recipe_ingredient_key
 from .domain.models import CommunifarmState
 from .domain.nfc import NFC_ACTIVITIES, NFC_OBJECT_TYPES
 from .domain.production import (
@@ -123,8 +129,7 @@ from .domain.validation import (
     validate_nfc_uid,
     validate_recipe_unit,
 )
-from .domain.inventory import recipe_ingredient_key
-from .domain.weight import WeightEvent
+from .domain.weight import WeightEvent, resolve_weigh_mass_g
 from .storage.batch_repository import BatchRepository
 from .storage.climate_repository import ClimateRepository
 from .storage.container_repository import ContainerRepository
@@ -132,6 +137,7 @@ from .storage.culture_repository import CultureRepository
 from .storage.inventory_repository import InventoryRepository
 from .storage.location_repository import LocationRepository
 from .storage.nfc_repository import NfcRepository
+from .storage.nfc_tag_pool_repository import NfcTagPoolRepository
 from .storage.repository import CommunifarmRepository
 from .storage.sale_repository import SaleRepository
 from .storage.tachometer_repository import TachometerRepository
@@ -265,6 +271,7 @@ ADVANCE_PRODUCTION_SCHEMA = vol.Schema(
             {STAGE_INCUBATING, STAGE_FRUITING, STAGE_HARVESTING}
         ),
         vol.Optional("zone_id"): cv.string,
+        vol.Optional("nfc_uid"): cv.string,
     }
 )
 
@@ -476,6 +483,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await sale_repo.async_setup()
     inventory_repo = InventoryRepository(hass)
     inventory_repo.bind_connection(weight_repo._conn)
+    tag_pool_repo = NfcTagPoolRepository(hass)
+    tag_pool_repo.bind_connection(weight_repo._conn)
     nfc_repo = NfcRepository(
         hass,
         container_repo=container_repo,
@@ -516,14 +525,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "sale_repository": sale_repo,
         "nfc_repository": nfc_repo,
         "inventory_repository": inventory_repo,
+        "nfc_tag_pool_repository": tag_pool_repo,
+        "intake_tag_uid_choice": "(last scanned)",
         "state": state,
         "weigh_session": new_weigh_session_tracker(),
+        "manual_weigh_g": MANUAL_WEIGH_OMIT_G,
         "nfc_session": nfc_actions.new_nfc_session(),
         "pending_nfc_write": inventory_actions.new_pending_nfc_write(),
         "nfc_write_object_type": "inventory",
         "nfc_write_label": "hardwood pellets",
         "nfc_write_object_id": None,
         "nfc_write_zone_id": None,
+        "nfc_scan_mode": "normal",
+        "intake_process_mode": "combined",
+        "intake_zone_label": None,
+        "relocate_zone_label": None,
+        "intake_amount": 0.0,
+        "intake_amount_unit": "g",
+        "intake_cost": 0.0,
+        "intake_payment_location": "cash",
+        "intake_tracked": "yes",
+        "intake_receipt_tracked": "no",
+        "intake_purchase_location": "",
+        "intake_purchase_date": "",
+        "intake_machine_label": "PN532 station",
+        "intake_employee_label": "Operator",
         "field_capacity_ok": None,
         "relocate_bag_nfc_uid": None,
         "relocate_location_nfc_uid": None,
@@ -714,6 +740,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.entry_id,
             target_stage=call.data.get("target_stage"),
             zone_id=call.data.get("zone_id"),
+            nfc_uid=call.data.get("nfc_uid"),
         )
 
     async def async_record_harvest(call: ServiceCall) -> None:
@@ -863,12 +890,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass, entry.entry_id, nfc_uid=call.data.get("nfc_uid")
         )
 
+    async def async_apply_tag_source_scan(call: ServiceCall) -> None:
+        await inventory_actions.async_apply_tag_source_scan(
+            hass, entry.entry_id, nfc_uid=call.data.get("nfc_uid")
+        )
+
     async def async_relocate_for_sterilization(call: ServiceCall) -> None:
         await inventory_actions.async_relocate_for_sterilization(
             hass,
             entry.entry_id,
             bag_nfc_uid=call.data.get("bag_nfc_uid"),
             location_nfc_uid=call.data.get("location_nfc_uid"),
+        )
+
+    async def async_seed_shipment_nfc_tags(call: ServiceCall) -> None:
+        await inventory_actions.async_seed_shipment_nfc_tags(
+            hass,
+            entry.entry_id,
+            shipment_id=call.data.get("shipment_id"),
+        )
+
+    async def async_import_nfc_from_entity(call: ServiceCall) -> None:
+        await inventory_actions.async_import_nfc_from_entity(
+            hass,
+            entry.entry_id,
+            entity_id=call.data.get("entity_id"),
+            intended_type=call.data.get("intended_type") or "container",
+            label=call.data.get("label"),
         )
 
     async def async_record_container_harvest(call: ServiceCall) -> None:
@@ -1152,12 +1200,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async_complete_mix_step_from_badge,
             schema=COMPLETE_MIX_STEP_FROM_BADGE_SCHEMA,
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_APPLY_TAG_SOURCE_SCAN):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_APPLY_TAG_SOURCE_SCAN,
+            async_apply_tag_source_scan,
+            schema=COMPLETE_MIX_STEP_FROM_BADGE_SCHEMA,
+        )
     if not hass.services.has_service(DOMAIN, SERVICE_RELOCATE_FOR_STERILIZATION):
         hass.services.async_register(
             DOMAIN,
             SERVICE_RELOCATE_FOR_STERILIZATION,
             async_relocate_for_sterilization,
             schema=RELOCATE_FOR_STERILIZATION_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SEED_SHIPMENT_NFC_TAGS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SEED_SHIPMENT_NFC_TAGS,
+            async_seed_shipment_nfc_tags,
+            schema=vol.Schema({vol.Optional("shipment_id"): cv.string}),
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_IMPORT_NFC_FROM_ENTITY):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_IMPORT_NFC_FROM_ENTITY,
+            async_import_nfc_from_entity,
+            schema=vol.Schema(
+                {
+                    vol.Optional("entity_id"): cv.entity_id,
+                    vol.Optional("intended_type"): cv.string,
+                    vol.Optional("label"): cv.string,
+                }
+            ),
         )
     if not hass.services.has_service(DOMAIN, SERVICE_RECORD_CONTAINER_HARVEST):
         hass.services.async_register(
@@ -1187,9 +1262,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return
         raw = event.data.get("service_data", {}).get(ATTR_ENTITY_ID)
         entity_ids = raw if isinstance(raw, list) else [raw]
-        session = hass.data[DOMAIN][entry.entry_id]["weigh_session"]
+        bucket = hass.data[DOMAIN][entry.entry_id]
+        session = bucket["weigh_session"]
         if any(eid in _TARE_BUTTONS for eid in entity_ids):
             session["tare_seen"] = True
+            # Fresh pour — clear sticky manual override so scale can lead again.
+            bucket["manual_weigh_g"] = MANUAL_WEIGH_OMIT_G
             async_dispatcher_send(hass, SIGNAL_WEIGH_SESSION_UPDATED, entry.entry_id)
             return
         if ENTITY_SCALE_RECORD_BUTTON not in entity_ids:
@@ -1226,12 +1304,34 @@ async def _async_persist_weight_event(
     select_state = hass.states.get(ENTITY_SCALE_SELECTED_INGREDIENT)
     nfc_state = hass.states.get(ENTITY_SCALE_NFC_UID)
 
-    mass_g = data.get("mass_g")
-    if mass_g is None:
-        if mass_state is None or mass_state.state in ("unknown", "unavailable"):
-            _LOGGER.warning("record_weight skipped: %s unavailable", ENTITY_SCALE_MASS_G)
+    scale_g: float | None = None
+    if mass_state is not None and mass_state.state not in ("unknown", "unavailable", ""):
+        try:
+            scale_g = float(mass_state.state)
+        except (TypeError, ValueError):
+            scale_g = None
+
+    # Explicit service mass_g wins; else Communifarm manual number (≥0) or scale.
+    if data.get("mass_g") is not None:
+        mass_g = float(data["mass_g"])
+        mass_source = "service"
+        source_entity_id = ENTITY_SCALE_MASS_G
+    else:
+        manual_raw = bucket.get("manual_weigh_g", MANUAL_WEIGH_OMIT_G)
+        try:
+            resolved = resolve_weigh_mass_g(manual_g=manual_raw, scale_g=scale_g)
+        except ValidationError as err:
+            session["last_reject"] = str(err)
+            _LOGGER.warning("record_weight skipped: %s", err)
+            async_dispatcher_send(hass, SIGNAL_WEIGH_SESSION_UPDATED, entry_id)
+            if raise_on_reject:
+                raise HomeAssistantError(str(err)) from err
             return
-        mass_g = float(mass_state.state)
+        mass_g = resolved.mass_g
+        mass_source = resolved.source
+        source_entity_id = (
+            ENTITY_MANUAL_WEIGH_G if resolved.source == "manual" else ENTITY_SCALE_MASS_G
+        )
 
     label = data.get("ingredient")
     if label is None and select_state is not None:
@@ -1343,7 +1443,7 @@ async def _async_persist_weight_event(
         mass_g=assessment.mass_g,
         ingredient_label=label,
         ingredient_key=key,
-        source_entity_id=ENTITY_SCALE_MASS_G,
+        source_entity_id=source_entity_id,
         nfc_uid=nfc_uid,
         inventory_lot_id=inventory_lot_id,
         recorded_at=datetime.now(tz=UTC).isoformat(),
@@ -1364,12 +1464,16 @@ async def _async_persist_weight_event(
 
     session["last_mass_g"] = assessment.mass_g
     session["last_ingredient_key"] = key
+    session["last_mass_source"] = mass_source
     session["record_count"] = int(session.get("record_count") or 0) + 1
     session["warnings"] = warnings
     session["last_reject"] = None
     # After a successful record, require a fresh tare signal for the next
     # unstable-step check unless the operator tares again.
     session["tare_seen"] = False
+    # Clear manual override so the next pour does not reuse a sticky grams value.
+    if mass_source == "manual":
+        bucket["manual_weigh_g"] = MANUAL_WEIGH_OMIT_G
 
     if warnings:
         _LOGGER.warning(
@@ -1467,7 +1571,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 SERVICE_PREPARE_NFC_WRITE,
                 SERVICE_CONFIRM_NFC_WRITE,
                 SERVICE_COMPLETE_MIX_STEP_FROM_BADGE,
+                SERVICE_APPLY_TAG_SOURCE_SCAN,
                 SERVICE_RELOCATE_FOR_STERILIZATION,
+                SERVICE_SEED_SHIPMENT_NFC_TAGS,
+                SERVICE_IMPORT_NFC_FROM_ENTITY,
                 SERVICE_RECORD_CONTAINER_HARVEST,
                 SERVICE_RECORD_SALE,
                 SERVICE_RECORD_SALE_CLEANUP,

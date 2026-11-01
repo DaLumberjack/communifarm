@@ -23,6 +23,8 @@ from custom_components.communifarm.domain.inventory import (
     recipe_ingredient_key,
     water_kind_from_label,
 )
+
+
 def test_water_labels_map_to_recipe_key() -> None:
     assert recipe_ingredient_key("water (tap)") == "water"
     assert recipe_ingredient_key("water (warm, filtered)") == "water"
@@ -131,16 +133,26 @@ async def test_prepare_and_confirm_nfc_write_binds_chip(
     assert updated is not None
     assert updated.nfc_uid == "04OAKBAG00001"
 
+    bucket = hass.data[DOMAIN][mock_config_entry.entry_id]
+    pool_row = await bucket["nfc_tag_pool_repository"].async_get_by_uid(
+        site_id, "04OAKBAG00001"
+    )
+    assert pool_row is not None
+    assert pool_row.status == "bound"
+    assert pool_row.bound_object_id == lot.id
+    assert pool_row.bound_object_type == "inventory"
+
     await hass.services.async_call(
         DOMAIN,
         SERVICE_RESOLVE_NFC,
         {"nfc_uid": "04OAKBAG00001"},
         blocking=True,
     )
-    session = hass.data[DOMAIN][mock_config_entry.entry_id]["nfc_session"]
+    session = bucket["nfc_session"]
     assert session["found"] is True
     assert session["object_type"] == "inventory"
     assert session["object_id"] == lot.id
+    assert session.get("scan_event_id")
 
 
 @pytest.mark.asyncio

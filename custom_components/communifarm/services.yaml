@@ -257,7 +257,9 @@ inoculate_batch:
 
 advance_production_stage:
   name: Advance production stage
-  description: Move inoculated → incubating → fruiting → harvesting.
+  description: >
+    Move inoculated → incubating → fruiting → harvesting.
+    Optional nfc_uid (or Tag source bag) moves only that container; otherwise whole batch.
   fields:
     target_stage:
       name: Target stage
@@ -270,6 +272,9 @@ advance_production_stage:
     zone_id:
       name: Zone ID
       description: Optional — set batch location when advancing (e.g. fruiting tent level).
+    nfc_uid:
+      name: Bag NFC UID
+      description: Optional — when set to a production bag, only that container moves.
 
 record_harvest:
   name: Record harvest
@@ -484,6 +489,16 @@ confirm_nfc_write:
       name: NFC UID
       description: Defaults to lab writer Last NFC UID.
 
+apply_tag_source_scan:
+  name: Scan NFC tag (from Tag source)
+  description: >
+    Apply select.communifarm_intake_tag_uid (or last scanned) as a live NFC
+    scan — updates existing last-NFC helpers and runs resolve_nfc.
+  fields:
+    nfc_uid:
+      name: NFC UID
+      description: Optional override; defaults to Tag source select
+
 complete_mix_step_from_badge:
   name: Complete mix step from badge
   description: Employee badge scan completes the next open mix-protocol milestone.
@@ -501,6 +516,36 @@ relocate_for_sterilization:
       name: Bag / container NFC UID
     location_nfc_uid:
       name: Location NFC UID
+
+seed_shipment_nfc_tags:
+  name: Seed shipment NFC tags
+  description: >
+    Load the all-in-one kit NFC UID pack into Communifarm SQLite (inventory,
+    bag/bin pool, employee). The integration does not create HA entities.
+    Sandbox mock last-NFC helpers (devcontainer packages) are updated when
+    present so T1/UX can drive tags without hardware.
+  fields:
+    shipment_id:
+      name: Shipment ID
+      description: Defaults to cf-kit-wood-lover-v1
+
+import_nfc_from_entity:
+  name: Import NFC from entity
+  description: >
+    Read a UID from an existing HA entity (default last-scan helper) into the
+    Communifarm tag pool. Does not create entities — sandbox mocks live in
+    devcontainer packages; production uses real ESPHome sensors.
+  fields:
+    entity_id:
+      name: Source entity
+      description: Defaults to input_text.esp32dev_last_nfc_uid
+      selector:
+        entity:
+    intended_type:
+      name: Intended type
+      description: container, inventory, location, employee, …
+    label:
+      name: Label
 
 record_container_harvest:
   name: Record container harvest

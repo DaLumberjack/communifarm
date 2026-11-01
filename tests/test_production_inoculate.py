@@ -182,9 +182,11 @@ def test_dashboard_includes_production_tab(sample_state) -> None:
     assert "Inoculate inputs" in titles
     assert "Lifecycle" in titles
     assert "Harvest" in titles
+    assert "Storage" in titles
+    assert "Inoculation tent" in titles
     intro = production["cards"][0]["content"]
-    assert "Placement" in intro
-    assert "inoculation tent" in intro
+    assert "Storage" in intro
+    assert "Tag source" in intro
     status = next(card for card in production["cards"] if card.get("title") == "Status")
     assert "zone_id" in status["content"]
     assert "area_name" in status["content"]
@@ -197,6 +199,7 @@ def test_dashboard_includes_production_tab(sample_state) -> None:
     assert "button.communifarm_inoculate_batch" in ids
     assert "select.communifarm_active_inoculum" in ids
     assert "button.communifarm_select_inoculum_from_nfc" in ids
+    assert "select.communifarm_intake_tag_uid" in ids
     assert "select.communifarm_container_type" in ids
     assert "number.communifarm_substrate_g_per_container" in ids
 

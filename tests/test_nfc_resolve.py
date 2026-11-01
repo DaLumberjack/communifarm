@@ -26,8 +26,8 @@ from custom_components.communifarm.domain.culture import (
     SOURCE_PURCHASED,
 )
 from custom_components.communifarm.domain.location import (
+    AREA_CULTURE_LAB,
     AREA_INOCULATION_TENT,
-    AREA_STILL_AIR_CABINET,
 )
 from custom_components.communifarm.domain.nfc import (
     ACTIVITY_CHECK_IN,
@@ -442,7 +442,7 @@ async def test_checkin_move_culture_and_media(
     loc_repo: LocationRepository = hass.data[DOMAIN][entry_id]["location_repository"]
     state = hass.data[DOMAIN][entry_id]["state"]
     areas = await loc_repo.async_list_areas(state.site.id)
-    sab = next(a for a in areas if a.area_kind == AREA_STILL_AIR_CABINET)
+    sab = next(a for a in areas if a.area_kind == AREA_CULTURE_LAB)
     zones = await loc_repo.async_list_zones_for_area(sab.id)
     zone_a, zone_b = zones[0], zones[1]
 
@@ -547,3 +547,87 @@ async def test_nfc_repository_insert_checkin_direct(
     ).fetchone()
     assert row["activity"] == ACTIVITY_INVENTORY
     assert "direct" in row["detail"]
+
+
+def test_sqlite_migration_v19_nfc_scan_events(tmp_path: Path) -> None:
+    from custom_components.communifarm.storage import sqlite_db
+
+    path = tmp_path / "communifarm_v19.db"
+    conn = sqlite_db.connect(path)
+    version = sqlite_db.apply_migrations(conn)
+    assert version == sqlite_db.SCHEMA_VERSION
+    assert version >= 19
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    assert "nfc_scan_events" in tables
+    assert "nfc_tag_pool" in tables
+    pool_cols = {
+        row["name"] for row in conn.execute("PRAGMA table_info(nfc_tag_pool)").fetchall()
+    }
+    assert "bound_object_type" in pool_cols
+    scan_cols = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(nfc_scan_events)").fetchall()
+    }
+    assert {"nfc_uid", "found", "source", "site_id"} <= scan_cols
+    conn.close()
+
+
+@pytest.mark.asyncio
+async def test_resolve_audits_scan_and_fills_inventory_amount(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolve appends nfc_scan_events and fills session from DB; qty unchanged."""
+    from custom_components.communifarm.domain.inventory import InventoryLot
+
+    db_path = tmp_path / "communifarm_nfc_scan_audit.db"
+    monkeypatch.setattr(
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
+        lambda _config_dir: db_path,
+    )
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    entry_id = mock_config_entry.entry_id
+    bucket = hass.data[DOMAIN][entry_id]
+    site_id = bucket["state"].site.id
+    inv = bucket["inventory_repository"]
+    lot = InventoryLot(
+        site_id=site_id,
+        ingredient_key="hardwood_pellets",
+        label="hardwood pellets",
+        nfc_uid="04AMTSCAN00001",
+        amount=12.5,
+        amount_unit="kg",
+    )
+    await inv.async_insert_lot(lot)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_RESOLVE_NFC,
+        {"nfc_uid": "04AMTSCAN00001"},
+        blocking=True,
+    )
+    session = bucket["nfc_session"]
+    assert session["found"] is True
+    assert session["object_type"] == "inventory"
+    assert session["object_id"] == lot.id
+    assert session["label"] == "hardwood pellets"
+    assert session["amount"] == 12.5
+    assert session["amount_unit"] == "kg"
+    assert session.get("scan_event_id")
+
+    nfc_repo: NfcRepository = bucket["nfc_repository"]
+    assert await nfc_repo.async_count_scan_events("04AMTSCAN00001") >= 1
+
+    after = await inv.async_get_lot(lot.id)
+    assert after is not None
+    assert after.amount == 12.5

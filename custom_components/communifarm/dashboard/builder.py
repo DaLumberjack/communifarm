@@ -12,11 +12,11 @@ from ..const import (
     DASHBOARD_VIEW_CLIMATE_STATUS,
     DASHBOARD_VIEW_CULTURE,
     DASHBOARD_VIEW_HARVEST,
+    DASHBOARD_VIEW_MIX,
+    DASHBOARD_VIEW_NFC_WRITE,
     DASHBOARD_VIEW_OVERVIEW,
     DASHBOARD_VIEW_POS,
     DASHBOARD_VIEW_PRODUCTION,
-    DASHBOARD_VIEW_MIX,
-    DASHBOARD_VIEW_NFC_WRITE,
     DASHBOARD_VIEW_WEIGH,
     ENTITY_ACQUIRE_FORM,
     ENTITY_ACQUIRE_SOURCE,
@@ -28,30 +28,34 @@ from ..const import (
     ENTITY_BATCH_NFC_UID,
     ENTITY_BATCH_STAGE,
     ENTITY_BTN_ACQUIRE_CULTURE,
+    ENTITY_BTN_APPLY_TAG_SOURCE,
     ENTITY_BTN_COMPLETE_NEW_BATCH,
     ENTITY_BTN_COMPLETELY_MIXED,
-    ENTITY_BTN_CREATE_VARIETY,
     ENTITY_BTN_CONFIRM_NFC_WRITE,
     ENTITY_BTN_CREATE_INVENTORY_LOT,
+    ENTITY_BTN_CREATE_VARIETY,
     ENTITY_BTN_DRY_WET_MIX,
     ENTITY_BTN_DRYS_COMBINED,
     ENTITY_BTN_FIELD_CAPACITY,
     ENTITY_BTN_FINAL_HARVEST,
     ENTITY_BTN_HEAT_TREATED,
+    ENTITY_BTN_IMPORT_NFC_FROM_ENTITY,
     ENTITY_BTN_INOCULATE,
     ENTITY_BTN_MIX_STEP_FROM_BADGE,
-    ENTITY_BTN_PREPARE_NFC_WRITE,
-    ENTITY_BTN_RECORD_WATER_POUR,
-    ENTITY_BTN_RELOCATE_STERILE,
-    ENTITY_BTN_REMAINING_WATER,
     ENTITY_BTN_MOVE_FRUITING,
     ENTITY_BTN_MOVE_HARVEST,
     ENTITY_BTN_MOVE_INCUBATION,
+    ENTITY_BTN_PREPARE_NFC_WRITE,
     ENTITY_BTN_PRODUCTION_START,
     ENTITY_BTN_RECORD_HARVEST,
     ENTITY_BTN_RECORD_SALE,
     ENTITY_BTN_RECORD_SALE_CLEANUP,
+    ENTITY_BTN_RECORD_WATER_POUR,
+    ENTITY_BTN_REGISTER_PRODUCTION_BLOCK,
+    ENTITY_BTN_RELOCATE_STERILE,
+    ENTITY_BTN_REMAINING_WATER,
     ENTITY_BTN_RETIRE_VARIETY,
+    ENTITY_BTN_SEED_SHIPMENT_TAGS,
     ENTITY_BTN_SELECT_INOCULUM_NFC,
     ENTITY_BTN_SEPARATE_CONTAINERS,
     ENTITY_BTN_SET_CULTURE_STATUS,
@@ -59,23 +63,43 @@ from ..const import (
     ENTITY_BTN_STORED_COOLING,
     ENTITY_BTN_WATER_ADDED,
     ENTITY_CATALOG_VARIETY,
-    ENTITY_FIELD_CAPACITY,
-    ENTITY_MIX_PROTOCOL,
-    ENTITY_NFC_WRITE_LABEL,
-    ENTITY_NFC_WRITE_OBJECT_TYPE,
-    ENTITY_NFC_WRITE_STATUS,
     ENTITY_CLIMATE_STATUS,
     ENTITY_CONTAINER_COUNT,
     ENTITY_CONTAINER_TYPE,
     ENTITY_CULTURE_INVENTORY,
     ENTITY_CULTURE_VESSEL_STATUS,
+    ENTITY_FIELD_CAPACITY,
     ENTITY_HARVEST_MASS_G,
     ENTITY_HEAT_TREATMENT,
     ENTITY_HUMIDITY_TARGET,
+    ENTITY_INTAKE_AMOUNT,
+    ENTITY_INTAKE_AMOUNT_UNIT,
+    ENTITY_INTAKE_COST,
+    ENTITY_INTAKE_EMPLOYEE_LABEL,
+    ENTITY_INTAKE_MACHINE_LABEL,
+    ENTITY_INTAKE_PAYMENT,
+    ENTITY_INTAKE_PROCESS_MODE,
+    ENTITY_INTAKE_PURCHASE_DATE,
+    ENTITY_INTAKE_PURCHASE_LOCATION,
+    ENTITY_INTAKE_RECEIPT,
+    ENTITY_INTAKE_TAG_UID,
+    ENTITY_INTAKE_TRACKED,
+    ENTITY_INTAKE_ZONE,
     ENTITY_LC_STIR_PLATE,
+    ENTITY_MANUAL_WEIGH_G,
+    ENTITY_MIX_PROTOCOL,
+    ENTITY_NFC_SCAN_MODE,
+    ENTITY_NFC_WRITE_LABEL,
+    ENTITY_NFC_WRITE_OBJECT_TYPE,
+    ENTITY_NFC_WRITE_STATUS,
     ENTITY_PAYMENT_METHOD,
+    ENTITY_PLACEMENT_COLD_STORAGE,
+    ENTITY_PLACEMENT_FRUITING_TENT,
+    ENTITY_PLACEMENT_INOCULATION_TENT,
+    ENTITY_PLACEMENT_STORAGE,
     ENTITY_PRODUCTION_STATUS,
     ENTITY_RECIPE_SCALE,
+    ENTITY_RELOCATE_ZONE,
     ENTITY_SALE_BUYER,
     ENTITY_SALE_LINE_AMOUNT,
     ENTITY_SALE_MASS_G,
@@ -152,7 +176,7 @@ class DashboardBuilder:
                     f"Site: **{state.site.name}**\n"
                     f"Batch: **{state.batch.name}** ({state.batch.stage})\n\n"
                     "Floor plan? **Layout** · Gauges and fans? **Climate** · "
-                    "Batch mixing? **Mix** · Tag writing? **NFC Write** · "
+                    "Batch mixing? **Mix** · Tagging / purchases? **Intake** · "
                     "History? **Batches** · "
                     "Culture / varieties? **Culture** · "
                     "Inoculate? **Production** · Pick / fridge? **Harvest** · "
@@ -314,18 +338,46 @@ class DashboardBuilder:
                             "entity": ENTITY_MIX_PROTOCOL,
                             "name": "Mix protocol",
                         },
+                    ],
+                },
+                {
+                    "type": "entities",
+                    "title": "NFC / badge (sandbox)",
+                    "show_header_toggle": False,
+                    "entities": [
+                        {
+                            "entity": ENTITY_INTAKE_TAG_UID,
+                            "name": "Tag source",
+                        },
+                        {
+                            "entity": ENTITY_BTN_APPLY_TAG_SOURCE,
+                            "name": "Scan NFC tag",
+                        },
                         {
                             "entity": ENTITY_BTN_MIX_STEP_FROM_BADGE,
                             "name": "Badge: complete next checkpoint",
                         },
                     ],
                 },
+                {
+                    "type": "markdown",
+                    "content": (
+                        "Last step (**relocate**): pick **Storage** shelf → "
+                        "**Relocate for sterilization** (bags land in Storage "
+                        "awaiting culture) — not the badge button.\n"
+                        "Earlier checkpoints: Tag source → `nfc-employee-01` → "
+                        "Scan NFC tag → Badge."
+                    ),
+                },
                 # --- DRY SECTION ---
                 {
                     "type": "markdown",
                     "content": (
                         "## 1 · Dry ingredients\n"
-                        "Scan NFC or pick ingredient → Tare → add → **Record weight**."
+                        "Scan NFC or pick ingredient → Tare → add → **Record weight**.\n"
+                        "After tare the scale reads **0** until mass is added. "
+                        "Broken scale / sandbox: set **Manual weigh (g)** "
+                        "(−1 = use scale, 0 = not in recipe)."
                     ),
                 },
                 {
@@ -341,10 +393,14 @@ class DashboardBuilder:
                     "content": (
                         "| | |\n"
                         "| --- | ---: |\n"
-                        f"| Current (g) | "
+                        f"| Effective (g) | "
+                        f"{{{{ state_attr('{ENTITY_WEIGH_SESSION}', 'effective_mass_g') }}}} |\n"
+                        f"| Source | "
+                        f"{{{{ state_attr('{ENTITY_WEIGH_SESSION}', 'mass_source') }}}} |\n"
+                        f"| Scale (g) | "
                         f"{{{{ states('{ENTITY_ESP32DEV_CALIBRATED_G}') }}}} |\n"
-                        f"| Gross | "
-                        f"{{{{ states('{ENTITY_ESP32DEV_CALIBRATED_SENSOR}') }}}} |\n"
+                        f"| Manual (g) | "
+                        f"{{{{ states('{ENTITY_MANUAL_WEIGH_G}') }}}} |\n"
                         f"| Selected | "
                         f"{{{{ states('{ENTITY_ESP32DEV_SELECTED_INGREDIENT}') }}}} |\n"
                         "| Last recorded | "
@@ -369,7 +425,11 @@ class DashboardBuilder:
                     "entities": [
                         {
                             "entity": ENTITY_ESP32DEV_CALIBRATED_G,
-                            "name": "Current mass (g)",
+                            "name": "Scale mass (g)",
+                        },
+                        {
+                            "entity": ENTITY_MANUAL_WEIGH_G,
+                            "name": "Manual weigh (g) (−1 = scale)",
                         },
                         {
                             "entity": ENTITY_ESP32DEV_CALIBRATED_SENSOR,
@@ -422,7 +482,11 @@ class DashboardBuilder:
                     "entities": [
                         {
                             "entity": ENTITY_ESP32DEV_CALIBRATED_G,
-                            "name": "Current mass (g)",
+                            "name": "Scale mass (g)",
+                        },
+                        {
+                            "entity": ENTITY_MANUAL_WEIGH_G,
+                            "name": "Manual weigh (g) (−1 = scale)",
                         },
                         {
                             "entity": ENTITY_ESP32DEV_LOCATION_TARE,
@@ -497,10 +561,27 @@ class DashboardBuilder:
                             "name": "Bag / bin",
                         },
                         {
+                            "entity": ENTITY_RELOCATE_ZONE,
+                            "name": "Sterilization-ready location",
+                        },
+                        {
                             "entity": ENTITY_BTN_RELOCATE_STERILE,
                             "name": "Relocate for sterilization",
                         },
                     ],
+                },
+                {
+                    "type": "markdown",
+                    "content": (
+                        "### Relocate\n"
+                        "1. Pick **Sterilization-ready location**.\n"
+                        "2. Optional: scan a bag/bin (or leave blank to use the "
+                        "active **batch NFC**).\n"
+                        "3. Press **Relocate for sterilization** — documents the "
+                        "whole batch moved.\n"
+                        "To tag bags first: **Intake** → scan mode "
+                        "`register_production_block` or Bag/bin write section."
+                    ),
                 },
                 {
                     "type": "markdown",
@@ -513,70 +594,315 @@ class DashboardBuilder:
         }
 
     def _nfc_write_view(self, state: CommunifarmState) -> dict[str, Any]:
-        """Write Communifarm identity NDEF onto physical NFC tags."""
-        return {
-            "title": "NFC Write",
-            "path": DASHBOARD_VIEW_NFC_WRITE,
-            "icon": "mdi:nfc",
-            "cards": [
+        """Intake: same entities; process mode toggles which card groups show."""
+
+        def _when_process(*modes: str) -> dict[str, Any]:
+            return {
+                "condition": "or",
+                "conditions": [
+                    {
+                        "condition": "state",
+                        "entity": ENTITY_INTAKE_PROCESS_MODE,
+                        "state": mode,
+                    }
+                    for mode in modes
+                ],
+            }
+
+        process_picker = {
+            "type": "entities",
+            "title": "Process",
+            "show_header_toggle": False,
+            "entities": [
                 {
-                    "type": "markdown",
-                    "content": (
-                        f"## NFC write station\n"
-                        f"Site: **{state.site.name}**\n\n"
-                        "Create inventory lots (same name, new UUID for each bag), "
-                        "employee badges, or location tags. Prepare NDEF, present "
-                        "the tag to the lab writer, then confirm.\n\n"
-                        "Payload is typed JSON identity (`cf://type/id`); "
-                        "SQLite remains the source of truth after bind.\n"
-                    ),
-                },
-                {
-                    "type": "entities",
-                    "title": "Write target",
-                    "show_header_toggle": False,
-                    "entities": [
-                        {
-                            "entity": ENTITY_NFC_WRITE_OBJECT_TYPE,
-                            "name": "Object type",
-                        },
-                        {
-                            "entity": ENTITY_NFC_WRITE_LABEL,
-                            "name": "Ingredient / water / label",
-                        },
-                        {
-                            "entity": ENTITY_BTN_CREATE_INVENTORY_LOT,
-                            "name": "New inventory UUID (same name OK)",
-                        },
-                        {
-                            "entity": ENTITY_BTN_PREPARE_NFC_WRITE,
-                            "name": "Prepare NDEF write",
-                        },
-                        {
-                            "entity": ENTITY_BTN_CONFIRM_NFC_WRITE,
-                            "name": "Confirm write (bind chip UID)",
-                        },
-                    ],
-                },
-                {
-                    "type": "entities",
-                    "title": "Writer status",
-                    "show_header_toggle": False,
-                    "entities": [
-                        {
-                            "entity": ENTITY_NFC_WRITE_STATUS,
-                            "name": "Write status",
-                        },
-                    ],
-                },
-                {
-                    "type": "markdown",
-                    "title": "Pending NDEF",
-                    "content": (
-                        f"{{{{ state_attr('{ENTITY_NFC_WRITE_STATUS}', 'progress_text') }}}}"
+                    "entity": ENTITY_INTAKE_PROCESS_MODE,
+                    "name": (
+                        "Mode — combined (bootstrap) / mark_tags / purchase_intake"
                     ),
                 },
             ],
+        }
+        header = {
+            "type": "markdown",
+            "content": (
+                f"## Intake\n"
+                f"Site: **{state.site.name}** · Batch: **{state.batch.name}**\n\n"
+                "SQLite is source of truth after bind. NDEF seeds identity on write.\n"
+                "Use **Process** mode to focus mark-tags vs purchase without leaving "
+                "this page (`combined` keeps both for fast kit bootstrap)."
+            ),
+        }
+        banner_combined = {
+            "type": "conditional",
+            "conditions": [
+                {
+                    "condition": "state",
+                    "entity": ENTITY_INTAKE_PROCESS_MODE,
+                    "state": "combined",
+                }
+            ],
+            "card": {
+                "type": "markdown",
+                "content": (
+                    "### Process: **combined** (bootstrap)\n"
+                    "Shipment pool, NFC marking, and purchase intake on one page."
+                ),
+            },
+        }
+        banner_mark = {
+            "type": "conditional",
+            "conditions": [
+                {
+                    "condition": "state",
+                    "entity": ENTITY_INTAKE_PROCESS_MODE,
+                    "state": "mark_tags",
+                }
+            ],
+            "card": {
+                "type": "markdown",
+                "content": (
+                    "### Process: **mark tags**\n"
+                    "Bind physical chips (employee / location / bag / machine). "
+                    "Purchase fields are hidden."
+                ),
+            },
+        }
+        banner_purchase = {
+            "type": "conditional",
+            "conditions": [
+                {
+                    "condition": "state",
+                    "entity": ENTITY_INTAKE_PROCESS_MODE,
+                    "state": "purchase_intake",
+                }
+            ],
+            "card": {
+                "type": "markdown",
+                "content": (
+                    "### Process: **purchase intake**\n"
+                    "Create inventory lots from purchases. NFC write chrome is hidden "
+                    "unless you switch back to mark_tags or combined."
+                ),
+            },
+        }
+        mark_cards = [
+            {
+                "type": "entities",
+                "title": "Shipment / tag pool",
+                "show_header_toggle": False,
+                "entities": [
+                    {
+                        "entity": ENTITY_BTN_SEED_SHIPMENT_TAGS,
+                        "name": "Seed kit NFC tags into Communifarm DB",
+                    },
+                    {
+                        "entity": ENTITY_BTN_IMPORT_NFC_FROM_ENTITY,
+                        "name": "Import UID from existing last-scan entity",
+                    },
+                    {
+                        "entity": ENTITY_INTAKE_TAG_UID,
+                        "name": "Tag source (last scanned or DB chip)",
+                    },
+                ],
+            },
+            {
+                "type": "entities",
+                "title": "Scanner mode",
+                "show_header_toggle": False,
+                "entities": [
+                    {
+                        "entity": ENTITY_NFC_SCAN_MODE,
+                        "name": "Scan mode (register_production_block binds next UID)",
+                    },
+                    {
+                        "entity": ENTITY_BTN_REGISTER_PRODUCTION_BLOCK,
+                        "name": "Register tag source as production block",
+                    },
+                    {
+                        "entity": ENTITY_CONTAINER_TYPE,
+                        "name": "Container type for new blocks",
+                    },
+                    {
+                        "entity": ENTITY_INTAKE_ZONE,
+                        "name": "Default place location",
+                    },
+                ],
+            },
+            {
+                "type": "markdown",
+                "content": (
+                    "## Location tag\n"
+                    "Pick zone → set tag type `location` → prepare → write → confirm."
+                ),
+            },
+            {
+                "type": "entities",
+                "title": "Location write",
+                "show_header_toggle": False,
+                "entities": [
+                    {"entity": ENTITY_INTAKE_ZONE, "name": "Zone to tag"},
+                    {
+                        "entity": ENTITY_NFC_WRITE_OBJECT_TYPE,
+                        "name": "Tag type (use location)",
+                    },
+                ],
+            },
+            {
+                "type": "markdown",
+                "content": (
+                    "## Bag / bin (production block)\n"
+                    "Scan mode `register_production_block`, or tag type `container`."
+                ),
+            },
+            {
+                "type": "entities",
+                "title": "Bag / bin write",
+                "show_header_toggle": False,
+                "entities": [
+                    {
+                        "entity": ENTITY_NFC_WRITE_OBJECT_TYPE,
+                        "name": "Tag type (use container)",
+                    },
+                    {
+                        "entity": ENTITY_CONTAINER_TYPE,
+                        "name": "Bag / block / tub…",
+                    },
+                    {
+                        "entity": ENTITY_INTAKE_ZONE,
+                        "name": "Place at (optional)",
+                    },
+                ],
+            },
+            {
+                "type": "markdown",
+                "content": (
+                    "## Machine / batch / culture / employee\n"
+                    "Set tag type accordingly. Culture uses **Active inoculum**."
+                ),
+            },
+            {
+                "type": "entities",
+                "title": "Other write targets",
+                "show_header_toggle": False,
+                "entities": [
+                    {
+                        "entity": ENTITY_INTAKE_MACHINE_LABEL,
+                        "name": "Machine label",
+                    },
+                    {
+                        "entity": ENTITY_ACTIVE_INOCULUM,
+                        "name": "Active culture (for culture tags)",
+                    },
+                    {
+                        "entity": ENTITY_INTAKE_EMPLOYEE_LABEL,
+                        "name": "Employee badge label",
+                    },
+                ],
+            },
+            {
+                "type": "entities",
+                "title": "Write actions",
+                "show_header_toggle": False,
+                "entities": [
+                    {
+                        "entity": ENTITY_BTN_PREPARE_NFC_WRITE,
+                        "name": "Prepare NDEF write",
+                    },
+                    {
+                        "entity": ENTITY_BTN_CONFIRM_NFC_WRITE,
+                        "name": "Confirm write (bind chip UID)",
+                    },
+                    {
+                        "entity": ENTITY_NFC_WRITE_STATUS,
+                        "name": "Write status",
+                    },
+                ],
+            },
+            {
+                "type": "markdown",
+                "title": "Pending NDEF",
+                "content": (
+                    f"{{{{ state_attr('{ENTITY_NFC_WRITE_STATUS}', 'progress_text') }}}}"
+                ),
+            },
+        ]
+        purchase_cards = [
+            {
+                "type": "markdown",
+                "content": (
+                    "## Asset / inventory purchase\n"
+                    "Type + purchase row → create lot. Mark the chip in "
+                    "**mark_tags** or **combined** when ready."
+                ),
+            },
+            {
+                "type": "entities",
+                "title": "Asset purchase",
+                "show_header_toggle": False,
+                "entities": [
+                    {
+                        "entity": ENTITY_NFC_WRITE_OBJECT_TYPE,
+                        "name": "Tag type (use inventory)",
+                    },
+                    {
+                        "entity": ENTITY_NFC_WRITE_LABEL,
+                        "name": "Asset / ingredient",
+                    },
+                    {"entity": ENTITY_INTAKE_AMOUNT, "name": "Amount"},
+                    {"entity": ENTITY_INTAKE_AMOUNT_UNIT, "name": "Unit"},
+                    {"entity": ENTITY_INTAKE_COST, "name": "Cost"},
+                    {
+                        "entity": ENTITY_INTAKE_PAYMENT,
+                        "name": "Payment (account / cash)",
+                    },
+                    {
+                        "entity": ENTITY_INTAKE_PURCHASE_LOCATION,
+                        "name": "Purchase location",
+                    },
+                    {"entity": ENTITY_INTAKE_TRACKED, "name": "Tracked"},
+                    {
+                        "entity": ENTITY_INTAKE_RECEIPT,
+                        "name": "Receipt tracked",
+                    },
+                    {
+                        "entity": ENTITY_INTAKE_PURCHASE_DATE,
+                        "name": "Purchase date",
+                    },
+                    {
+                        "entity": ENTITY_BTN_CREATE_INVENTORY_LOT,
+                        "name": "Create inventory lot (new UUID)",
+                    },
+                ],
+            },
+        ]
+        cards: list[dict[str, Any]] = [
+            header,
+            process_picker,
+            banner_combined,
+            banner_mark,
+            banner_purchase,
+        ]
+        for card in mark_cards:
+            cards.append(
+                {
+                    "type": "conditional",
+                    "conditions": [_when_process("combined", "mark_tags")],
+                    "card": card,
+                }
+            )
+        for card in purchase_cards:
+            cards.append(
+                {
+                    "type": "conditional",
+                    "conditions": [_when_process("combined", "purchase_intake")],
+                    "card": card,
+                }
+            )
+        return {
+            "title": "Intake",
+            "path": DASHBOARD_VIEW_NFC_WRITE,
+            "icon": "mdi:clipboard-text",
+            "cards": cards,
         }
 
     def _batches_view(self, state: CommunifarmState) -> dict[str, Any]:
@@ -765,18 +1091,11 @@ class DashboardBuilder:
                     "content": (
                         f"## Production\n"
                         f"Batch: **{state.batch.name}** (`{state.batch.id}`)\n\n"
-                        "1. Register varieties / vessels on **Culture** tab, then pick "
-                        "**Active inoculum** (variety · form · status · UID) or NFC scan\n"
-                        "2. Set container type + substrate g → **Inoculate** → "
-                        "incubation → fruiting → harvest\n"
-                        "3. Final harvest completes the batch\n\n"
-                        "**Placement:** call `ensure_placement_layout` once, then "
-                        "`set_batch_location` / pass `zone_id` on inoculate/advance/harvest.\n"
-                        "Culture/media: `set_culture_location`, `set_media_location`, "
-                        "or optional `zone_id` on acquire/create/introduce.\n"
-                        "Soft hints: inoculated/incubating → inoculation tent; "
-                        "fruiting/harvesting → fruiting tent; pick → harvest fridge shelf; "
-                        "culture storage → culture fridge; media prep → still-air cabinet.\n"
+                        "1. After Mix **Relocate**, bags appear under **Storage** "
+                        "(awaiting culture)\n"
+                        "2. Culture tab → **Active inoculum** → **Inoculate**\n"
+                        "3. Lifecycle moves: optional bag NFC (Tag source) moves "
+                        "that bag; no scan moves the whole active batch\n"
                     ),
                 },
                 {
@@ -788,6 +1107,36 @@ class DashboardBuilder:
                         f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'area_name') }}}} / "
                         f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_name') }}}} "
                         f"(`{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_id') }}}}`)"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Storage",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_PLACEMENT_STORAGE}', 'progress_text') }}}}"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Cold storage",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_PLACEMENT_COLD_STORAGE}', 'progress_text') }}}}"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Fruiting tent",
+                    "content": (
+                        f"{{{{ state_attr('{ENTITY_PLACEMENT_FRUITING_TENT}', 'progress_text') }}}}"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Inoculation tent",
+                    "content": (
+                        "{{ state_attr('"
+                        f"{ENTITY_PLACEMENT_INOCULATION_TENT}"
+                        "', 'progress_text') }}"
                     ),
                 },
                 {
@@ -806,6 +1155,14 @@ class DashboardBuilder:
                         {
                             "entity": ENTITY_BTN_SELECT_INOCULUM_NFC,
                             "name": "Select inoculum from NFC",
+                        },
+                        {
+                            "entity": ENTITY_INTAKE_TAG_UID,
+                            "name": "Tag source (optional bag for moves)",
+                        },
+                        {
+                            "entity": ENTITY_BTN_APPLY_TAG_SOURCE,
+                            "name": "Scan NFC tag",
                         },
                         {
                             "entity": ENTITY_CONTAINER_TYPE,

@@ -96,6 +96,25 @@ class ContainerRepository(SqliteRepository):
         ).fetchall()
         return [self._row_to_container(row) for row in rows]
 
+    async def async_list_active_placed(self) -> list[ProductionContainer]:
+        """Active containers that have a zone (shown on Production placement cards)."""
+        return await self._hass.async_add_executor_job(
+            self._locked, self._list_active_placed_sync
+        )
+
+    def _list_active_placed_sync(self) -> list[ProductionContainer]:
+        assert self._conn is not None
+        rows = self._conn.execute(
+            """
+            SELECT * FROM production_containers
+            WHERE status != 'complete'
+              AND zone_id IS NOT NULL
+              AND TRIM(zone_id) != ''
+            ORDER BY batch_id ASC, container_index ASC
+            """
+        ).fetchall()
+        return [self._row_to_container(row) for row in rows]
+
     async def async_update(self, container: ProductionContainer) -> ProductionContainer:
         return await self._hass.async_add_executor_job(self._locked, self._update_sync, container)
 

@@ -16,10 +16,17 @@ from .validation import ValidationError
 
 SLOT_LEVEL = "level"
 SLOT_SHELF = "shelf"
-SLOT_KINDS = frozenset({SLOT_LEVEL, SLOT_SHELF})
+SLOT_GRID = "grid"  # slot_index 1..25 → Row 1–5 × Pos 1–5
+SLOT_KINDS = frozenset({SLOT_LEVEL, SLOT_SHELF, SLOT_GRID})
 
 AREA_FRUITING_TENT = "fruiting_tent"
 AREA_INOCULATION_TENT = "inoculation_tent"
+AREA_CULTURE_LAB = "culture_lab"
+AREA_STORAGE = "storage"
+AREA_COLD_STORAGE = "cold_storage"
+AREA_GENERAL_ENV = "general_env"
+AREA_OUTSIDE = "outside"
+# Legacy kinds retained so existing DBs / soft maps keep resolving.
 AREA_CULTURE_FRIDGE = "culture_fridge"
 AREA_STILL_AIR_CABINET = "still_air_cabinet"
 AREA_HARVEST_FRIDGE = "harvest_fridge"
@@ -28,13 +35,17 @@ AREA_KINDS = frozenset(
     {
         AREA_FRUITING_TENT,
         AREA_INOCULATION_TENT,
+        AREA_CULTURE_LAB,
+        AREA_STORAGE,
+        AREA_COLD_STORAGE,
+        AREA_GENERAL_ENV,
+        AREA_OUTSIDE,
         AREA_CULTURE_FRIDGE,
         AREA_STILL_AIR_CABINET,
         AREA_HARVEST_FRIDGE,
     }
 )
 
-# Soft suggestions only — MVP does not hard-reject mismatched area_kind.
 STAGE_SUGGESTED_AREA_KIND: dict[str, str] = {
     STAGE_INOCULATED: AREA_INOCULATION_TENT,
     STAGE_INCUBATING: AREA_INOCULATION_TENT,
@@ -42,33 +53,36 @@ STAGE_SUGGESTED_AREA_KIND: dict[str, str] = {
     STAGE_HARVESTING: AREA_FRUITING_TENT,
 }
 
-# Culture lot storage (agar / LC / spores) → culture fridge.
 CULTURE_FORM_SUGGESTED_AREA_KIND: dict[str, str] = {
-    "agar": AREA_CULTURE_FRIDGE,
-    "liquid_culture": AREA_CULTURE_FRIDGE,
-    "spores": AREA_CULTURE_FRIDGE,
-    "grain_spawn": AREA_CULTURE_FRIDGE,
+    "agar": AREA_COLD_STORAGE,
+    "liquid_culture": AREA_COLD_STORAGE,
+    "spores": AREA_COLD_STORAGE,
+    "grain_spawn": AREA_COLD_STORAGE,
 }
 
-# Media prep / cooling in SAB; ready / in-use storage in culture fridge.
 MEDIA_STATUS_SUGGESTED_AREA_KIND: dict[str, str] = {
-    "planned": AREA_STILL_AIR_CABINET,
-    "weighing": AREA_STILL_AIR_CABINET,
-    "sterilizing": AREA_STILL_AIR_CABINET,
-    "media_ready": AREA_CULTURE_FRIDGE,
-    "in_use": AREA_CULTURE_FRIDGE,
+    "planned": AREA_CULTURE_LAB,
+    "weighing": AREA_CULTURE_LAB,
+    "sterilizing": AREA_CULTURE_LAB,
+    "media_ready": AREA_COLD_STORAGE,
+    "in_use": AREA_COLD_STORAGE,
 }
 
-# SAB work notes (transfers, plating) — soft hint only.
-SAB_WORK_SUGGESTED_AREA_KIND = AREA_STILL_AIR_CABINET
+SAB_WORK_SUGGESTED_AREA_KIND = AREA_CULTURE_LAB
+
+TENT_GRID_ROWS = 5
+TENT_GRID_COLS = 5
+TENT_GRID_SLOTS = TENT_GRID_ROWS * TENT_GRID_COLS
 
 # (name, area_kind, slot_kind, slot_count)
 DEFAULT_LAYOUT: tuple[tuple[str, str, str, int], ...] = (
-    ("Fruiting tent", AREA_FRUITING_TENT, SLOT_LEVEL, 5),
-    ("Inoculation tent", AREA_INOCULATION_TENT, SLOT_LEVEL, 5),
-    ("Culture fridge", AREA_CULTURE_FRIDGE, SLOT_SHELF, 5),
-    ("Still air cabinet", AREA_STILL_AIR_CABINET, SLOT_SHELF, 3),
-    ("Harvest fridge", AREA_HARVEST_FRIDGE, SLOT_SHELF, 6),
+    ("Culture lab", AREA_CULTURE_LAB, SLOT_SHELF, 5),
+    ("Storage", AREA_STORAGE, SLOT_SHELF, 5),
+    ("Cold storage", AREA_COLD_STORAGE, SLOT_SHELF, 5),
+    ("Fruiting tent", AREA_FRUITING_TENT, SLOT_GRID, TENT_GRID_SLOTS),
+    ("Inoculation tent", AREA_INOCULATION_TENT, SLOT_GRID, TENT_GRID_SLOTS),
+    ("General env", AREA_GENERAL_ENV, SLOT_LEVEL, 1),
+    ("Outside", AREA_OUTSIDE, SLOT_LEVEL, 1),
 )
 
 
@@ -96,7 +110,7 @@ class PlacementArea:
 
 @dataclass(slots=True)
 class Zone:
-    """Level or shelf slot inside a placement area."""
+    """Level, shelf, or grid slot inside a placement area."""
 
     area_id: str
     site_id: str
@@ -159,8 +173,18 @@ def suggest_area_kind_for_media_status(status: str) -> str | None:
 
 
 def zone_display_name(slot_kind: str, slot_index: int) -> str:
+    if slot_kind == SLOT_GRID:
+        zero = int(slot_index) - 1
+        row = zero // TENT_GRID_COLS + 1
+        pos = zero % TENT_GRID_COLS + 1
+        return f"Row {row} Pos {pos}"
     label = "Level" if slot_kind == SLOT_LEVEL else "Shelf"
     return f"{label} {slot_index}"
+
+
+def zone_option_label(area_name: str, zone_name: str) -> str:
+    """Select option text: 'Fruiting tent / Row 1 Pos 3'."""
+    return f"{area_name} / {zone_name}"
 
 
 def build_default_layout(site_id: str) -> LocationLayout:

@@ -56,33 +56,114 @@ def test_dashboard_targets_card_is_interactive(sample_state) -> None:
     assert targets.get("show_header_toggle") is False
 
 
-def test_dashboard_includes_mix_and_nfc_write_tabs(sample_state) -> None:
+def test_dashboard_includes_mix_and_intake_tabs(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
     mix = next(view for view in config["views"] if view.get("path") == "mix")
     assert mix["title"] == "Mix"
     mix_titles = [card.get("title") for card in mix["cards"]]
     assert "Focus — now / last / next" in mix_titles
+    assert "NFC / badge (sandbox)" in mix_titles
     assert "Dry progress" in mix_titles
     assert "Water progress" in mix_titles
     assert "Scale (drys)" in mix_titles
     assert "Scale (water pours)" in mix_titles
     assert "Finish checkpoints" in mix_titles
+    nfc_card = next(
+        card for card in mix["cards"] if card.get("title") == "NFC / badge (sandbox)"
+    )
+    nfc_ids = [row["entity"] for row in nfc_card["entities"]]
+    assert "select.communifarm_intake_tag_uid" in nfc_ids
+    assert "button.communifarm_apply_tag_source_scan" in nfc_ids
+    assert "button.communifarm_mix_step_from_badge" in nfc_ids
     finish = next(
         card for card in mix["cards"] if card.get("title") == "Finish checkpoints"
     )
     finish_ids = [row["entity"] for row in finish["entities"]]
     assert "button.communifarm_relocate_for_sterilization" in finish_ids
+    assert "select.communifarm_relocate_zone" in finish_ids
     water = next(
         card for card in mix["cards"] if card.get("title") == "Scale (water pours)"
     )
     water_ids = [row["entity"] for row in water["entities"]]
     assert "button.communifarm_record_water_pour" in water_ids
     assert "button.esp32dev_location_tare" in water_ids
+    assert "number.communifarm_manual_weigh_g" in water_ids
+    dry_scale = next(
+        card for card in mix["cards"] if card.get("title") == "Scale (drys)"
+    )
+    dry_ids = [row["entity"] for row in dry_scale["entities"]]
+    assert "number.communifarm_manual_weigh_g" in dry_ids
 
-    nfc = next(view for view in config["views"] if view.get("path") == "nfc-write")
-    assert nfc["title"] == "NFC Write"
-    nfc_titles = [card.get("title") for card in nfc["cards"]]
-    assert "Write target" in nfc_titles
+    intake = next(view for view in config["views"] if view.get("path") == "intake")
+    assert intake["title"] == "Intake"
+
+    def _intake_inner_cards() -> list[dict]:
+        out: list[dict] = []
+        for card in intake["cards"]:
+            if card.get("type") == "conditional":
+                out.append(card["card"])
+            else:
+                out.append(card)
+        return out
+
+    inner = _intake_inner_cards()
+    intake_titles = [card.get("title") for card in inner]
+    assert "Process" in intake_titles
+    assert "Shipment / tag pool" in intake_titles
+    assert "Scanner mode" in intake_titles
+    assert "Asset purchase" in intake_titles
+    assert "Location write" in intake_titles
+    assert "Bag / bin write" in intake_titles
+    assert "Write actions" in intake_titles
+
+    process = next(card for card in inner if card.get("title") == "Process")
+    process_ids = [row["entity"] for row in process["entities"]]
+    assert "select.communifarm_intake_process_mode" in process_ids
+
+    conditionals = [
+        card for card in intake["cards"] if card.get("type") == "conditional"
+    ]
+    assert conditionals, "Intake should gate sections with conditional cards"
+    mark_gated = [
+        c
+        for c in conditionals
+        if c["card"].get("title") == "Shipment / tag pool"
+    ]
+    assert mark_gated
+    mark_cond = mark_gated[0]["conditions"][0]
+    assert mark_cond["condition"] == "or"
+    mark_states = {x["state"] for x in mark_cond["conditions"]}
+    assert mark_states == {"combined", "mark_tags"}
+    purchase_gated = [
+        c for c in conditionals if c["card"].get("title") == "Asset purchase"
+    ]
+    assert purchase_gated
+    purchase_states = {
+        x["state"] for x in purchase_gated[0]["conditions"][0]["conditions"]
+    }
+    assert purchase_states == {"combined", "purchase_intake"}
+
+    shipment = next(card for card in inner if card.get("title") == "Shipment / tag pool")
+    ship_ids = [row["entity"] for row in shipment["entities"]]
+    assert "button.communifarm_seed_shipment_nfc_tags" in ship_ids
+    assert "select.communifarm_intake_tag_uid" in ship_ids
+
+
+def test_dashboard_production_has_placement_sections(sample_state) -> None:
+    config = DashboardBuilder().build(sample_state, {})
+    prod = next(view for view in config["views"] if view.get("path") == "production")
+    titles = [card.get("title") for card in prod["cards"]]
+    assert "Storage" in titles
+    assert "Cold storage" in titles
+    assert "Fruiting tent" in titles
+    assert "Inoculation tent" in titles
+    storage = next(card for card in prod["cards"] if card.get("title") == "Storage")
+    assert "sensor.communifarm_placement_storage" in storage["content"]
+    lifecycle = next(
+        card for card in prod["cards"] if card.get("title") == "Lifecycle"
+    )
+    ids = [row["entity"] for row in lifecycle["entities"]]
+    assert "button.communifarm_move_to_incubation" in ids
 
 
 def test_dashboard_includes_batches_tab(sample_state) -> None:

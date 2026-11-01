@@ -18,15 +18,19 @@ from .const import (
     ENTITY_BATCH_STAGE,
     ENTITY_CLIMATE_STATUS,
     ENTITY_CULTURE_INVENTORY,
+    ENTITY_FIELD_CAPACITY,
+    ENTITY_FIELD_CAPACITY_RAW,
+    ENTITY_MIX_PROTOCOL,
     ENTITY_NFC_CHECKIN,
+    ENTITY_NFC_WRITE_STATUS,
+    ENTITY_PLACEMENT_COLD_STORAGE,
+    ENTITY_PLACEMENT_FRUITING_TENT,
+    ENTITY_PLACEMENT_INOCULATION_TENT,
+    ENTITY_PLACEMENT_STORAGE,
     ENTITY_PRODUCTION_STATUS,
     ENTITY_SALES_STATUS,
     ENTITY_TACHOMETER_STATUS,
     ENTITY_VARIETY_LIST,
-    ENTITY_FIELD_CAPACITY,
-    ENTITY_FIELD_CAPACITY_RAW,
-    ENTITY_MIX_PROTOCOL,
-    ENTITY_NFC_WRITE_STATUS,
     ENTITY_WEIGH_SESSION,
     FIELD_CAPACITY_MAX_OK,
     FIELD_CAPACITY_MIN_OK,
@@ -39,6 +43,12 @@ from .const import (
     SIGNAL_SALES_UPDATED,
     SIGNAL_TACHOMETER_UPDATED,
     SIGNAL_WEIGH_SESSION_UPDATED,
+)
+from .domain.location import (
+    AREA_COLD_STORAGE,
+    AREA_FRUITING_TENT,
+    AREA_INOCULATION_TENT,
+    AREA_STORAGE,
 )
 from .domain.models import CommunifarmState
 from .domain.recipe import build_weigh_session_progress
@@ -83,6 +93,38 @@ async def async_setup_entry(
             CommunifarmBatchListSensor(entry_id),
             CommunifarmBatchMilestonesSensor(entry_id),
             CommunifarmProductionStatusSensor(entry_id),
+            CommunifarmPlacementInventorySensor(
+                entry_id,
+                area_kind=AREA_STORAGE,
+                title="Storage",
+                unique_id="communifarm_placement_storage",
+                entity_id=ENTITY_PLACEMENT_STORAGE,
+                icon="mdi:warehouse",
+            ),
+            CommunifarmPlacementInventorySensor(
+                entry_id,
+                area_kind=AREA_COLD_STORAGE,
+                title="Cold storage",
+                unique_id="communifarm_placement_cold_storage",
+                entity_id=ENTITY_PLACEMENT_COLD_STORAGE,
+                icon="mdi:snowflake",
+            ),
+            CommunifarmPlacementInventorySensor(
+                entry_id,
+                area_kind=AREA_FRUITING_TENT,
+                title="Fruiting tent",
+                unique_id="communifarm_placement_fruiting_tent",
+                entity_id=ENTITY_PLACEMENT_FRUITING_TENT,
+                icon="mdi:tent",
+            ),
+            CommunifarmPlacementInventorySensor(
+                entry_id,
+                area_kind=AREA_INOCULATION_TENT,
+                title="Inoculation tent",
+                unique_id="communifarm_placement_inoculation_tent",
+                entity_id=ENTITY_PLACEMENT_INOCULATION_TENT,
+                icon="mdi:greenhouse",
+            ),
             CommunifarmActiveCultureIdSensor(entry_id),
             CommunifarmVarietyListSensor(entry_id),
             CommunifarmCultureInventorySensor(entry_id),
@@ -214,8 +256,31 @@ class CommunifarmWeighSessionSensor(CommunifarmSensor):
             recipe_scale=runtime.recipe_scale,
             events=events,
         )
+        from .const import ENTITY_MANUAL_WEIGH_G, ENTITY_SCALE_MASS_G, MANUAL_WEIGH_OMIT_G
+        from .domain.validation import ValidationError
+        from .domain.weight import resolve_weigh_mass_g
+
         warnings = list(session.get("warnings") or [])
         last_reject = session.get("last_reject")
+        manual_raw = self.bucket().get("manual_weigh_g", MANUAL_WEIGH_OMIT_G)
+        scale_state = self.hass.states.get(ENTITY_SCALE_MASS_G)
+        scale_g = None
+        if scale_state is not None and scale_state.state not in (
+            "unknown",
+            "unavailable",
+            "",
+        ):
+            try:
+                scale_g = float(scale_state.state)
+            except (TypeError, ValueError):
+                scale_g = None
+        try:
+            resolved = resolve_weigh_mass_g(manual_g=manual_raw, scale_g=scale_g)
+            effective_mass = resolved.mass_g
+            mass_source = resolved.source
+        except ValidationError:
+            effective_mass = None
+            mass_source = None
         self._progress_text = progress.progress_text()
         if warnings:
             self._progress_text += "\n\n**Warnings:** " + ", ".join(warnings)
@@ -239,6 +304,12 @@ class CommunifarmWeighSessionSensor(CommunifarmSensor):
             "last_reject": last_reject,
             "tare_seen": bool(session.get("tare_seen")),
             "record_count": int(session.get("record_count") or 0),
+            "manual_weigh_g": manual_raw,
+            "scale_mass_g": scale_g,
+            "effective_mass_g": effective_mass,
+            "mass_source": mass_source,
+            "manual_weigh_entity": ENTITY_MANUAL_WEIGH_G,
+            "last_mass_source": session.get("last_mass_source"),
         }
         self.async_write_ha_state()
 
@@ -524,6 +595,60 @@ class CommunifarmProductionStatusSensor(CommunifarmSensor):
         return self._attrs
 
 
+class CommunifarmPlacementInventorySensor(CommunifarmSensor):
+    """Markdown inventory of bags/boxes in one placement area kind."""
+
+    def __init__(
+        self,
+        entry_id: str,
+        *,
+        area_kind: str,
+        title: str,
+        unique_id: str,
+        entity_id: str,
+        icon: str,
+    ) -> None:
+        super().__init__(entry_id, entity_id=entity_id)
+        self._attr_name = f"Placement — {title}"
+        self._attr_unique_id = unique_id
+        self._attr_icon = icon
+        self._area_kind = area_kind
+        self._title = title
+        self._value = "0 units"
+        self._attrs: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh()
+        self.listen_entry_signals(SIGNAL_BATCH_UPDATED, method="async_refresh")
+        self.listen_entry_signals(SIGNAL_NFC_CHECKIN_UPDATED, method="async_refresh")
+
+    async def async_refresh(self) -> None:
+        from . import production_actions
+
+        if self._entry_id not in self.hass.data.get(DOMAIN, {}):
+            return
+        value, markdown, rows = await production_actions.async_placement_section(
+            self.hass, self._entry_id, self._area_kind, self._title
+        )
+        self._value = value
+        self._attrs = {
+            "area_kind": self._area_kind,
+            "area_title": self._title,
+            "count": len(rows),
+            "containers": rows,
+            "progress_text": markdown,
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
 class CommunifarmActiveCultureIdSensor(CommunifarmSensor):
     """Stable id of the culture lot selected for inoculation."""
 
@@ -745,8 +870,11 @@ class CommunifarmNfcCheckinSensor(CommunifarmSensor):
             "lifecycle_phase": session.get("lifecycle_phase"),
             "flush_count": session.get("flush_count"),
             "max_flushes": session.get("max_flushes"),
+            "amount": session.get("amount"),
+            "amount_unit": session.get("amount_unit"),
             "found": bool(session.get("found")),
             "checkin_id": session.get("checkin_id"),
+            "scan_event_id": session.get("scan_event_id"),
             "progress_text": session.get("progress_text")
             or "Scan a tag with the handheld reader.",
         }

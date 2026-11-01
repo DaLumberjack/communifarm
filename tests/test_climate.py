@@ -576,7 +576,7 @@ def test_schema_v13_upgrade_preserves_v11(tmp_path: Path) -> None:
     conn.commit()
     version = sqlite_db.apply_migrations(conn)
     assert version == sqlite_db.SCHEMA_VERSION
-    assert version == 16
+    assert version == 18
     batch = conn.execute(
         "SELECT name, environment_id FROM batches WHERE stable_id = 'batch_keep'"
     ).fetchone()

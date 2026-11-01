@@ -15,6 +15,7 @@ OBJECT_MEDIA = "media"
 OBJECT_INVENTORY = "inventory"
 OBJECT_EMPLOYEE = "employee"
 OBJECT_LOCATION = "location"
+OBJECT_MACHINE = "machine"
 OBJECT_UNKNOWN = "unknown"
 
 NFC_OBJECT_TYPES = frozenset(
@@ -26,6 +27,7 @@ NFC_OBJECT_TYPES = frozenset(
         OBJECT_INVENTORY,
         OBJECT_EMPLOYEE,
         OBJECT_LOCATION,
+        OBJECT_MACHINE,
     }
 )
 
@@ -85,6 +87,27 @@ class NfcCheckin:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class NfcScanEvent:
+    """Append-only audit row for every resolve (no qty/location mutation)."""
+
+    site_id: str
+    nfc_uid: str
+    recorded_at: str
+    object_type: str | None = None
+    object_id: str | None = None
+    found: bool = False
+    source: str = "resolve"
+    id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = new_id("nscn")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def validate_activity(activity: str) -> str:
     value = str(activity or "").strip()
     if value not in NFC_ACTIVITIES:
@@ -130,4 +153,9 @@ def format_resolution_markdown(res: NfcResolution) -> str:
         f"{res.max_flushes if res.max_flushes is not None else '—'} |",
         f"| Zone | `{res.zone_id or '—'}` |",
     ]
+    amount = res.detail.get("amount") if res.detail else None
+    amount_unit = res.detail.get("amount_unit") if res.detail else None
+    if amount is not None:
+        unit = amount_unit or ""
+        lines.append(f"| Amount left | {amount} {unit}".rstrip() + " |")
     return "\n".join(lines)

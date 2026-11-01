@@ -19,6 +19,16 @@ Quality oracle: `docs/intermediate/cea-quality-process.md`
 | Bag / bin | Container count + separate | `containers_separated` |
 | Relocate for sterilization | Bag NFC + location NFC | `relocated_for_sterilization` |
 
+## Manual weigh (scale fallback)
+
+| value | meaning |
+| --- | --- |
+| **−1** (default) | Omit — `record_weight` uses live `sensor.esp32dev_calibrated_g` |
+| **0** | Ingredient not in this recipe / zero pour (recorded) |
+| **> 0** | Override scale (broken scale, post-tare stuck at 0, sandbox) |
+
+Entity: `number.communifarm_manual_weigh_g`. Assess / recipe logic is unchanged — only the mass **source** swaps. After a successful manual record or tare, the number resets to −1.
+
 ## Water
 
 | rule | detail |
@@ -42,9 +52,18 @@ Write station: `/communifarm/nfc-write`.
 | --- | --- |
 | Mix | Standalone process: focus → drys → water pours (location tare) → finish |
 | Weigh | Redirects to Mix |
-| NFC Write | Register + write bag/bin / ingredient / location tags |
+| Intake | Purchases + NFC write sections (asset / location / bag / machine / culture / batch / employee) |
 
-**Relocate for sterilization:** scan at least one bag/bin (or batch) NFC, then press the button. That milestone documents the **entire batch** moved. Location tag optional.
+**Relocate for sterilization (last step):** pick a **Storage** shelf on Mix, then **Relocate for sterilization**. Bags land in Storage (awaiting culture) and appear on **Production → Storage**. Badge cannot finish this step. Active **batch NFC** is enough when no bag tag exists yet; bag/bin tags preferred.
+
+**Sandbox NFC / badge checkpoints:** **Seed shipment NFC tags** (Intake) → Mix **Tag source** → **Scan NFC tag** → **Badge: complete next checkpoint**. For employee milestones pick `nfc-employee-01`.
+
+**Production blocks:** Tag source → bag UID → **Register tag source as production block**.
+
+| Env | Fake HA sensors? |
+| --- | --- |
+| Sandbox (`devcontainer/ha_config/packages/`) | **Yes** — `input_select.cf_sandbox_shipment_nfc_uid`, last-NFC helpers, simulate buttons |
+| Production integration | **No** — only bind/import from real ESPHome last-NFC entities |
 
 ## Test cases
 

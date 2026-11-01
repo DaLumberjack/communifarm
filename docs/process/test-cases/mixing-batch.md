@@ -81,16 +81,52 @@ When you open Communifarm after setup, these tests verify Weigh stays scale-focu
 |-------|-------|
 | CQA | Operator clarity |
 | CPP / gate | Dashboard provision |
-| acceptance | `/mix` has ordered steps; `/weigh` has no mix milestone card; `/nfc-write` exists |
+| acceptance | `/mix` has ordered steps; `/weigh` redirects; `/intake` has purchase + write sections |
 | flaw this case is built to catch | Protocol buried on the general scale tab |
 | loop | none |
 | stage | T0 |
-| pytest or spec | `tests/test_dashboard.py::test_dashboard_includes_mix_and_nfc_write_tabs`, `::test_dashboard_includes_weigh_tab_with_scale_and_nfc` |
+| pytest or spec | `tests/test_dashboard.py::test_dashboard_includes_mix_and_intake_tabs`, `::test_dashboard_weigh_tab_redirects_to_mix` |
 | pass means | Task UI is separated from weights & measures |
 | pass does not mean | Playwright layout polish |
 | related batches | n/a |
+
+## R1 — Relocate with location select + batch NFC
+
+When you finish mix and relocate without a bag tag, these tests verify location select + active batch NFC documents the whole-batch move (no `nfc_uid is required` on empty scan).
+
+| field | value |
+|-------|-------|
+| CQA | Contemporaneous batch record / move audit |
+| CPP / gate | Storage shelf required; bag optional (batch NFC fallback); bags land in Storage |
+| acceptance | Milestone `relocated_for_sterilization` with Storage zone; empty NFC without location → clear error |
+| flaw this case is built to catch | Relocate calls resolve with blank UID; bags not visible on Production → Storage |
+| loop | process |
+| stage | T0 |
+| pytest or spec | `tests/test_mix_protocol.py::test_relocate_requires_location_then_allows_batch_nfc`, `tests/test_placement_inventory.py` |
+| pass means | Operator can finish Mix into Storage awaiting culture |
+| pass does not mean | Live PN532 bag tagging |
+| related batches | Active mix batch |
+
+## M1 — Manual weigh overrides stuck / dead scale
+
+When tare leaves the scale at 0 g (or the scale is dead), typing grams into `number.communifarm_manual_weigh_g` must record that mass; −1 keeps using the scale.
+
+| field | value |
+|-------|-------|
+| CQA | Contemporaneous mass on the batch record |
+| CPP / gate | Manual ≥ 0 overrides; −1 omits; 0 = not in recipe |
+| acceptance | `weight_events.mass_g` matches manual; `source_entity_id` = manual number; resets to −1 after record |
+| flaw this case is built to catch | Post-tare 0 blocks Mix forever; broken scale has no escape |
+| loop | process |
+| stage | T0 |
+| pytest or spec | `tests/test_manual_weigh.py` |
+| pass means | Operators can finish weigh without a live pan reading |
+| pass does not mean | HX711 calibration is correct |
+| related batches | Active mix batch |
 
 ### Sources
 
 - `docs/process/mixing-batch.md`
 - `docs/intake/mushroom data/recipe.md`
+- `docs/hardware/communifarm_nfc_station.md`
+- `docs/intermediate/communifarm-number-mass-source.md`

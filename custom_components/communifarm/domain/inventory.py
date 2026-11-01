@@ -13,14 +13,48 @@ from .weight import ingredient_key_from_label
 OBJECT_INVENTORY = "inventory"
 OBJECT_EMPLOYEE = "employee"
 OBJECT_LOCATION = "location"
+OBJECT_CONTAINER = "container"
+OBJECT_BATCH = "batch"
+OBJECT_CULTURE = "culture"
+OBJECT_MACHINE = "machine"
 
 NFC_WRITE_OBJECT_TYPES = frozenset(
     {
         OBJECT_INVENTORY,
         OBJECT_EMPLOYEE,
         OBJECT_LOCATION,
+        OBJECT_CONTAINER,
+        OBJECT_BATCH,
+        OBJECT_CULTURE,
+        OBJECT_MACHINE,
     }
 )
+
+# Scan mode: when register_production_block, next unresolved UID becomes a bag/bin.
+SCAN_MODE_NORMAL = "normal"
+SCAN_MODE_REGISTER_BLOCK = "register_production_block"
+NFC_SCAN_MODES = frozenset({SCAN_MODE_NORMAL, SCAN_MODE_REGISTER_BLOCK})
+
+# Intake station process chrome (same entities; different visible card groups).
+INTAKE_PROCESS_COMBINED = "combined"
+INTAKE_PROCESS_MARK_TAGS = "mark_tags"
+INTAKE_PROCESS_PURCHASE = "purchase_intake"
+INTAKE_PROCESS_MODES = frozenset(
+    {
+        INTAKE_PROCESS_COMBINED,
+        INTAKE_PROCESS_MARK_TAGS,
+        INTAKE_PROCESS_PURCHASE,
+    }
+)
+
+PAYMENT_ACCOUNT = "account"
+PAYMENT_CASH = "cash"
+INTAKE_PAYMENT_METHODS = frozenset({PAYMENT_ACCOUNT, PAYMENT_CASH})
+
+AMOUNT_UNITS = ("g", "kg", "lb", "qts", "bags", "ea")
+
+# Intake tag-source select: bind pending NDEF to last scan or a known DB UID.
+TAG_SOURCE_LAST_SCANNED = "(last scanned)"
 
 # Display labels for water inventory / select; all map to recipe key ``water``.
 WATER_KIND_TAP = "tap"
@@ -57,6 +91,14 @@ class InventoryLot:
     notes: str | None = None
     created_at: str = ""
     id: str = ""
+    amount: float | None = None
+    amount_unit: str | None = None
+    cost: float | None = None
+    payment_location: str | None = None
+    purchase_location: str | None = None
+    tracked: bool | None = None
+    receipt_tracked: bool | None = None
+    purchase_date: str | None = None
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -66,6 +108,37 @@ class InventoryLot:
             raise ValidationError(
                 f"water_kind must be one of {sorted(WATER_KINDS)}; got {self.water_kind!r}"
             )
+        if self.nfc_uid is not None:
+            self.nfc_uid = validate_nfc_uid(self.nfc_uid, required=True)
+        if self.payment_location and self.payment_location not in INTAKE_PAYMENT_METHODS:
+            raise ValidationError(
+                f"payment_location must be one of {sorted(INTAKE_PAYMENT_METHODS)}"
+            )
+        if self.amount_unit and self.amount_unit not in AMOUNT_UNITS:
+            raise ValidationError(
+                f"amount_unit must be one of {AMOUNT_UNITS}; got {self.amount_unit!r}"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class MachineAsset:
+    """Tagged machine / equipment (identity only on the chip)."""
+
+    site_id: str
+    label: str
+    nfc_uid: str | None = None
+    ndef_payload: str | None = None
+    status: str = STATUS_ACTIVE
+    created_at: str = ""
+    id: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = new_id("mach")
+        validate_readable_name(self.label, field_name="machine.label")
         if self.nfc_uid is not None:
             self.nfc_uid = validate_nfc_uid(self.nfc_uid, required=True)
 

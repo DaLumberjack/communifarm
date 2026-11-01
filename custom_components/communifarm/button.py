@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     ENTITY_BTN_ACQUIRE_CULTURE,
+    ENTITY_BTN_APPLY_TAG_SOURCE,
     ENTITY_BTN_COMPLETE_NEW_BATCH,
     ENTITY_BTN_COMPLETELY_MIXED,
     ENTITY_BTN_CONFIRM_CONTAINER_HARVEST,
@@ -24,9 +25,9 @@ from .const import (
     ENTITY_BTN_FIELD_CAPACITY,
     ENTITY_BTN_FINAL_HARVEST,
     ENTITY_BTN_HEAT_TREATED,
+    ENTITY_BTN_IMPORT_NFC_FROM_ENTITY,
     ENTITY_BTN_INOCULATE,
     ENTITY_BTN_MIX_STEP_FROM_BADGE,
-    ENTITY_BTN_RECORD_WATER_POUR,
     ENTITY_BTN_MOVE_FRUITING,
     ENTITY_BTN_MOVE_HARVEST,
     ENTITY_BTN_MOVE_INCUBATION,
@@ -36,9 +37,12 @@ from .const import (
     ENTITY_BTN_RECORD_HARVEST,
     ENTITY_BTN_RECORD_SALE,
     ENTITY_BTN_RECORD_SALE_CLEANUP,
+    ENTITY_BTN_RECORD_WATER_POUR,
+    ENTITY_BTN_REGISTER_PRODUCTION_BLOCK,
     ENTITY_BTN_RELOCATE_STERILE,
     ENTITY_BTN_REMAINING_WATER,
     ENTITY_BTN_RETIRE_VARIETY,
+    ENTITY_BTN_SEED_SHIPMENT_TAGS,
     ENTITY_BTN_SELECT_INOCULUM_NFC,
     ENTITY_BTN_SEPARATE_CONTAINERS,
     ENTITY_BTN_SET_CULTURE_STATUS,
@@ -209,6 +213,10 @@ async def async_setup_entry(
             CommunifarmCreateInventoryLotButton(entry_id),
             CommunifarmPrepareNfcWriteButton(entry_id),
             CommunifarmConfirmNfcWriteButton(entry_id),
+            CommunifarmRegisterProductionBlockButton(entry_id),
+            CommunifarmSeedShipmentTagsButton(entry_id),
+            CommunifarmImportNfcFromEntityButton(entry_id),
+            CommunifarmApplyTagSourceScanButton(entry_id),
             CommunifarmMixStepFromBadgeButton(entry_id),
             CommunifarmHeatTreatedButton(entry_id),
             CommunifarmMilestoneButton(
@@ -426,6 +434,72 @@ class CommunifarmMixStepFromBadgeButton(CommunifarmButton):
         await inventory_actions.async_complete_mix_step_from_badge(
             self.hass, self._entry_id
         )
+
+
+class CommunifarmApplyTagSourceScanButton(CommunifarmButton):
+    """Push Tag source select into last-NFC helpers and resolve."""
+
+    _attr_name = "Scan NFC tag (from Tag source)"
+    _attr_unique_id = "communifarm_apply_tag_source_scan"
+    _attr_icon = "mdi:nfc-tap"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_APPLY_TAG_SOURCE)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_apply_tag_source_scan(self.hass, self._entry_id)
+
+
+class CommunifarmRegisterProductionBlockButton(CommunifarmButton):
+    """Bind Tag source UID as a production block for the active batch."""
+
+    _attr_name = "Register tag source as production block"
+    _attr_unique_id = "communifarm_register_production_block"
+    _attr_icon = "mdi:package-variant-closed-plus"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_REGISTER_PRODUCTION_BLOCK)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_register_production_block(
+            self.hass, self._entry_id
+        )
+
+
+class CommunifarmSeedShipmentTagsButton(CommunifarmButton):
+    """Load kit NFC UIDs into Communifarm DB (no new HA sensors)."""
+
+    _attr_name = "Seed shipment NFC tags"
+    _attr_unique_id = "communifarm_seed_shipment_nfc_tags"
+    _attr_icon = "mdi:package-variant"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_SEED_SHIPMENT_TAGS)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_seed_shipment_nfc_tags(self.hass, self._entry_id)
+
+
+class CommunifarmImportNfcFromEntityButton(CommunifarmButton):
+    """Import UID from existing last-NFC helper into the tag pool."""
+
+    _attr_name = "Import NFC from last-scan entity"
+    _attr_unique_id = "communifarm_import_nfc_from_entity"
+    _attr_icon = "mdi:database-import"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_BTN_IMPORT_NFC_FROM_ENTITY)
+
+    async def async_press(self) -> None:
+        from . import inventory_actions
+
+        await inventory_actions.async_import_nfc_from_entity(self.hass, self._entry_id)
 
 
 class CommunifarmSeparateContainersButton(CommunifarmButton):

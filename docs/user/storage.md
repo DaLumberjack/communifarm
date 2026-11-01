@@ -5,9 +5,10 @@ Long-term Communifarm events live in a Communifarm-owned SQLite file — not Hom
 | Item | Value |
 | --- | --- |
 | Path | `<HA config>/communifarm/communifarm.db` |
-| Schema | v10 |
+| Schema | **v19** (`SCHEMA_VERSION` in `storage/sqlite_db.py`) |
 | Concurrency | Process-wide `DB_LOCK` + WAL + 30s busy timeout (HA executor-safe) |
 | ADR | [0003-communifarm-sqlite.md](../adr/0003-communifarm-sqlite.md) |
+| NFC schema / UML | [nfc-schema.md](../architecture/nfc-schema.md) |
 | Services | `record_weight`, `record_batch_milestone`, `complete_and_new_batch`, `create_media_batch`, `record_media_weight`, `record_media_milestone`, `acquire_culture`, `introduce_culture`, `inoculate_batch`, `advance_production_stage`, `record_harvest`, `record_container_harvest`, `resolve_nfc`, `check_in`, `bind_nfc`, `record_sale`, `record_sale_cleanup`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location`, `set_culture_location`, `set_media_location` |
 
 ## Why not Recorder?
@@ -29,7 +30,9 @@ batches (master)
         └── sale_line_items.sale_pack_id  # POS lines (v10)
               └── sales                   # venue / buyer / payment (v10)
 
-nfc_checkins                          # handheld resolve/check-in audit (v9)
+nfc_checkins                          # handheld activity check-in audit (v9)
+nfc_scan_events                       # every resolve audit (v19); no qty mutation
+nfc_tag_pool                          # physical tag registry + dual-write bind (v18+)
 sale_cleanup_events                   # post-sale clean / put-away (v10)
 
 placement_areas (site tents / fridges / cabinets)

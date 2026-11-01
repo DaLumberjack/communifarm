@@ -219,7 +219,7 @@ async def test_badge_completes_next_mix_milestone(
 
 
 @pytest.mark.asyncio
-async def test_relocate_requires_bag_scan_not_empty_nfc(
+async def test_relocate_requires_location_then_allows_batch_nfc(
     hass: HomeAssistant,
     mock_config_entry: MockConfigEntry,
     tmp_path: Path,
@@ -232,25 +232,43 @@ async def test_relocate_requires_bag_scan_not_empty_nfc(
     mock_config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
-    # Empty last NFC must not raise "nfc_uid is required" from resolve.
+    bucket = hass.data[DOMAIN][mock_config_entry.entry_id]
+    # Zone selects may seed a default — clear so relocate must demand a pick.
+    bucket["relocate_zone_label"] = None
+    bucket["intake_zone_label"] = None
+    # Empty last NFC + no location → clear location error (not nfc_uid is required).
     hass.states.async_set("input_text.esp32dev_last_nfc_uid", "")
-    with pytest.raises(HomeAssistantError, match="bag/bin NFC"):
+    with pytest.raises(HomeAssistantError, match="Storage shelf"):
         await hass.services.async_call(
             DOMAIN, SERVICE_RELOCATE_FOR_STERILIZATION, {}, blocking=True
         )
 
-    # Batch tag scan documents whole-batch relocate.
-    state = hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
+    from custom_components.communifarm import inventory_actions
+
+    labels = await inventory_actions.async_list_zone_option_labels(
+        hass, mock_config_entry.entry_id, area_kind="storage"
+    )
+    storage = next(label for label in labels if label.startswith("Storage"))
+    bucket["relocate_zone_label"] = storage
+
+    # 5A: Storage shelf + active batch NFC → bags land in Storage.
+    state = bucket["state"]
     await hass.services.async_call(
         DOMAIN,
         SERVICE_RELOCATE_FOR_STERILIZATION,
-        {"bag_nfc_uid": state.batch.nfc_uid},
+        {},
         blocking=True,
     )
-    batch_repo = hass.data[DOMAIN][mock_config_entry.entry_id]["batch_repository"]
+    batch_repo = bucket["batch_repository"]
     assert await batch_repo.async_has_milestone(
         state.batch.id, "relocated_for_sterilization"
     )
+    batch = await batch_repo.async_get_batch(state.batch.id)
+    assert batch is not None and batch.zone_id
+    loc = bucket["location_repository"]
+    zone = await loc.async_get_zone(batch.zone_id)
+    area = await loc.async_get_area(zone.area_id)
+    assert area.area_kind == "storage"
 
 
 @pytest.mark.asyncio

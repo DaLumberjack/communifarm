@@ -14,10 +14,12 @@ from ..domain.nfc import (
     OBJECT_EMPLOYEE,
     OBJECT_INVENTORY,
     OBJECT_LOCATION,
+    OBJECT_MACHINE,
     OBJECT_MEDIA,
     OBJECT_UNKNOWN,
     NfcCheckin,
     NfcResolution,
+    NfcScanEvent,
 )
 from .container_repository import ContainerRepository
 from .sqlite_repository import SqliteRepository
@@ -132,6 +134,9 @@ class NfcRepository(SqliteRepository):
                         "ingredient_key": lot.ingredient_key,
                         "water_kind": lot.water_kind,
                         "ndef_payload": lot.ndef_payload,
+                        "amount": lot.amount,
+                        "amount_unit": lot.amount_unit,
+                        "status": lot.status,
                     },
                 )
             badge = self._inventory._get_employee_by_nfc_sync(nfc_uid)
@@ -143,6 +148,16 @@ class NfcRepository(SqliteRepository):
                     label=badge.label,
                     found=True,
                     detail={"ndef_payload": badge.ndef_payload},
+                )
+            machine = self._inventory._get_machine_by_nfc_sync(nfc_uid)
+            if machine is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_MACHINE,
+                    object_id=machine.id,
+                    label=machine.label,
+                    found=True,
+                    detail={"ndef_payload": machine.ndef_payload},
                 )
 
         if self._locations is not None:
@@ -198,8 +213,8 @@ class NfcRepository(SqliteRepository):
         return self._cultures._row_to_media(row)
 
     async def async_insert_checkin(self, event: NfcCheckin) -> NfcCheckin:
-        return await self._hass.async_add_executor_job(self._locked, 
-            self._insert_checkin_sync, event
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_checkin_sync, event
         )
 
     def _insert_checkin_sync(self, event: NfcCheckin) -> NfcCheckin:
@@ -228,3 +243,47 @@ class NfcRepository(SqliteRepository):
         )
         conn.commit()
         return event
+
+    async def async_insert_scan_event(self, event: NfcScanEvent) -> NfcScanEvent:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_scan_event_sync, event
+        )
+
+    def _insert_scan_event_sync(self, event: NfcScanEvent) -> NfcScanEvent:
+        conn = getattr(self._batches, "_conn", None)
+        assert conn is not None
+        conn.execute(
+            """
+            INSERT INTO nfc_scan_events (
+              stable_id, site_id, nfc_uid, object_type, object_id,
+              found, source, recorded_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.id,
+                event.site_id,
+                event.nfc_uid,
+                event.object_type,
+                event.object_id,
+                1 if event.found else 0,
+                event.source,
+                event.recorded_at,
+                event.recorded_at,
+            ),
+        )
+        conn.commit()
+        return event
+
+    async def async_count_scan_events(self, nfc_uid: str) -> int:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._count_scan_events_sync, nfc_uid
+        )
+
+    def _count_scan_events_sync(self, nfc_uid: str) -> int:
+        conn = getattr(self._batches, "_conn", None)
+        assert conn is not None
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM nfc_scan_events WHERE nfc_uid = ?",
+            (nfc_uid,),
+        ).fetchone()
+        return int(row["c"] if row else 0)
