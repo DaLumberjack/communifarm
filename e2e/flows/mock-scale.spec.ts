@@ -60,8 +60,8 @@ test.describe("Mock esp32dev scale (T1)", () => {
     expect(recorded).toMatch(/3000/);
     expect(recorded).toMatch(/hardwood pellets/);
 
-    // Dashboard still shows weigh chrome after the activity
-    await expect(page.getByText(/weigh station/i).first()).toBeVisible({
+    // Dashboard still shows Mix weigh chrome after the activity
+    await expect(page.getByText(/mixing batch|dry ingredients/i).first()).toBeVisible({
       timeout: STEP_MS,
     });
   });

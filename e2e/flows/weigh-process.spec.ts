@@ -41,7 +41,7 @@ test.describe("Weigh process workflow (T1)", () => {
     await cf.openWeighStation();
 
     await expect(
-      page.getByText(/weigh station|recipe scale|this session/i).first()
+      page.getByText(/mixing batch|recipe scale|dry ingredients|this session/i).first()
     ).toBeVisible({ timeout: STEP_MS });
 
     await resetWeighBatch(page, `E2E Exact ${Date.now()}`);
@@ -75,7 +75,7 @@ test.describe("Weigh process workflow (T1)", () => {
     const sessionState = await getStateViaHass(page, "sensor.communifarm_weigh_session");
     expect(sessionState).toBe(`${total}/${total} lines recorded`);
 
-    await expect(page.getByText(/weigh station/i).first()).toBeVisible({
+    await expect(page.getByText(/mixing batch|dry ingredients/i).first()).toBeVisible({
       timeout: STEP_MS,
     });
     await expect(page.getByText(/this session|session progress/i).first()).toBeVisible({
