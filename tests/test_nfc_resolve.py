@@ -631,3 +631,214 @@ async def test_resolve_audits_scan_and_fills_inventory_amount(
     after = await inv.async_get_lot(lot.id)
     assert after is not None
     assert after.amount == 12.5
+
+
+def test_nfc_bind_pool_align_rules() -> None:
+    from custom_components.communifarm.domain.nfc_bind import (
+        pool_should_align_on_resolve,
+        pool_unbind_fields,
+    )
+    from custom_components.communifarm.domain.shipment_tags import (
+        STATUS_AVAILABLE,
+        STATUS_BOUND,
+    )
+
+    assert (
+        pool_should_align_on_resolve(
+            pool_status=STATUS_AVAILABLE,
+            pool_bound_object_id=None,
+            pool_bound_object_type=None,
+            resolved_object_id="inv_1",
+            resolved_object_type="inventory",
+        )
+        is False
+    )
+    assert (
+        pool_should_align_on_resolve(
+            pool_status=STATUS_BOUND,
+            pool_bound_object_id="inv_old",
+            pool_bound_object_type="inventory",
+            resolved_object_id="inv_new",
+            resolved_object_type="inventory",
+        )
+        is True
+    )
+    assert (
+        pool_should_align_on_resolve(
+            pool_status=STATUS_BOUND,
+            pool_bound_object_id="inv_1",
+            pool_bound_object_type="inventory",
+            resolved_object_id="inv_1",
+            resolved_object_type="inventory",
+        )
+        is False
+    )
+    status, oid, otype = pool_unbind_fields()
+    assert status == STATUS_AVAILABLE
+    assert oid is None and otype is None
+
+
+@pytest.mark.asyncio
+async def test_bind_nfc_dual_writes_pool_and_entity(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """bind_nfc updates inventory.nfc_uid and nfc_tag_pool in one action."""
+    from custom_components.communifarm.domain.inventory import InventoryLot
+    from custom_components.communifarm.domain.nfc import OBJECT_INVENTORY
+
+    db_path = tmp_path / "communifarm_nfc_dual_bind.db"
+    monkeypatch.setattr(
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
+        lambda _config_dir: db_path,
+    )
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    entry_id = mock_config_entry.entry_id
+    bucket = hass.data[DOMAIN][entry_id]
+    site_id = bucket["state"].site.id
+    lot = InventoryLot(
+        site_id=site_id,
+        ingredient_key="gypsum",
+        label="gypsum",
+    )
+    await bucket["inventory_repository"].async_insert_lot(lot)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_BIND_NFC,
+        {
+            "object_type": OBJECT_INVENTORY,
+            "object_id": lot.id,
+            "nfc_uid": "04DUALBIND0001",
+        },
+        blocking=True,
+    )
+    updated = await bucket["inventory_repository"].async_get_lot(lot.id)
+    assert updated is not None
+    assert updated.nfc_uid == "04DUALBIND0001"
+    pool = await bucket["nfc_tag_pool_repository"].async_get_by_uid(
+        site_id, "04DUALBIND0001"
+    )
+    assert pool is not None
+    assert pool.status == "bound"
+    assert pool.bound_object_id == lot.id
+    assert pool.bound_object_type == OBJECT_INVENTORY
+    assert await bucket["nfc_repository"].async_count_scan_events("04DUALBIND0001") >= 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_does_not_auto_bind_available_pool_chip(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Available shipment chips stay available on bare resolve (audit only)."""
+    from custom_components.communifarm.domain.shipment_tags import STATUS_AVAILABLE
+    from custom_components.communifarm.storage.nfc_tag_pool_repository import (
+        NfcTagPoolEntry,
+    )
+
+    db_path = tmp_path / "communifarm_nfc_pool_available.db"
+    monkeypatch.setattr(
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
+        lambda _config_dir: db_path,
+    )
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    entry_id = mock_config_entry.entry_id
+    bucket = hass.data[DOMAIN][entry_id]
+    site_id = bucket["state"].site.id
+    await bucket["nfc_tag_pool_repository"].async_upsert(
+        NfcTagPoolEntry(
+            site_id=site_id,
+            nfc_uid="nfc-bag-available-01",
+            intended_type="container",
+            label="bag available",
+            status=STATUS_AVAILABLE,
+        )
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_RESOLVE_NFC,
+        {"nfc_uid": "nfc-bag-available-01"},
+        blocking=True,
+    )
+    session = bucket["nfc_session"]
+    assert session["found"] is False
+    row = await bucket["nfc_tag_pool_repository"].async_get_by_uid(
+        site_id, "nfc-bag-available-01"
+    )
+    assert row is not None
+    assert row.status == STATUS_AVAILABLE
+    assert row.bound_object_id is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_aligns_drifted_bound_pool_row(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    bypass_dashboard,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Already-bound pool rows realign object pointers from entity resolve."""
+    from custom_components.communifarm.domain.inventory import InventoryLot
+    from custom_components.communifarm.domain.nfc import OBJECT_INVENTORY
+    from custom_components.communifarm.domain.shipment_tags import STATUS_BOUND
+    from custom_components.communifarm.storage.nfc_tag_pool_repository import (
+        NfcTagPoolEntry,
+    )
+
+    db_path = tmp_path / "communifarm_nfc_pool_align.db"
+    monkeypatch.setattr(
+        "custom_components.communifarm.storage.sqlite_repository.sqlite_db.db_path_for_config_dir",
+        lambda _config_dir: db_path,
+    )
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    entry_id = mock_config_entry.entry_id
+    bucket = hass.data[DOMAIN][entry_id]
+    site_id = bucket["state"].site.id
+    lot = InventoryLot(
+        site_id=site_id,
+        ingredient_key="potash",
+        label="potash",
+        nfc_uid="04ALIGNPOOL0001",
+        amount=3.0,
+        amount_unit="kg",
+    )
+    await bucket["inventory_repository"].async_insert_lot(lot)
+    await bucket["nfc_tag_pool_repository"].async_upsert(
+        NfcTagPoolEntry(
+            site_id=site_id,
+            nfc_uid="04ALIGNPOOL0001",
+            intended_type=OBJECT_INVENTORY,
+            label="stale",
+            status=STATUS_BOUND,
+            bound_object_id="inv_stale_id",
+            bound_object_type="inventory",
+        )
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_RESOLVE_NFC,
+        {"nfc_uid": "04ALIGNPOOL0001"},
+        blocking=True,
+    )
+    row = await bucket["nfc_tag_pool_repository"].async_get_by_uid(
+        site_id, "04ALIGNPOOL0001"
+    )
+    assert row is not None
+    assert row.status == STATUS_BOUND
+    assert row.bound_object_id == lot.id
+    assert row.bound_object_type == OBJECT_INVENTORY
+    assert bucket["nfc_session"]["amount"] == 3.0

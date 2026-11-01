@@ -63,9 +63,11 @@ class SqliteRepository:
         """Hook while ``DB_LOCK`` is held, after migrations."""
 
     async def async_close(self) -> None:
-        await self._hass.async_add_executor_job(self._close_sync)
+        await self._hass.async_add_executor_job(self._locked, self._close_sync)
 
     def _close_sync(self) -> None:
+        # Must run under DB_LOCK (via ``_locked``): concurrent query + close
+        # segfaults the native sqlite3 module (CI exit 139).
         if self._conn is not None:
             self._conn.close()
             self._conn = None

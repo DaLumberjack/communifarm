@@ -80,6 +80,7 @@ async def test_scan_mode_registers_production_block(
     hass.states.async_set("input_text.esp32dev_last_nfc_uid", uid)
 
     await hass.services.async_call(DOMAIN, SERVICE_RESOLVE_NFC, {}, blocking=True)
+    await hass.async_block_till_done()
     conts = await bucket["container_repository"].async_list_for_batch(
         bucket["state"].batch.id
     )

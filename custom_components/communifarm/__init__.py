@@ -1511,6 +1511,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_units = bucket.get("unsub_core_config")
     if unsub_units:
         unsub_units()
+    # Platforms first so entity dispatcher listeners stop before SQLite close
+    # (closing under an in-flight sensor refresh segfaulted CI with exit 139).
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        entry, [Platform(p) for p in PLATFORMS]
+    )
+    await hass.async_block_till_done()
+
     weight_repo: WeightEventRepository | None = bucket.get("weight_repository")
     if weight_repo is not None:
         await weight_repo.async_close()
@@ -1533,9 +1540,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if sale_repo is not None:
         await sale_repo.async_close()
 
-    unload_ok = await hass.config_entries.async_unload_platforms(
-        entry, [Platform(p) for p in PLATFORMS]
-    )
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not any(key != "dashboard_config" for key in hass.data.get(DOMAIN, {})):
