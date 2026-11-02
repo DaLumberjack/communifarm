@@ -1,8 +1,8 @@
 # Communifarm local E2E summary
 
-- Generated: 2026-11-02T01:26:44Z
-- Git SHA: `c71aa930dfe4fee776a3b7834e2139849dcba1a3`
-- Branch: `feature/directory-readme-maps`
+- Generated: 2026-11-02T18:30:22Z
+- Git SHA: `84099a6c9e0af3a4739b7e1963cd9226fcd8576a`
+- Branch: `spike/ha-integration-architecture-eval`
 
 ## Totals
 
