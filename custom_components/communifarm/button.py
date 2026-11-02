@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from homeassistant.components.button import ButtonEntity
@@ -134,6 +135,28 @@ class CommunifarmAdvanceStageButton(CommunifarmButton):
         )
 
 
+class CommunifarmEntryActionButton(CommunifarmButton):
+    """Press calls ``action(hass, entry_id)``. Prefer over one-off subclasses."""
+
+    def __init__(
+        self,
+        entry_id: str,
+        spec: _ButtonSpec,
+        action: Callable[[HomeAssistant, str], Awaitable[None]],
+    ) -> None:
+        super().__init__(
+            entry_id,
+            name=spec.name,
+            unique_id=spec.unique_id,
+            entity_id=spec.entity_id,
+            icon=spec.icon,
+        )
+        self._action = action
+
+    async def async_press(self) -> None:
+        await self._action(self.hass, self._entry_id)
+
+
 def _spec(name: str, unique_id: str, entity_id: str, icon: str) -> _ButtonSpec:
     return _ButtonSpec(name, unique_id, entity_id, icon)
 
@@ -143,6 +166,8 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    from . import inventory_actions
+
     entry_id = entry.entry_id
     async_add_entities(
         [
@@ -209,15 +234,87 @@ async def async_setup_entry(
             ),
             CommunifarmSeparateContainersButton(entry_id),
             CommunifarmRelocateSterileButton(entry_id),
-            CommunifarmRecordWaterPourButton(entry_id),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Record water pour",
+                    "communifarm_record_water_pour",
+                    ENTITY_BTN_RECORD_WATER_POUR,
+                    "mdi:cup-water",
+                ),
+                inventory_actions.async_record_water_pour,
+            ),
             CommunifarmCreateInventoryLotButton(entry_id),
-            CommunifarmPrepareNfcWriteButton(entry_id),
-            CommunifarmConfirmNfcWriteButton(entry_id),
-            CommunifarmRegisterProductionBlockButton(entry_id),
-            CommunifarmSeedShipmentTagsButton(entry_id),
-            CommunifarmImportNfcFromEntityButton(entry_id),
-            CommunifarmApplyTagSourceScanButton(entry_id),
-            CommunifarmMixStepFromBadgeButton(entry_id),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Prepare NDEF write",
+                    "communifarm_prepare_nfc_write",
+                    ENTITY_BTN_PREPARE_NFC_WRITE,
+                    "mdi:nfc-tap",
+                ),
+                inventory_actions.async_prepare_nfc_write,
+            ),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Confirm NFC write",
+                    "communifarm_confirm_nfc_write",
+                    ENTITY_BTN_CONFIRM_NFC_WRITE,
+                    "mdi:nfc-check",
+                ),
+                inventory_actions.async_confirm_nfc_write,
+            ),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Register tag source as production block",
+                    "communifarm_register_production_block",
+                    ENTITY_BTN_REGISTER_PRODUCTION_BLOCK,
+                    "mdi:package-variant-closed-plus",
+                ),
+                inventory_actions.async_register_production_block,
+            ),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Seed shipment NFC tags",
+                    "communifarm_seed_shipment_nfc_tags",
+                    ENTITY_BTN_SEED_SHIPMENT_TAGS,
+                    "mdi:package-variant",
+                ),
+                inventory_actions.async_seed_shipment_nfc_tags,
+            ),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Import NFC from last-scan entity",
+                    "communifarm_import_nfc_from_entity",
+                    ENTITY_BTN_IMPORT_NFC_FROM_ENTITY,
+                    "mdi:database-import",
+                ),
+                inventory_actions.async_import_nfc_from_entity,
+            ),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Scan NFC tag (from Tag source)",
+                    "communifarm_apply_tag_source_scan",
+                    ENTITY_BTN_APPLY_TAG_SOURCE,
+                    "mdi:nfc-tap",
+                ),
+                inventory_actions.async_apply_tag_source_scan,
+            ),
+            CommunifarmEntryActionButton(
+                entry_id,
+                _spec(
+                    "Complete mix step from badge",
+                    "communifarm_mix_step_from_badge",
+                    ENTITY_BTN_MIX_STEP_FROM_BADGE,
+                    "mdi:badge-account",
+                ),
+                inventory_actions.async_complete_mix_step_from_badge,
+            ),
             CommunifarmHeatTreatedButton(entry_id),
             CommunifarmMilestoneButton(
                 entry_id,
@@ -359,22 +456,6 @@ class CommunifarmRelocateSterileButton(CommunifarmButton):
         )
 
 
-class CommunifarmRecordWaterPourButton(CommunifarmButton):
-    """Record scale mass as a water pour (sums toward 10200 g)."""
-
-    _attr_name = "Record water pour"
-    _attr_unique_id = "communifarm_record_water_pour"
-    _attr_icon = "mdi:cup-water"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_RECORD_WATER_POUR)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_record_water_pour(self.hass, self._entry_id)
-
-
 class CommunifarmCreateInventoryLotButton(CommunifarmButton):
     _attr_name = "Create inventory lot (new UUID)"
     _attr_unique_id = "communifarm_create_inventory_lot"
@@ -390,116 +471,6 @@ class CommunifarmCreateInventoryLotButton(CommunifarmButton):
         await inventory_actions.async_create_inventory_lot(
             self.hass, self._entry_id, label=str(label)
         )
-
-
-class CommunifarmPrepareNfcWriteButton(CommunifarmButton):
-    _attr_name = "Prepare NDEF write"
-    _attr_unique_id = "communifarm_prepare_nfc_write"
-    _attr_icon = "mdi:nfc-tap"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_PREPARE_NFC_WRITE)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_prepare_nfc_write(self.hass, self._entry_id)
-
-
-class CommunifarmConfirmNfcWriteButton(CommunifarmButton):
-    _attr_name = "Confirm NFC write"
-    _attr_unique_id = "communifarm_confirm_nfc_write"
-    _attr_icon = "mdi:nfc-check"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_CONFIRM_NFC_WRITE)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_confirm_nfc_write(self.hass, self._entry_id)
-
-
-class CommunifarmMixStepFromBadgeButton(CommunifarmButton):
-    _attr_name = "Complete mix step from badge"
-    _attr_unique_id = "communifarm_mix_step_from_badge"
-    _attr_icon = "mdi:badge-account"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_MIX_STEP_FROM_BADGE)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_complete_mix_step_from_badge(
-            self.hass, self._entry_id
-        )
-
-
-class CommunifarmApplyTagSourceScanButton(CommunifarmButton):
-    """Push Tag source select into last-NFC helpers and resolve."""
-
-    _attr_name = "Scan NFC tag (from Tag source)"
-    _attr_unique_id = "communifarm_apply_tag_source_scan"
-    _attr_icon = "mdi:nfc-tap"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_APPLY_TAG_SOURCE)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_apply_tag_source_scan(self.hass, self._entry_id)
-
-
-class CommunifarmRegisterProductionBlockButton(CommunifarmButton):
-    """Bind Tag source UID as a production block for the active batch."""
-
-    _attr_name = "Register tag source as production block"
-    _attr_unique_id = "communifarm_register_production_block"
-    _attr_icon = "mdi:package-variant-closed-plus"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_REGISTER_PRODUCTION_BLOCK)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_register_production_block(
-            self.hass, self._entry_id
-        )
-
-
-class CommunifarmSeedShipmentTagsButton(CommunifarmButton):
-    """Load kit NFC UIDs into Communifarm DB (no new HA sensors)."""
-
-    _attr_name = "Seed shipment NFC tags"
-    _attr_unique_id = "communifarm_seed_shipment_nfc_tags"
-    _attr_icon = "mdi:package-variant"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_SEED_SHIPMENT_TAGS)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_seed_shipment_nfc_tags(self.hass, self._entry_id)
-
-
-class CommunifarmImportNfcFromEntityButton(CommunifarmButton):
-    """Import UID from existing last-NFC helper into the tag pool."""
-
-    _attr_name = "Import NFC from last-scan entity"
-    _attr_unique_id = "communifarm_import_nfc_from_entity"
-    _attr_icon = "mdi:database-import"
-
-    def __init__(self, entry_id: str) -> None:
-        super().__init__(entry_id, entity_id=ENTITY_BTN_IMPORT_NFC_FROM_ENTITY)
-
-    async def async_press(self) -> None:
-        from . import inventory_actions
-
-        await inventory_actions.async_import_nfc_from_entity(self.hass, self._entry_id)
 
 
 class CommunifarmSeparateContainersButton(CommunifarmButton):

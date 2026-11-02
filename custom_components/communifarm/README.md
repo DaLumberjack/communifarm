@@ -57,7 +57,7 @@ Installable Communifarm HA integration: platforms, adapters, domain, storage.
 | config, CONFIG_SCHEMA, TRANSITION_SCHEMA, RECORD_WEIGHT_SCHEMA, RECORD_MILESTONE_SCHEMA, COMPLETE_NEW_BATCH_SCHEMA, CREATE_MEDIA_BATCH_SCHEMA, RECORD_MEDIA_WEIGHT_SCHEMA, RECORD_MEDIA_MILESTONE_SCHEMA, ACQUIRE_CULTURE_SCHEMA, CREATE_VARIETY_SCHEMA, RETIRE_VARIETY_SCHEMA | `__init__.py` |
 | batch actions, adapter, ALLOWED_MANUAL, async_record_milestone, async_ensure_dry_mixing_started, async_complete_and_new_batch, batch, actions | `batch_actions.py` |
 | binary sensor, platform, async_setup_entry, binary, sensor | `binary_sensor.py` |
-| button, platform, CommunifarmButton, CommunifarmMilestoneButton, CommunifarmAdvanceStageButton, async_setup_entry, CommunifarmFieldCapacityButton, CommunifarmRelocateSterileButton, CommunifarmRecordWaterPourButton, CommunifarmCreateInventoryLotButton, CommunifarmPrepareNfcWriteButton, CommunifarmConfirmNfcWriteButton | `button.py` |
+| button, platform, CommunifarmButton, CommunifarmMilestoneButton, CommunifarmAdvanceStageButton, CommunifarmEntryActionButton, async_setup_entry, CommunifarmFieldCapacityButton, CommunifarmRelocateSterileButton, CommunifarmCreateInventoryLotButton, CommunifarmSeparateContainersButton, CommunifarmHeatTreatedButton | `button.py` |
 | climate actions, adapter, async_ensure_climate_layout, async_bind_climate_role, async_tick_climate, climate, actions | `climate_actions.py` |
 | climate entities, adapter, CommunifarmDrawingSensor, CommunifarmDrawingSwitch, CommunifarmDrawingBinarySensor, drawing_sensor_entities, drawing_switch_entities, drawing_binary_entities, climate, entities | `climate_entities.py` |
 | config flow, config, CommunifarmConfigFlow, CommunifarmOptionsFlow, flow | `config_flow.py` |

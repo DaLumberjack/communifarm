@@ -20,6 +20,7 @@ Workspace directory `repos/communifarm/docs/adr`.
 | `0004-climate-control.md` | `docs` | ADR 0004: Climate tree and control ownership — Operator/architecture docs — same change as code when user-visible. |
 | `0005-local-e2e-ci-evidence.md` | `docs` | ADR 0005: Local E2E evidence for merge CI — Operator/architecture docs — same change as code when user-visible. |
 | `0006-nfc-dual-write-registry.md` | `docs` | ADR 0006: NFC dual-write registry (not central-only UID table) — Operator/architecture docs — same change as code when user-visible. |
+| `0008-entity-bases-and-runtime-load.md` | `docs` | ADR 0008: Entity bases, runtime load, and maintainability — Operator/architecture docs — same change as code when user-visible. |
 | `README.md` | `docs` | This directory map (dim1 Map + dim2 Feature index). |
 
 ## Feature index
@@ -32,5 +33,6 @@ Workspace directory `repos/communifarm/docs/adr`.
 | 0004-climate-control, docs, ADR 0004: Climate tree and control ownership, Status, Context, Decision, Consequences | `0004-climate-control.md` |
 | 0005-local-e2e-ci-evidence, docs, ADR 0005: Local E2E evidence for merge CI, Status, Context, Decision, Consequences | `0005-local-e2e-ci-evidence.md` |
 | 0006-nfc-dual-write-registry, docs, ADR 0006: NFC dual-write registry (not central-only UID table), Status, Context, Decision, Consequences, NFC | `0006-nfc-dual-write-registry.md` |
+| 0008-entity-bases-and-runtime-load, docs, ADR 0008: Entity bases, runtime load, and maintainability, Status, Context, Findings, Inheritance (KEEP), Runtime load (acceptable for home scale), Security / dangerous patterns, Decision, Spike on this branch, Rejected alternatives | `0008-entity-bases-and-runtime-load.md` |
 
 <!-- generated/maintained per .agents/skills/directory-readme/SKILL.md -->
