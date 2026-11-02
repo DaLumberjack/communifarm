@@ -27,6 +27,7 @@ from . import (
     inventory_actions,
     location_actions,
     nfc_actions,
+    ops_actions,
     production_actions,
     sale_actions,
     tachometer_actions,
@@ -586,11 +587,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception:
         _LOGGER.exception("Climate layout was not seeded")
 
+    async def _climate_and_ops_tick() -> None:
+        await climate_actions.async_tick_climate(hass, entry.entry_id)
+        await ops_actions.async_tick_ops(hass, entry.entry_id)
+
     @callback
     def _schedule_climate_tick(_now) -> None:
-        hass.async_create_task(
-            climate_actions.async_tick_climate(hass, entry.entry_id)
-        )
+        hass.async_create_task(_climate_and_ops_tick())
 
     hass.data[DOMAIN][entry.entry_id]["unsub_climate_tick"] = async_track_time_interval(
         hass, _schedule_climate_tick, timedelta(seconds=CLIMATE_TICK_SECONDS)

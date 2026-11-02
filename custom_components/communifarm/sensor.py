@@ -23,6 +23,7 @@ from .const import (
     ENTITY_MIX_PROTOCOL,
     ENTITY_NFC_CHECKIN,
     ENTITY_NFC_WRITE_STATUS,
+    ENTITY_OPS_QUEUE,
     ENTITY_PLACEMENT_COLD_STORAGE,
     ENTITY_PLACEMENT_FRUITING_TENT,
     ENTITY_PLACEMENT_INOCULATION_TENT,
@@ -40,6 +41,7 @@ from .const import (
     SIGNAL_CLIMATE_UPDATED,
     SIGNAL_CULTURE_UPDATED,
     SIGNAL_NFC_CHECKIN_UPDATED,
+    SIGNAL_OPS_UPDATED,
     SIGNAL_SALES_UPDATED,
     SIGNAL_TACHOMETER_UPDATED,
     SIGNAL_WEIGH_SESSION_UPDATED,
@@ -131,6 +133,7 @@ async def async_setup_entry(
             CommunifarmNfcCheckinSensor(entry_id),
             CommunifarmSalesStatusSensor(entry_id),
             CommunifarmClimateStatusSensor(entry_id),
+            CommunifarmOpsQueueSensor(entry_id),
             CommunifarmTachometerStatusSensor(entry_id),
             *drawing_sensor_entities(entry_id),
         ]
@@ -772,6 +775,49 @@ class CommunifarmClimateStatusSensor(CommunifarmSensor):
 
     @property
     def native_value(self) -> str:
+        return self._value
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return self._attrs
+
+
+class CommunifarmOpsQueueSensor(CommunifarmSensor):
+    """Open ops alarms and projected next moves."""
+
+    _attr_name = "Ops queue"
+    _attr_unique_id = "communifarm_ops_queue"
+    _attr_icon = "mdi:clipboard-alert-outline"
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_OPS_QUEUE)
+        self._value = 0
+        self._attrs: dict = {
+            "summary": "no evaluation yet",
+            "alarms": [],
+            "projected_moves": [],
+            "alarm_count": 0,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        self._refresh()
+        self.listen_entry_signals(SIGNAL_OPS_UPDATED, method="_refresh")
+
+    @callback
+    def _refresh(self) -> None:
+        snapshot = self.bucket().get("ops_snapshot") or {}
+        count = int(snapshot.get("alarm_count") or 0)
+        self._value = count
+        self._attrs = {
+            "summary": snapshot.get("summary") or "",
+            "alarms": snapshot.get("alarms") or [],
+            "projected_moves": snapshot.get("projected_moves") or [],
+            "alarm_count": count,
+        }
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> int:
         return self._value
 
     @property

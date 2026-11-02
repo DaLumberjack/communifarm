@@ -47,6 +47,7 @@ class BatchRecord:
     max_flushes: int = DEFAULT_MAX_FLUSHES
     inoculated_at: str | None = None
     zone_id: str | None = None
+    phase_changed_at: str | None = None
 
     def to_attr_dict(self) -> dict[str, Any]:
         return {
@@ -73,6 +74,7 @@ class BatchRecord:
             "max_flushes": self.max_flushes,
             "inoculated_at": self.inoculated_at,
             "zone_id": self.zone_id,
+            "phase_changed_at": self.phase_changed_at,
         }
 
 
@@ -229,16 +231,36 @@ class BatchRepository(SqliteRepository):
         )
         self._conn.commit()
 
-    async def async_set_lifecycle_phase(self, batch_id: str, phase: str) -> None:
-        await self._hass.async_add_executor_job(self._locked, 
-            self._set_lifecycle_phase_sync, batch_id, phase
+    async def async_set_lifecycle_phase(
+        self,
+        batch_id: str,
+        phase: str,
+        *,
+        phase_changed_at: str | None = None,
+    ) -> None:
+        await self._hass.async_add_executor_job(
+            self._locked,
+            self._set_lifecycle_phase_sync,
+            batch_id,
+            phase,
+            phase_changed_at,
         )
 
-    def _set_lifecycle_phase_sync(self, batch_id: str, phase: str) -> None:
+    def _set_lifecycle_phase_sync(
+        self,
+        batch_id: str,
+        phase: str,
+        phase_changed_at: str | None = None,
+    ) -> None:
         assert self._conn is not None
+        when = phase_changed_at or datetime.now(tz=UTC).isoformat()
         self._conn.execute(
-            "UPDATE batches SET lifecycle_phase = ? WHERE stable_id = ?",
-            (phase, batch_id),
+            """
+            UPDATE batches
+            SET lifecycle_phase = ?, phase_changed_at = ?
+            WHERE stable_id = ?
+            """,
+            (phase, when, batch_id),
         )
         self._conn.commit()
 
@@ -465,6 +487,7 @@ class BatchRepository(SqliteRepository):
                 max_flushes = ?,
                 inoculated_at = ?,
                 lifecycle_phase = ?,
+                phase_changed_at = ?,
                 notes = COALESCE(?, notes),
                 zone_id = COALESCE(?, zone_id)
             WHERE stable_id = ?
@@ -480,6 +503,7 @@ class BatchRepository(SqliteRepository):
                 spec.max_flushes,
                 inoculated_at,
                 lifecycle_phase,
+                inoculated_at,
                 spec.notes,
                 zone_id,
                 batch_id,
@@ -670,6 +694,7 @@ class BatchRepository(SqliteRepository):
             else DEFAULT_MAX_FLUSHES,
             inoculated_at=_opt("inoculated_at"),
             zone_id=_opt("zone_id"),
+            phase_changed_at=_opt("phase_changed_at"),
         )
 
     @staticmethod

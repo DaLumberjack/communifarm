@@ -308,10 +308,13 @@ async def async_advance_production_stage(
         detail=detail,
     )
     phase = MILESTONE_TO_PHASE.get(milestone, resolved)
-    await batch_repo.async_set_lifecycle_phase(batch.id, phase)
+    await batch_repo.async_set_lifecycle_phase(
+        batch.id, phase, phase_changed_at=when
+    )
 
     if scanned_container is not None:
         scanned_container.lifecycle_phase = phase
+        scanned_container.phase_changed_at = when
         if dest_zone:
             scanned_container.zone_id = dest_zone
         await cont_repo.async_update(scanned_container)
@@ -319,6 +322,7 @@ async def async_advance_production_stage(
         for cont in await cont_repo.async_list_for_batch(batch.id):
             if cont.status != CONTAINER_STATUS_COMPLETE:
                 cont.lifecycle_phase = phase
+                cont.phase_changed_at = when
                 if dest_zone:
                     cont.zone_id = dest_zone
                 await cont_repo.async_update(cont)
