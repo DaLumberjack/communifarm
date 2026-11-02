@@ -35,8 +35,8 @@ class ContainerRepository(SqliteRepository):
                 INSERT INTO production_containers (
                   stable_id, batch_id, container_index, container_type, nfc_uid,
                   lifecycle_phase, flush_count, max_flushes, zone_id, status,
-                  created_at, completed_at, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  created_at, phase_changed_at, completed_at, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     cont.id,
@@ -50,6 +50,7 @@ class ContainerRepository(SqliteRepository):
                     cont.zone_id,
                     cont.status,
                     cont.created_at,
+                    cont.phase_changed_at or cont.created_at,
                     cont.completed_at,
                     cont.notes,
                 ),
@@ -124,7 +125,8 @@ class ContainerRepository(SqliteRepository):
             """
             UPDATE production_containers
             SET nfc_uid = ?, lifecycle_phase = ?, flush_count = ?, max_flushes = ?,
-                zone_id = ?, status = ?, completed_at = ?, notes = ?
+                zone_id = ?, status = ?, completed_at = ?, notes = ?,
+                phase_changed_at = ?
             WHERE stable_id = ?
             """,
             (
@@ -136,6 +138,7 @@ class ContainerRepository(SqliteRepository):
                 container.status,
                 container.completed_at,
                 container.notes,
+                container.phase_changed_at,
                 container.id,
             ),
         )
@@ -264,6 +267,10 @@ class ContainerRepository(SqliteRepository):
 
     @staticmethod
     def _row_to_container(row: Any) -> ProductionContainer:
+        keys = row.keys() if hasattr(row, "keys") else []
+        phase_changed = (
+            row["phase_changed_at"] if "phase_changed_at" in keys else None
+        )
         return ProductionContainer(
             id=row["stable_id"],
             batch_id=row["batch_id"],
@@ -276,6 +283,7 @@ class ContainerRepository(SqliteRepository):
             zone_id=row["zone_id"],
             status=row["status"] or CONTAINER_STATUS_ACTIVE,
             created_at=row["created_at"],
+            phase_changed_at=phase_changed,
             completed_at=row["completed_at"],
             notes=row["notes"],
         )

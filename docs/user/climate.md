@@ -96,6 +96,8 @@ On/off only. There is no spectrum control.
 
 Sources for the defaults: Paul Stamets, *Growing Gourmet and Medicinal Mushrooms* (12 h fruiting photoperiod; colonization does not need a fruiting light cycle). Toyoki Kozai, *Plant Factory* (16 h vegetative photoperiod for leafy greens). Species differ. Change `light_hours_on` / `light_hours_off` on the node if you need a different clock.
 
+Continuous light/UV left on beyond the ops max hours raises a **P3** entry on `sensor.communifarm_ops_queue` and a persistent notification (same overrun class until a distinct UV binding exists). See ADR 0007.
+
 While a bound light is on, the heater in that room stays off. If the light is flagged `waste_heat_to_parent`, the general-room heater stays off too. A real overheating still starts the fan or AC immediately. The humidifier waits 15 minutes after the light turns on before treating a humidity drop as “too dry.”
 
 ## If a sensor is missing

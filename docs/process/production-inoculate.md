@@ -4,9 +4,10 @@ Bridge from culture lots into substrate production batches: inoculate N identica
 
 | Item | Value |
 | --- | --- |
-| Schema | v7 (production columns from v6; placement from v7) |
+| Schema | v20 (`phase_changed_at`; production from v6; placement from v7) |
 | Services | `inoculate_batch`, `advance_production_stage`, `record_harvest`, `add_batch_note`, `set_check_reminder`, `ensure_placement_layout`, `set_batch_location` |
-| Dashboard | **Production** tab (`/communifarm/production`) |
+| Dashboard | **Production** tab (`/communifarm/production`) incl. **Ops queue** |
+| Ops alerts | `sensor.communifarm_ops_queue` + P2/P3 `persistent_notification` (see [ops-scheduling test cases](test-cases/ops-scheduling.md)) |
 | UI inoculum | `select.communifarm_active_inoculum` (must register with default options), `button.communifarm_select_inoculum_from_nfc`, `sensor.communifarm_active_culture_id` |
 | Mock NFC | Set `input_text.esp32dev_last_nfc_uid` to culture tag (defaults to culture id; optional `nfc_uid` on `acquire_culture`) |
 | Related | [varieties-culture-vessels.md](varieties-culture-vessels.md), [placement-locations.md](placement-locations.md), [culture media](../user/storage.md#culture-media-hub-media_batches--culture_lots), [storage](../user/storage.md) |
@@ -20,9 +21,9 @@ Bridge from culture lots into substrate production batches: inoculate N identica
 | 3 | Container types | `block` \| `tub` \| `bag` \| `jar` \| `other` |
 | 4 | Stages | `inoculated` → `incubating` → `fruiting` → `harvesting` → `complete` |
 | 5 | Flushes | Default max 3; explicit `is_final` ends batch |
-| 6 | Reminders | `expected_check_at` + `persistent_notification` |
+| 6 | Reminders | `expected_check_at` + `persistent_notification`; ops tick also raises P2 when due |
 | 7 | Notes | `batch_note` milestones |
-| 8 | MVP defer | Cost/revenue math, camera UI, full alarm profiles |
+| 8 | MVP defer | Cost/revenue math, camera UI, full alarm profiles / ack workflow |
 
 ## Flow
 

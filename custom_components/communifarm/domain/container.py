@@ -35,6 +35,7 @@ class ProductionContainer:
     zone_id: str | None = None
     status: str = CONTAINER_STATUS_ACTIVE
     created_at: str = ""
+    phase_changed_at: str | None = None
     completed_at: str | None = None
     notes: str | None = None
     id: str = ""
@@ -102,6 +103,7 @@ def build_containers_for_inoculate(
             max_flushes=max_flushes,
             zone_id=zone_id,
             created_at=created_at,
+            phase_changed_at=created_at,
         )
         containers.append(cont)
     return containers

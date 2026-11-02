@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -681,6 +681,15 @@ MIGRATIONS: dict[int, str] = {
 
     CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_bound
       ON nfc_tag_pool (bound_object_type, bound_object_id);
+    """,
+    20: """
+    ALTER TABLE batches ADD COLUMN phase_changed_at TEXT;
+    ALTER TABLE production_containers ADD COLUMN phase_changed_at TEXT;
+
+    CREATE INDEX IF NOT EXISTS idx_batches_phase_changed
+      ON batches (lifecycle_phase, phase_changed_at);
+    CREATE INDEX IF NOT EXISTS idx_production_containers_phase_changed
+      ON production_containers (lifecycle_phase, phase_changed_at);
     """,
 }
 
