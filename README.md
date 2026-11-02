@@ -84,3 +84,5 @@ Feature branch → merge to `main` → bump `manifest.json` version → local T2
 
 See [docs/user/dashboard.md](docs/user/dashboard.md).
 
+
+<!-- hand-maintained -->
