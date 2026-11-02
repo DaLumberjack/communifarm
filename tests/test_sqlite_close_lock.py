@@ -43,13 +43,30 @@ async def test_close_serializes_against_in_flight_query(
     with ThreadPoolExecutor(max_workers=2) as pool:
         query_fut = pool.submit(slow_query)
         assert hold.wait(timeout=5)
-        close_fut = pool.submit(repo._locked, repo._close_sync)
+        close_fut = pool.submit(repo._close_locked)
         release.set()
         query_fut.result(timeout=10)
         close_fut.result(timeout=10)
 
     assert errors == []
     assert repo._conn is None
+
+
+@pytest.mark.asyncio
+async def test_query_after_close_raises_repository_closed(
+    hass: HomeAssistant, tmp_path: Path
+) -> None:
+    """Post-close readers must raise RepositoryClosedError, not assert/segfault."""
+    from custom_components.communifarm.storage.sqlite_repository import (
+        RepositoryClosedError,
+    )
+
+    path = tmp_path / "communifarm_closed_query.db"
+    repo = BatchRepository(hass, path)
+    await repo.async_setup()
+    await repo.async_close()
+    with pytest.raises(RepositoryClosedError):
+        repo._locked(lambda: None)
 
 
 def test_migration_v18_to_v19_adds_scan_events_without_data_loss(tmp_path: Path) -> None:

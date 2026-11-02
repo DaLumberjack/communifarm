@@ -493,6 +493,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         inventory_repo=inventory_repo,
         location_repo=location_repo,
     )
+    nfc_repo.bind_connection(weight_repo._conn)
     await location_repo.async_ensure_default_layout(state.site.id)
     await batch_repo.async_ensure_batch(
         batch_id=state.batch.id,
