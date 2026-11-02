@@ -1,8 +1,8 @@
 # Communifarm local E2E summary
 
-- Generated: 2026-11-02T00:41:20Z
-- Git SHA: `49b33f0b5702848958912b60ed607f9f0cdf2349`
-- Branch: `feature/mixing-batch-nfc`
+- Generated: 2026-11-02T01:26:44Z
+- Git SHA: `c71aa930dfe4fee776a3b7834e2139849dcba1a3`
+- Branch: `feature/directory-readme-maps`
 
 ## Totals
 

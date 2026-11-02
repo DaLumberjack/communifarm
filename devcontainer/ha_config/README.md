@@ -1,45 +1,52 @@
-# Local Home Assistant fixtures for Communifarm T1/T2
+# ha_config
 
-**Prerequisite:** Start the **Docker Desktop** application before `docker compose ... up`. The CLI alone is not enough; `docker version` must show a Server section. Details: [docs/user/local-development.md](../docs/user/local-development.md).
+## Purpose
 
-## What is committed vs ignored
+Workspace directory `repos/communifarm/devcontainer/ha_config`.
 
-| Commit (share with next developer) | Ignore (secrets / regenerable) |
-|------------------------------------|--------------------------------|
-| `configuration.yaml` (mock ESP entities) | `.storage/` (auth, tokens, registries) |
-| `README.md` | `.cache/`, `.cloud/` |
-| Default `blueprints/` shipped with HA | `home-assistant_v2.db*`, logs, `tts/` |
-| `.devcontainer/*` compose + JSON | `backups/*.tar` (use workspace intake + OpenBao keys) |
-| Repo-root `custom_components/communifarm/` | Nested `ha_config/custom_components/` (bind-mount overlay) |
+## How to use this directory
 
-Next developer: `docker compose -f .devcontainer/docker-compose.yml up -d homeassistant`, then either complete onboarding once, restore a backup from workspace `docs/intake/Dev Container Backups/` (keys via OpenBao / emergency kit intake — never git), or reuse a local `.storage` that is never pushed.
+- Read **Feature index** for task keywords, then **Map** for how/why before opening files.
+- This directory is primarily `dir`-oriented; stay in-layer unless adapters require a bridge.
+- Update this README when adding/removing public files or symbols (`py scripts/generate_directory_readmes.py`).
 
-| Profile | Purpose |
-|---------|---------|
-| Empty / standalone | Communifarm mounted under `custom_components/communifarm`, no config entry yet |
-| Mocked ESP set | `sensor.mock_temperature`, `sensor.mock_humidity`, `fan.mock_circulation_fan`, `switch.mock_exhaust` |
-| Tent sensor (S3) | calibrated BME/SHT/OneWire + offsets — `packages/mock_cf_tent_sensor.yaml` |
-| AIO868 machines | `switch.cf_lab_aio868_*` — `packages/mock_cf_aio868.yaml` |
-| Dedicated NFC | `cf_mixroom_nfc_scan01_*` / `cf_lab_nfc_write01_*` + kit picker `input_select.cf_sandbox_shipment_nfc_uid` — `packages/mock_cf_nfc_reader.yaml` |
+## Map
 
-**Sandbox vs production:** mock packages **should** create fake sensors and injectors for T1/UX. The Communifarm custom component must **not** create those entities when shipped to production HA — only read/bind real ESPHome last-NFC sensors and seed its own SQLite tag pool.
-| Manual tachometer | vent label / value / timestamp helpers — `packages/mock_cf_tachometer.yaml` |
-| Mocked scale + NFC stub | `esp32dev_*` live-shaped entities — see [docs/user/mock-scale.md](../docs/user/mock-scale.md) |
-| Seeded state | Local-only `.storage` or restored backup — not committed |
+| path | layer | how / why |
+|------|-------|-----------|
+| `backups/` | `dir` | Child map — read `backups/README.md` before exploring. |
+| `communifarm/` | `dir` | Child map — read `communifarm/README.md` before exploring. |
+| `custom_components/` | `dir` | Child map — read `custom_components/README.md` before exploring. |
+| `packages/` | `dir` | Child map — read `packages/README.md` before exploring. |
+| `www/` | `ui` | Enter for ui work — read `www/README.md` (Feature index → Map). |
+| `.ha_run.lock` | `ops` | ops file `.ha_run.lock`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `.HA_VERSION` | `ops` | ops file `.HA_VERSION`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `configuration.yaml` | `config` | config file `configuration.yaml`. — Onboarding/setup surface — pair with onboarding + dashboards skills. |
+| `home-assistant.log` | `ops` | ops file `home-assistant.log`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `home-assistant.log.1` | `ops` | ops file `home-assistant.log.1`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `home-assistant.log.fault` | `ops` | ops file `home-assistant.log.fault`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `home-assistant_v2.db` | `ops` | ops file `home-assistant_v2.db`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `home-assistant_v2.db-shm` | `ops` | ops file `home-assistant_v2.db-shm`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `home-assistant_v2.db-wal` | `ops` | ops file `home-assistant_v2.db-wal`. — Runbooks/scripts — inspect before execute; no secrets in git. |
+| `README.md` | `ops` | This directory map (dim1 Map + dim2 Feature index). |
 
-ESPHome YAML mockups live in `esphome/` (packages + devices). See [docs/hardware/esphome-devices.md](../docs/hardware/esphome-devices.md).
+## Feature index
 
-## Injecting conditions
+| keywords / features | path |
+|---------------------|------|
+| backups, dir | `backups/` |
+| communifarm, dir | `communifarm/` |
+| custom components, dir | `custom_components/` |
+| packages, dir | `packages/` |
+| www, ui | `www/` |
+| .ha run, ops | `.ha_run.lock` |
+| .HA VERSION, ops | `.HA_VERSION` |
+| configuration, config, default_config, homeassistant, logger, template, input_number, input_boolean, switch | `configuration.yaml` |
+| home-assistant, ops | `home-assistant.log` |
+| home-assistant.log, ops | `home-assistant.log.1` |
+| home-assistant.log, ops | `home-assistant.log.fault` |
+| home-assistant v2, ops | `home-assistant_v2.db` |
+| home-assistant v2, ops | `home-assistant_v2.db-shm` |
+| home-assistant v2, ops | `home-assistant_v2.db-wal` |
 
-```bash
-# Environment mocks
-# input_number.set_value → input_number.mock_temperature
-
-# Scale mock (same IDs as live esp32dev)
-# input_number.set_value → input_number.esp32dev_inject_calibrated_sensor
-# input_select.select_option → input_select.esp32dev_selected_ingredient
-# button.press → button.esp32dev_tare / button.esp32dev_record_weight
-```
-
-Mocks are the default for T1/T2. Live ESPHome in the devcontainer is a special case (networking + dedicated lab hardware) — documented in mock-scale.md. Human weigh/NFC process UI is deferred.
-
+<!-- generated/maintained per .agents/skills/directory-readme/SKILL.md -->
