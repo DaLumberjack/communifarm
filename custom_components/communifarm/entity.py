@@ -60,8 +60,9 @@ class CommunifarmEntity:
         def _on_signal(signaled_entry_id: str) -> None:
             if signaled_entry_id != self._entry_id:
                 return
-            # Skip refresh after unload tore down the entry bucket / SQLite.
-            if self._entry_id not in self.hass.data.get(DOMAIN, {}):
+            # Skip refresh while unload is closing SQLite or after the bucket is gone.
+            entry_bucket = self.hass.data.get(DOMAIN, {}).get(self._entry_id)
+            if entry_bucket is None or entry_bucket.get("closing"):
                 return
             result = refresh()
             if inspect.isawaitable(result):

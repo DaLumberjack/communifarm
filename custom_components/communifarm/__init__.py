@@ -599,8 +599,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         stored = hass.data[DOMAIN][entry.entry_id]["state"]
         await async_provision_dashboard(hass, stored)
 
+    @callback
     def _on_core_config(event: Event) -> None:
-        hass.async_create_task(_reprovision_for_units(event))
+        # EVENT_CORE_CONFIG_UPDATE can arrive off-loop on some HA builds.
+        hass.loop.call_soon_threadsafe(
+            hass.async_create_task, _reprovision_for_units(event)
+        )
 
     hass.data[DOMAIN][entry.entry_id]["unsub_core_config"] = hass.bus.async_listen(
         EVENT_CORE_CONFIG_UPDATE, _on_core_config
@@ -1511,12 +1515,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_units = bucket.get("unsub_core_config")
     if unsub_units:
         unsub_units()
-    # Platforms first so entity dispatcher listeners stop before SQLite close
-    # (closing under an in-flight sensor refresh segfaulted CI with exit 139).
+    # Platforms first so teardown still sees the entry bucket; then close under
+    # DB_LOCK so concurrent query+close cannot segfault sqlite3 (CI exit 139).
+    # Do not async_block_till_done here — that deadlocks config-entry reload.
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, [Platform(p) for p in PLATFORMS]
     )
-    await hass.async_block_till_done()
+    # Signal handlers skip refresh while SQLite is closing (bucket still present).
+    bucket["closing"] = True
 
     weight_repo: WeightEventRepository | None = bucket.get("weight_repository")
     if weight_repo is not None:
