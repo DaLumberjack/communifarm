@@ -33,6 +33,7 @@ Installable Communifarm HA integration: platforms, adapters, domain, storage.
 | `location_actions.py` | `adapter` | Placement layout and batch location application helpers. — HA service/action bridge — keep domain calls thin; test via services. |
 | `manifest.json` | `config` | config file `manifest.json`. — Onboarding/setup surface — pair with onboarding + dashboards skills. |
 | `nfc_actions.py` | `adapter` | NFC resolve / check-in application helpers (handheld scanner pull model). — HA service/action bridge — keep domain calls thin; test via services. |
+| `ops_actions.py` | `adapter` | Ops scheduling tick, queue snapshot, and persistent notifications. — HA service/action bridge — keep domain calls thin; test via services. |
 | `number.py` | `platform` | Number platform for Communifarm profile targets and dashboard drafts. — HA entity platform — bind capabilities; avoid domain leakage of entity IDs as PKs. |
 | `production_actions.py` | `adapter` | Production inoculate / stage / harvest application helpers. — HA service/action bridge — keep domain calls thin; test via services. |
 | `README.md` | `ops` | This directory map (dim1 Map + dim2 Feature index). |
@@ -68,6 +69,7 @@ Installable Communifarm HA integration: platforms, adapters, domain, storage.
 | location actions, adapter, async_ensure_default_layout, async_set_batch_location, async_first_zone_for_area_kind, async_ensure_storage_zone, async_list_locations, async_resolve_location_attrs, location, actions, batch | `location_actions.py` |
 | manifest, config | `manifest.json` |
 | nfc actions, adapter, new_nfc_session, async_dual_write_pool_bind, async_resolve_nfc, async_check_in, async_bind_nfc, nfc, actions | `nfc_actions.py` |
+| ops actions, adapter, async_tick_ops, ops queue, AlarmEvent notifications | `ops_actions.py` |
 | number, platform, CommunifarmNumber, CommunifarmProfileNumber, CommunifarmBucketNumber, async_setup_entry, CommunifarmTemperatureTarget, CommunifarmHumidityTarget, CommunifarmRecipeScale | `number.py` |
 | production actions, adapter, async_inoculate_batch, async_advance_production_stage, async_placement_inventory_rows, async_placement_section, async_record_container_harvest, async_record_harvest, async_add_batch_note, async_set_check_reminder, async_production_summary, production_summary_markdown | `production_actions.py` |
 | sale actions, adapter, async_record_sale, async_record_sale_cleanup, async_sales_summary, sales_summary_markdown, sale, actions | `sale_actions.py` |

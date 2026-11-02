@@ -70,10 +70,11 @@ varieties (mushroom catalog, schema v11)
 | `substrate_g_per_container` | Substrate mass per container (g) |
 | `flush_count` / `max_flushes` | Harvest flush tracking (default max 3) |
 | `expected_check_at` | Next operator check reminder |
+| `phase_changed_at` | When lifecycle phase last changed (v20; ops dwell / projections) |
 | `zone_id` | Placement zone slot (v7; FK → `zones.stable_id`) |
 | `nfc_uid` | Tag that follows the bag until container split |
 
-Lifecycle phase advances when milestones are recorded (and on complete).
+Lifecycle phase advances when milestones are recorded (and on complete). Ops tick projects next moves and may raise P2/P3 on `sensor.communifarm_ops_queue`.
 
 ## Culture media hub (`media_batches` + `culture_lots`)
 

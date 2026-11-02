@@ -153,10 +153,13 @@ def test_dashboard_production_has_placement_sections(sample_state) -> None:
     config = DashboardBuilder().build(sample_state, {})
     prod = next(view for view in config["views"] if view.get("path") == "production")
     titles = [card.get("title") for card in prod["cards"]]
+    assert "Ops queue" in titles
     assert "Storage" in titles
     assert "Cold storage" in titles
     assert "Fruiting tent" in titles
     assert "Inoculation tent" in titles
+    ops = next(card for card in prod["cards"] if card.get("title") == "Ops queue")
+    assert "sensor.communifarm_ops_queue" in ops["content"]
     storage = next(card for card in prod["cards"] if card.get("title") == "Storage")
     assert "sensor.communifarm_placement_storage" in storage["content"]
     lifecycle = next(

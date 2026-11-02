@@ -30,6 +30,7 @@ Pure domain models and process rules — no Home Assistant imports.
 | `models.py` | `domain` | Pure domain models for Communifarm (no Home Assistant imports). — Edit for pure process/rules; add T0 tests; no HA imports. |
 | `nfc.py` | `domain` | NFC resolve / check-in (tag holds stable ID only; SQLite is source of truth). — Edit for pure process/rules; add T0 tests; no HA imports. |
 | `nfc_bind.py` | `domain` | Dual-write contract: entity ``nfc_uid`` + ``nfc_tag_pool`` registry. Physical tags may seed identity on first bind (NDEF / chip). After that — Edit for pure process/rules; add T0 tests; no HA imports. |
+| `ops_schedule.py` | `domain` | Ops scheduling: projected next moves and priority alarms (pure domain). — Edit for pure process/rules; add T0 tests; no HA imports. |
 | `placement_inventory.py` | `domain` | Production placement inventory — bags/boxes by area kind (pure domain). — Edit for pure process/rules; add T0 tests; no HA imports. |
 | `production.py` | `domain` | Production inoculate / incubate / fruit / harvest (pure domain). — Edit for pure process/rules; add T0 tests; no HA imports. |
 | `README.md` | `domain` | This directory map (dim1 Map + dim2 Feature index). |
@@ -59,6 +60,7 @@ Pure domain models and process rules — no Home Assistant imports.
 | models, domain, new_id, Site, Environment, EntityBinding, EnvironmentalProfile, ProcessEvent, ProductionBatch, CommunifarmState, suggest_role_from_entity | `models.py` |
 | nfc, domain, OBJECT_CONTAINER, OBJECT_BATCH, OBJECT_CULTURE, OBJECT_MEDIA, OBJECT_INVENTORY, OBJECT_EMPLOYEE, OBJECT_LOCATION, OBJECT_MACHINE, OBJECT_UNKNOWN, NFC_OBJECT_TYPES | `nfc.py` |
 | nfc bind, domain, SCAN_SOURCE_RESOLVE, SCAN_SOURCE_CHECK_IN, SCAN_SOURCE_BIND, SCAN_SOURCE_CONFIRM_WRITE, PoolBindTarget, pool_should_align_on_resolve, pool_unbind_fields, nfc, bind | `nfc_bind.py` |
+| ops schedule, AlarmEvent, ProjectedMove, OpsQueue, evaluate_ops, project_next_move, P2, P3, dwell | `ops_schedule.py` |
 | placement inventory, domain, PLACEMENT_DASHBOARD_KINDS, PlacementContainerRow, format_placement_inventory_markdown, filter_rows_for_area_kind, placement, inventory | `placement_inventory.py` |
 | production, domain, CONTAINER_BLOCK, CONTAINER_TUB, CONTAINER_BAG, CONTAINER_JAR, CONTAINER_OTHER, PRODUCTION_CONTAINERS, DEFAULT_MAX_FLUSHES, STAGE_INOCULATED, STAGE_INCUBATING, STAGE_FRUITING | `production.py` |
 | recipe, domain, DEFAULT_RECIPE_SCALE_MIN, DEFAULT_RECIPE_SCALE_MAX, DEFAULT_RECIPE_SCALE, RecipeLine, WOOD_LOVER_RECIPE, LineProgress, WeighSessionProgress, clamp_recipe_scale, build_weigh_session_progress | `recipe.py` |

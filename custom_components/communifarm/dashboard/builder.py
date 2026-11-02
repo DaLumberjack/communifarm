@@ -92,6 +92,7 @@ from ..const import (
     ENTITY_NFC_WRITE_LABEL,
     ENTITY_NFC_WRITE_OBJECT_TYPE,
     ENTITY_NFC_WRITE_STATUS,
+    ENTITY_OPS_QUEUE,
     ENTITY_PAYMENT_METHOD,
     ENTITY_PLACEMENT_COLD_STORAGE,
     ENTITY_PLACEMENT_FRUITING_TENT,
@@ -1107,6 +1108,16 @@ class DashboardBuilder:
                         f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'area_name') }}}} / "
                         f"{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_name') }}}} "
                         f"(`{{{{ state_attr('{ENTITY_PRODUCTION_STATUS}', 'zone_id') }}}}`)"
+                    ),
+                },
+                {
+                    "type": "markdown",
+                    "title": "Ops queue",
+                    "content": (
+                        f"**{{{{ states('{ENTITY_OPS_QUEUE}') }}}}** open — "
+                        f"{{{{ state_attr('{ENTITY_OPS_QUEUE}', 'summary') }}}}\n\n"
+                        "Due moves and light/UV overruns also create HA "
+                        "persistent notifications (P2/P3)."
                     ),
                 },
                 {
