@@ -31,6 +31,7 @@ export const WOOD_LOVER_WEIGH_STEPS: WoodLoverLine[] = [
   { label: "coco coir", nfcUid: "nfc-coco-coir", amountG: 2, unit: "qts" },
   { label: "gypsum", nfcUid: "nfc-gypsum", amountG: 200, unit: "g" },
   { label: "potash", nfcUid: "nfc-potash", amountG: 50, unit: "g" },
+  { label: "water (tap)", nfcUid: "nfc-water-tap", amountG: 10200, unit: "g" },
 ];
 
 /** Empty mix-bin mass before each tare (simulates container on the scale). */

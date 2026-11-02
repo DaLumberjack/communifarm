@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -16,11 +16,15 @@ from .const import (
     ENTITY_CONTAINER_COUNT,
     ENTITY_HARVEST_MASS_G,
     ENTITY_HUMIDITY_TARGET,
+    ENTITY_INTAKE_AMOUNT,
+    ENTITY_INTAKE_COST,
+    ENTITY_MANUAL_WEIGH_G,
     ENTITY_RECIPE_SCALE,
     ENTITY_SALE_LINE_AMOUNT,
     ENTITY_SALE_MASS_G,
     ENTITY_SUBSTRATE_G,
     ENTITY_TEMPERATURE_TARGET,
+    MANUAL_WEIGH_OMIT_G,
     SIGNAL_BATCH_UPDATED,
     SIGNAL_WEIGH_SESSION_UPDATED,
 )
@@ -103,6 +107,15 @@ class CommunifarmBucketNumber(CommunifarmNumber):
     async def async_added_to_hass(self) -> None:
         stored: int | float = int(self._value) if self._spec.as_int else self._value
         self.bucket()[self._spec.bucket_key] = stored
+        if self._spec.bucket_key == "manual_weigh_g":
+            # Tare / successful record clears bucket → refresh the box.
+            self.listen_entry_signals(
+                SIGNAL_WEIGH_SESSION_UPDATED, method="_sync_from_bucket"
+            )
+
+    @callback
+    def _sync_from_bucket(self) -> None:
+        self.async_write_ha_state()
 
     @property
     def native_value(self) -> float:
@@ -118,6 +131,10 @@ class CommunifarmBucketNumber(CommunifarmNumber):
             self._value = clamped
             self.bucket()[self._spec.bucket_key] = self._value
         self.async_write_ha_state()
+        if self._spec.bucket_key == "manual_weigh_g":
+            async_dispatcher_send(
+                self.hass, SIGNAL_WEIGH_SESSION_UPDATED, self._entry_id
+            )
 
 
 def _draft(
@@ -216,6 +233,44 @@ _DRAFT_NUMBERS: tuple[_NumberSpec, ...] = (
         0.01,
         0.0,
         unit="USD",
+    ),
+    _draft(
+        "Intake purchase amount",
+        "communifarm_intake_amount",
+        ENTITY_INTAKE_AMOUNT,
+        "mdi:counter",
+        "intake_amount",
+        0.0,
+        0.0,
+        1000000.0,
+        0.01,
+        0.0,
+    ),
+    _draft(
+        "Intake purchase cost",
+        "communifarm_intake_cost",
+        ENTITY_INTAKE_COST,
+        "mdi:currency-usd",
+        "intake_cost",
+        0.0,
+        0.0,
+        1000000.0,
+        0.01,
+        0.0,
+        unit="USD",
+    ),
+    _draft(
+        "Manual weigh (g)",
+        "communifarm_manual_weigh_g",
+        ENTITY_MANUAL_WEIGH_G,
+        "mdi:keyboard",
+        "manual_weigh_g",
+        MANUAL_WEIGH_OMIT_G,
+        MANUAL_WEIGH_OMIT_G,
+        150000.0,
+        0.1,
+        MANUAL_WEIGH_OMIT_G,
+        unit="g",
     ),
 )
 

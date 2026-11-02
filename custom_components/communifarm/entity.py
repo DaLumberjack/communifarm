@@ -14,6 +14,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import DOMAIN
 from .domain.models import CommunifarmState
+from .storage.sqlite_repository import RepositoryClosedError
 
 
 class CommunifarmEntity:
@@ -60,9 +61,23 @@ class CommunifarmEntity:
         def _on_signal(signaled_entry_id: str) -> None:
             if signaled_entry_id != self._entry_id:
                 return
-            result = refresh()
+            # Skip refresh while unload is closing SQLite or after the bucket is gone.
+            entry_bucket = self.hass.data.get(DOMAIN, {}).get(self._entry_id)
+            if entry_bucket is None or entry_bucket.get("closing"):
+                return
+
+            async def _safe_async_refresh(awaitable):
+                try:
+                    await awaitable
+                except (RepositoryClosedError, KeyError):
+                    return
+
+            try:
+                result = refresh()
+            except (RepositoryClosedError, KeyError):
+                return
             if inspect.isawaitable(result):
-                self.hass.async_create_task(result)
+                self.hass.async_create_task(_safe_async_refresh(result))
 
         for signal in signals:
             self.async_on_remove(

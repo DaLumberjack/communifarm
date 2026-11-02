@@ -117,6 +117,16 @@ PLACEMENT_AREA_CLIMATE_KIND: dict[str, str] = {
     AREA_STILL_AIR_CABINET: KIND_CULTURE_PREP,
     AREA_HARVEST_FRIDGE: KIND_HARVEST,
 }
+# Late imports avoided — string keys for new intake layout kinds.
+PLACEMENT_AREA_CLIMATE_KIND.update(
+    {
+        "culture_lab": KIND_CULTURE_PREP,
+        "cold_storage": KIND_HARVEST,
+        "storage": KIND_CULTURE_PREP,
+        "general_env": KIND_FRUITING,
+        "outside": KIND_FRUITING,
+    }
+)
 
 TENT_ROLES = (
     ROLE_TEMPERATURE,

@@ -28,11 +28,15 @@ Inject-only helpers (`input_number.esp32dev_inject_*`, etc.) are mock scaffoldin
 
 ## NFC stub (option B)
 
+Sandbox **intentionally** ships fake NFC helpers. Drive them via Developer Tools, Intake seed, or the kit picker in `mock_cf_nfc_reader.yaml`.
+
 | Entity | Purpose |
 | --- | --- |
 | `input_select.esp32dev_selected_ingredient` | Dropdown of recipe ingredients (scan result) |
-| `input_text.esp32dev_last_nfc_uid` | Mock tag UID (shared with Communifarm harvest resolve) |
+| `input_text.esp32dev_last_nfc_uid` | Mock tag UID (shared with Communifarm harvest resolve); default `nfc-bag-01` |
 | `input_button.esp32dev_simulate_nfc_scan` | Apply UID → **recipe ingredient** map (weigh only) |
+| `input_select.cf_sandbox_shipment_nfc_uid` | Kit UIDs (inventory / bags / employee / location) |
+| `input_button.cf_sandbox_apply_shipment_nfc` | Push selected kit UID into all last-scan helpers |
 
 Record Weight appends `| <ingredient>` when a selection other than `(none)` is active.
 
@@ -59,8 +63,12 @@ input_text.set_value → input_text.esp32dev_last_nfc_uid = nfc-hardwood-pellets
 input_button.press → input_button.esp32dev_simulate_nfc_scan
 
 button.press → button.esp32dev_tare
+# Net mass is 0 until inject rises — or set Communifarm manual weigh:
+number.set_value → number.communifarm_manual_weigh_g = 3000
 button.press → button.esp32dev_record_weight
 ```
+
+After **Tare**, mock net grams stay **0** until you raise `input_number.esp32dev_inject_calibrated_sensor` (or use **Manual weigh**). That is the same UX trap as a live scale with nothing on the pan — Communifarm’s number is the escape hatch.
 
 ## Mocks vs live devices (read this before “just plug ESPHome into Docker”)
 
@@ -113,7 +121,7 @@ Use the same inject helpers to exercise reject/warn paths in T1:
 
 ### Full recipe weigh process (E2E)
 
-`yarn test:e2e:weigh` runs `e2e/flows/weigh-process.spec.ts`: for each Wood Lover line — NFC scan → tare mix bin → set mass → record — then asserts `sensor.communifarm_weigh_session` is `9/9 lines recorded` with every line non-pending.
+`yarn test:e2e:weigh` runs `e2e/flows/weigh-process.spec.ts`: for each Wood Lover line (including water) — NFC scan → tare mix bin → set mass → record — then asserts `sensor.communifarm_weigh_session` is `10/10 lines recorded` with every line non-pending.
 
 Reload Communifarm after upgrade so the dashboard model re-provisions.
 

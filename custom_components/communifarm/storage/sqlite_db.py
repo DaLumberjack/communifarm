@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 19
 
 MIGRATIONS: dict[int, str] = {
     1: """
@@ -525,7 +525,290 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_tachometer_readings_site_time
       ON tachometer_readings (site_id, recorded_at);
     """,
+    14: """
+    CREATE TABLE IF NOT EXISTS inventory_lots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      ingredient_key TEXT NOT NULL,
+      label TEXT NOT NULL,
+      water_kind TEXT,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_site_key
+      ON inventory_lots (site_id, ingredient_key, status);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_nfc
+      ON inventory_lots (nfc_uid);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_label
+      ON inventory_lots (label COLLATE NOCASE, created_at);
+
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_employees_site
+      ON employees (site_id, status);
+    CREATE INDEX IF NOT EXISTS idx_employees_nfc
+      ON employees (nfc_uid);
+
+    ALTER TABLE zones ADD COLUMN nfc_uid TEXT;
+    ALTER TABLE zones ADD COLUMN ndef_payload TEXT;
+    CREATE INDEX IF NOT EXISTS idx_zones_nfc ON zones (nfc_uid);
+
+    ALTER TABLE weight_events ADD COLUMN inventory_lot_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_weight_events_inventory
+      ON weight_events (inventory_lot_id, recorded_at);
+    """,
+    # Repair path for DBs that recorded schema 15 without inventory tables
+    # (empty / mismatched prior migrations on shared PHCC testing_config).
+    16: """
+    CREATE TABLE IF NOT EXISTS inventory_lots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      ingredient_key TEXT NOT NULL,
+      label TEXT NOT NULL,
+      water_kind TEXT,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_site_key
+      ON inventory_lots (site_id, ingredient_key, status);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_nfc
+      ON inventory_lots (nfc_uid);
+    CREATE INDEX IF NOT EXISTS idx_inventory_lots_label
+      ON inventory_lots (label COLLATE NOCASE, created_at);
+
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_employees_site
+      ON employees (site_id, status);
+    CREATE INDEX IF NOT EXISTS idx_employees_nfc
+      ON employees (nfc_uid);
+    """,
+    17: """
+    ALTER TABLE inventory_lots ADD COLUMN amount REAL;
+    ALTER TABLE inventory_lots ADD COLUMN amount_unit TEXT;
+    ALTER TABLE inventory_lots ADD COLUMN cost REAL;
+    ALTER TABLE inventory_lots ADD COLUMN payment_location TEXT;
+    ALTER TABLE inventory_lots ADD COLUMN purchase_location TEXT;
+    ALTER TABLE inventory_lots ADD COLUMN tracked INTEGER;
+    ALTER TABLE inventory_lots ADD COLUMN receipt_tracked INTEGER;
+    ALTER TABLE inventory_lots ADD COLUMN purchase_date TEXT;
+
+    CREATE TABLE IF NOT EXISTS machines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      nfc_uid TEXT,
+      ndef_payload TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_machines_site
+      ON machines (site_id, status);
+    CREATE INDEX IF NOT EXISTS idx_machines_nfc
+      ON machines (nfc_uid);
+    """,
+    18: """
+    CREATE TABLE IF NOT EXISTS nfc_tag_pool (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      nfc_uid TEXT NOT NULL,
+      intended_type TEXT NOT NULL,
+      label TEXT NOT NULL,
+      ingredient_key TEXT,
+      status TEXT NOT NULL DEFAULT 'available',
+      shipment_id TEXT,
+      bound_object_id TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE (site_id, nfc_uid)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_site_status
+      ON nfc_tag_pool (site_id, status, intended_type);
+    CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_uid
+      ON nfc_tag_pool (nfc_uid);
+    """,
+    19: """
+    CREATE TABLE IF NOT EXISTS nfc_scan_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stable_id TEXT NOT NULL UNIQUE,
+      site_id TEXT NOT NULL,
+      nfc_uid TEXT NOT NULL,
+      object_type TEXT,
+      object_id TEXT,
+      found INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'resolve',
+      recorded_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nfc_scan_events_uid_time
+      ON nfc_scan_events (nfc_uid, recorded_at);
+    CREATE INDEX IF NOT EXISTS idx_nfc_scan_events_site_time
+      ON nfc_scan_events (site_id, recorded_at);
+
+    ALTER TABLE nfc_tag_pool ADD COLUMN bound_object_type TEXT;
+
+    CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_bound
+      ON nfc_tag_pool (bound_object_type, bound_object_id);
+    """,
 }
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def ensure_inventory_columns(conn: sqlite3.Connection) -> None:
+    """Add inventory NFC / purchase columns when older DBs skipped ALTER migrations."""
+    tables = {
+        str(r[0])
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if "zones" in tables:
+        zone_cols = _table_columns(conn, "zones")
+        if "nfc_uid" not in zone_cols:
+            conn.execute("ALTER TABLE zones ADD COLUMN nfc_uid TEXT")
+        if "ndef_payload" not in zone_cols:
+            conn.execute("ALTER TABLE zones ADD COLUMN ndef_payload TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_zones_nfc ON zones (nfc_uid)")
+
+    if "weight_events" in tables:
+        weight_cols = _table_columns(conn, "weight_events")
+        if "inventory_lot_id" not in weight_cols:
+            conn.execute("ALTER TABLE weight_events ADD COLUMN inventory_lot_id TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_weight_events_inventory "
+            "ON weight_events (inventory_lot_id, recorded_at)"
+        )
+
+    if "inventory_lots" in tables:
+        inv_cols = _table_columns(conn, "inventory_lots")
+        for col, decl in (
+            ("amount", "REAL"),
+            ("amount_unit", "TEXT"),
+            ("cost", "REAL"),
+            ("payment_location", "TEXT"),
+            ("purchase_location", "TEXT"),
+            ("tracked", "INTEGER"),
+            ("receipt_tracked", "INTEGER"),
+            ("purchase_date", "TEXT"),
+        ):
+            if col not in inv_cols:
+                conn.execute(f"ALTER TABLE inventory_lots ADD COLUMN {col} {decl}")
+
+    if "machines" not in tables:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS machines (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              stable_id TEXT NOT NULL UNIQUE,
+              site_id TEXT NOT NULL,
+              label TEXT NOT NULL,
+              nfc_uid TEXT,
+              ndef_payload TEXT,
+              status TEXT NOT NULL DEFAULT 'active',
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_machines_site
+              ON machines (site_id, status);
+            CREATE INDEX IF NOT EXISTS idx_machines_nfc
+              ON machines (nfc_uid);
+            """
+        )
+
+    if "nfc_tag_pool" not in tables:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS nfc_tag_pool (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              stable_id TEXT NOT NULL UNIQUE,
+              site_id TEXT NOT NULL,
+              nfc_uid TEXT NOT NULL,
+              intended_type TEXT NOT NULL,
+              label TEXT NOT NULL,
+              ingredient_key TEXT,
+              status TEXT NOT NULL DEFAULT 'available',
+              shipment_id TEXT,
+              bound_object_id TEXT,
+              bound_object_type TEXT,
+              created_at TEXT NOT NULL,
+              UNIQUE (site_id, nfc_uid)
+            );
+            CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_site_status
+              ON nfc_tag_pool (site_id, status, intended_type);
+            CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_uid
+              ON nfc_tag_pool (nfc_uid);
+            CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_bound
+              ON nfc_tag_pool (bound_object_type, bound_object_id);
+            """
+        )
+    elif "nfc_tag_pool" in tables:
+        pool_cols = _table_columns(conn, "nfc_tag_pool")
+        if "bound_object_type" not in pool_cols:
+            conn.execute(
+                "ALTER TABLE nfc_tag_pool ADD COLUMN bound_object_type TEXT"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nfc_tag_pool_bound "
+            "ON nfc_tag_pool (bound_object_type, bound_object_id)"
+        )
+
+    if "nfc_scan_events" not in tables:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS nfc_scan_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              stable_id TEXT NOT NULL UNIQUE,
+              site_id TEXT NOT NULL,
+              nfc_uid TEXT NOT NULL,
+              object_type TEXT,
+              object_id TEXT,
+              found INTEGER NOT NULL DEFAULT 0,
+              source TEXT NOT NULL DEFAULT 'resolve',
+              recorded_at TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_nfc_scan_events_uid_time
+              ON nfc_scan_events (nfc_uid, recorded_at);
+            CREATE INDEX IF NOT EXISTS idx_nfc_scan_events_site_time
+              ON nfc_scan_events (site_id, recorded_at);
+            """
+        )
+    conn.commit()
 
 
 def db_path_for_config_dir(config_dir: str | Path) -> Path:
@@ -584,4 +867,6 @@ def apply_migrations(conn: sqlite3.Connection) -> int:
         )
         conn.commit()
         current = version
+    # Idempotent column repair for polluted DBs that jumped past v14.
+    ensure_inventory_columns(conn)
     return current

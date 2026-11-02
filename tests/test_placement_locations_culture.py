@@ -25,8 +25,8 @@ from custom_components.communifarm.domain.culture import (
     SOURCE_PURCHASED,
 )
 from custom_components.communifarm.domain.location import (
-    AREA_CULTURE_FRIDGE,
-    AREA_STILL_AIR_CABINET,
+    AREA_COLD_STORAGE,
+    AREA_CULTURE_LAB,
     suggest_area_kind_for_culture_form,
     suggest_area_kind_for_media_status,
 )
@@ -36,24 +36,22 @@ from custom_components.communifarm.storage.location_repository import LocationRe
 
 
 def test_suggest_area_kind_for_culture_form() -> None:
-    assert suggest_area_kind_for_culture_form(FORM_AGAR) == AREA_CULTURE_FRIDGE
+    assert suggest_area_kind_for_culture_form(FORM_AGAR) == AREA_COLD_STORAGE
     assert (
-        suggest_area_kind_for_culture_form(FORM_LIQUID_CULTURE) == AREA_CULTURE_FRIDGE
+        suggest_area_kind_for_culture_form(FORM_LIQUID_CULTURE) == AREA_COLD_STORAGE
     )
-    assert suggest_area_kind_for_culture_form("spores") == AREA_CULTURE_FRIDGE
+    assert suggest_area_kind_for_culture_form("spores") == AREA_COLD_STORAGE
     assert suggest_area_kind_for_culture_form("unknown") is None
 
 
 def test_suggest_area_kind_for_media_status() -> None:
     assert (
-        suggest_area_kind_for_media_status(MEDIA_STATUS_PLANNED)
-        == AREA_STILL_AIR_CABINET
+        suggest_area_kind_for_media_status(MEDIA_STATUS_PLANNED) == AREA_CULTURE_LAB
     )
     assert (
-        suggest_area_kind_for_media_status(MEDIA_STATUS_WEIGHING)
-        == AREA_STILL_AIR_CABINET
+        suggest_area_kind_for_media_status(MEDIA_STATUS_WEIGHING) == AREA_CULTURE_LAB
     )
-    assert suggest_area_kind_for_media_status(MEDIA_STATUS_READY) == AREA_CULTURE_FRIDGE
+    assert suggest_area_kind_for_media_status(MEDIA_STATUS_READY) == AREA_COLD_STORAGE
     assert suggest_area_kind_for_media_status("complete") is None
 
 
@@ -106,7 +104,7 @@ async def test_acquire_culture_with_zone_id(
     ]
     state = hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
     areas = await loc_repo.async_list_areas(state.site.id)
-    fridge = next(a for a in areas if a.area_kind == AREA_CULTURE_FRIDGE)
+    fridge = next(a for a in areas if a.area_kind == AREA_COLD_STORAGE)
     shelf = (await loc_repo.async_list_zones_for_area(fridge.id))[0]
 
     await hass.services.async_call(
@@ -167,7 +165,7 @@ async def test_set_culture_location_moves_lot(
     ]
     state = hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
     areas = await loc_repo.async_list_areas(state.site.id)
-    fridge = next(a for a in areas if a.area_kind == AREA_CULTURE_FRIDGE)
+    fridge = next(a for a in areas if a.area_kind == AREA_COLD_STORAGE)
     shelf = (await loc_repo.async_list_zones_for_area(fridge.id))[2]
 
     await hass.services.async_call(
@@ -201,7 +199,7 @@ async def test_create_media_batch_with_zone_id(
     ]
     state = hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
     areas = await loc_repo.async_list_areas(state.site.id)
-    sab = next(a for a in areas if a.area_kind == AREA_STILL_AIR_CABINET)
+    sab = next(a for a in areas if a.area_kind == AREA_CULTURE_LAB)
     shelf = (await loc_repo.async_list_zones_for_area(sab.id))[0]
 
     await hass.services.async_call(
@@ -247,7 +245,7 @@ async def test_set_media_location(
     ]
     state = hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
     areas = await loc_repo.async_list_areas(state.site.id)
-    sab = next(a for a in areas if a.area_kind == AREA_STILL_AIR_CABINET)
+    sab = next(a for a in areas if a.area_kind == AREA_CULTURE_LAB)
     shelf = (await loc_repo.async_list_zones_for_area(sab.id))[1]
 
     await hass.services.async_call(

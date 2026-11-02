@@ -53,17 +53,24 @@ Culture intro into **media** stays on `media_batches`. Production inoculate link
 | Control | Entity |
 | --- | --- |
 | Status | `sensor.communifarm_production_status` |
+| Storage bags/boxes | `sensor.communifarm_placement_storage` |
+| Cold storage | `sensor.communifarm_placement_cold_storage` |
+| Fruiting tent | `sensor.communifarm_placement_fruiting_tent` |
+| Inoculation tent | `sensor.communifarm_placement_inoculation_tent` |
+| Tag source / Scan NFC | optional bag for lifecycle moves |
 | Container type | `select.communifarm_container_type` |
 | Container count | `number.communifarm_container_count` |
 | Substrate g/container | `number.communifarm_substrate_g_per_container` |
 | Inoculate | `button.communifarm_inoculate_batch` (uses last acquired culture) |
-| Move incubation / fruiting / harvest | `button.communifarm_move_to_*` |
+| Move incubation / fruiting / harvest | `button.communifarm_move_to_*` (bag NFC optional → that unit; else whole batch) |
 | Harvest mass | `number.communifarm_harvest_mass_g` |
 | Record / final harvest | `button.communifarm_record_harvest` / `button.communifarm_final_harvest` |
+
+After Mix **Relocate**, bags land in **Storage** (awaiting culture) and show in the Storage section.
 
 ## Testing
 
 | Stage | Coverage |
 | --- | --- |
-| T0 | `tests/test_production_inoculate.py` + `tests/test_placement_locations.py` — gates, schema v7, dashboard tab, happy path, placement layout |
+| T0 | `tests/test_production_inoculate.py`, `tests/test_placement_locations.py`, `tests/test_placement_inventory.py` |
 | T1 / T2 | Pending |

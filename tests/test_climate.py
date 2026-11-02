@@ -576,7 +576,6 @@ def test_schema_v13_upgrade_preserves_v11(tmp_path: Path) -> None:
     conn.commit()
     version = sqlite_db.apply_migrations(conn)
     assert version == sqlite_db.SCHEMA_VERSION
-    assert version == 13
     batch = conn.execute(
         "SELECT name, environment_id FROM batches WHERE stable_id = 'batch_keep'"
     ).fetchone()
@@ -598,6 +597,12 @@ def test_schema_v13_upgrade_preserves_v11(tmp_path: Path) -> None:
     assert "climate_intents" in tables
     assert "air_vents" in tables
     assert "tachometer_readings" in tables
+    assert "nfc_scan_events" in tables
+    assert "nfc_tag_pool" in tables
+    pool_cols = {
+        row["name"] for row in conn.execute("PRAGMA table_info(nfc_tag_pool)").fetchall()
+    }
+    assert "bound_object_type" in pool_cols
     conn.close()
 
 

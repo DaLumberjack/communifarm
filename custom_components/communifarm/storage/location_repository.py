@@ -184,8 +184,44 @@ class LocationRepository(SqliteRepository):
             climate_id=row["climate_id"] if "climate_id" in row.keys() else None,
         )
 
+    async def async_get_zone_by_nfc(self, nfc_uid: str) -> Zone | None:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._get_zone_by_nfc_sync, nfc_uid
+        )
+
+    def _get_zone_by_nfc_sync(self, nfc_uid: str) -> Zone | None:
+        assert self._conn is not None
+        row = self._conn.execute(
+            "SELECT * FROM zones WHERE nfc_uid = ? LIMIT 1", (nfc_uid,)
+        ).fetchone()
+        return self._row_to_zone(row) if row else None
+
+    async def async_bind_zone_nfc(
+        self, zone_id: str, nfc_uid: str, ndef_payload: str | None = None
+    ) -> Zone:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._bind_zone_nfc_sync, zone_id, nfc_uid, ndef_payload
+        )
+
+    def _bind_zone_nfc_sync(
+        self, zone_id: str, nfc_uid: str, ndef_payload: str | None
+    ) -> Zone:
+        assert self._conn is not None
+        self._conn.execute(
+            """
+            UPDATE zones SET nfc_uid = ?, ndef_payload = ?
+            WHERE stable_id = ?
+            """,
+            (nfc_uid, ndef_payload, zone_id),
+        )
+        self._conn.commit()
+        zone = self._get_zone_sync(zone_id)
+        assert zone is not None
+        return zone
+
     @staticmethod
     def _row_to_zone(row: Any) -> Zone:
+        keys = row.keys()
         return Zone(
             id=row["stable_id"],
             area_id=row["area_id"],
@@ -194,4 +230,6 @@ class LocationRepository(SqliteRepository):
             slot_kind=row["slot_kind"],
             slot_index=int(row["slot_index"]),
             created_at=row["created_at"],
+            nfc_uid=row["nfc_uid"] if "nfc_uid" in keys else None,
+            ndef_payload=row["ndef_payload"] if "ndef_payload" in keys else None,
         )

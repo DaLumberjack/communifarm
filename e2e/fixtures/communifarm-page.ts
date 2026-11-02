@@ -79,14 +79,16 @@ export class CommunifarmPage {
     await expect(this.page).toHaveURL(/communifarm/, { timeout: INITIAL_LOAD_MS });
   }
 
-  /** Open the Weigh activity tab (scale + NFC select). */
+  /** Open the Mix tab (standalone dry→wet weigh + NFC; replaces legacy Weigh). */
   async openWeighStation(): Promise<void> {
-    await this.page.goto("/communifarm/weigh", { waitUntil: "domcontentloaded" });
-    await expect(this.page).toHaveURL(/communifarm\/weigh/, {
+    await this.page.goto("/communifarm/mix", { waitUntil: "domcontentloaded" });
+    await expect(this.page).toHaveURL(/communifarm\/mix/, {
       timeout: INITIAL_LOAD_MS,
     });
     await expect(
-      this.page.getByText(/weigh station|ingredient|current mass/i).first()
+      this.page
+        .getByText(/mixing batch|dry ingredients|scale \(drys\)|selected ingredient/i)
+        .first()
     ).toBeVisible({
       timeout: STEP_MS,
     });

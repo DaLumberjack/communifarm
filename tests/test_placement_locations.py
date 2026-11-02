@@ -21,13 +21,18 @@ from custom_components.communifarm.domain.culture import (
     SOURCE_PURCHASED,
 )
 from custom_components.communifarm.domain.location import (
+    AREA_COLD_STORAGE,
+    AREA_CULTURE_LAB,
     AREA_FRUITING_TENT,
-    AREA_HARVEST_FRIDGE,
     AREA_INOCULATION_TENT,
+    AREA_OUTSIDE,
+    AREA_STORAGE,
     DEFAULT_LAYOUT,
+    TENT_GRID_SLOTS,
     build_default_layout,
     suggest_area_kind_for_production_stage,
     validate_zone_index,
+    zone_display_name,
 )
 from custom_components.communifarm.domain.production import (
     STAGE_FRUITING,
@@ -44,13 +49,19 @@ from custom_components.communifarm.storage.location_repository import LocationRe
 
 def test_default_layout_counts() -> None:
     layout = build_default_layout("site_test")
-    assert len(layout.areas) == 5
-    assert len(layout.zones) == 5 + 5 + 5 + 3 + 6
-    assert sum(row[3] for row in DEFAULT_LAYOUT) == 24
+    assert len(layout.areas) == 7
+    expected_zones = 5 + 5 + 5 + TENT_GRID_SLOTS + TENT_GRID_SLOTS + 1 + 1
+    assert len(layout.zones) == expected_zones
+    assert sum(row[3] for row in DEFAULT_LAYOUT) == expected_zones
     kinds = {a.area_kind for a in layout.areas}
     assert AREA_FRUITING_TENT in kinds
     assert AREA_INOCULATION_TENT in kinds
-    assert AREA_HARVEST_FRIDGE in kinds
+    assert AREA_CULTURE_LAB in kinds
+    assert AREA_STORAGE in kinds
+    assert AREA_COLD_STORAGE in kinds
+    assert AREA_OUTSIDE in kinds
+    assert zone_display_name("grid", 1) == "Row 1 Pos 1"
+    assert zone_display_name("grid", 8) == "Row 2 Pos 3"
 
 
 def test_validate_zone_index() -> None:
@@ -126,8 +137,9 @@ async def test_ensure_default_layout_persists(
     state = hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
     areas = await loc_repo.async_list_areas(state.site.id)
     zones = await loc_repo.async_list_zones(state.site.id)
-    assert len(areas) == 5
-    assert len(zones) == 24
+    expected_zones = sum(row[3] for row in DEFAULT_LAYOUT)
+    assert len(areas) == len(DEFAULT_LAYOUT)
+    assert len(zones) == expected_zones
 
     await hass.services.async_call(
         DOMAIN, SERVICE_ENSURE_PLACEMENT_LAYOUT, {}, blocking=True
@@ -135,8 +147,8 @@ async def test_ensure_default_layout_persists(
     await hass.async_block_till_done()
     areas2 = await loc_repo.async_list_areas(state.site.id)
     zones2 = await loc_repo.async_list_zones(state.site.id)
-    assert len(areas2) == 5
-    assert len(zones2) == 24
+    assert len(areas2) == len(DEFAULT_LAYOUT)
+    assert len(zones2) == expected_zones
     assert {a.id for a in areas} == {a.id for a in areas2}
 
 
@@ -305,8 +317,8 @@ async def test_harvest_with_zone_id(
     ]
     state = hass.data[DOMAIN][mock_config_entry.entry_id]["state"]
     areas = await loc_repo.async_list_areas(state.site.id)
-    fridge = next(a for a in areas if a.area_kind == AREA_HARVEST_FRIDGE)
-    shelf = (await loc_repo.async_list_zones_for_area(fridge.id))[0]
+    cold = next(a for a in areas if a.area_kind == AREA_COLD_STORAGE)
+    shelf = (await loc_repo.async_list_zones_for_area(cold.id))[0]
 
     await hass.services.async_call(
         DOMAIN,

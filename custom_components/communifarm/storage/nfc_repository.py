@@ -11,10 +11,15 @@ from ..domain.nfc import (
     OBJECT_BATCH,
     OBJECT_CONTAINER,
     OBJECT_CULTURE,
+    OBJECT_EMPLOYEE,
+    OBJECT_INVENTORY,
+    OBJECT_LOCATION,
+    OBJECT_MACHINE,
     OBJECT_MEDIA,
     OBJECT_UNKNOWN,
     NfcCheckin,
     NfcResolution,
+    NfcScanEvent,
 )
 from .container_repository import ContainerRepository
 from .sqlite_repository import SqliteRepository
@@ -36,15 +41,18 @@ class NfcRepository(SqliteRepository):
         container_repo: ContainerRepository,
         batch_repo: Any,
         culture_repo: Any,
+        inventory_repo: Any | None = None,
+        location_repo: Any | None = None,
     ) -> None:
         super().__init__(hass)
         self._containers = container_repo
         self._batches = batch_repo
         self._cultures = culture_repo
+        self._inventory = inventory_repo
+        self._locations = location_repo
 
     def bind_connection(self, conn: Any) -> None:
         self._conn = conn
-
 
     async def async_resolve(self, nfc_uid: str) -> NfcResolution:
         return await self._hass.async_add_executor_job(self._locked, self._resolve_sync, nfc_uid)
@@ -113,6 +121,58 @@ class NfcRepository(SqliteRepository):
                 detail={"status": media.status, "recipe_key": media.recipe_key},
             )
 
+        if self._inventory is not None:
+            lot = self._inventory._get_lot_by_nfc_sync(nfc_uid)
+            if lot is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_INVENTORY,
+                    object_id=lot.id,
+                    label=lot.label,
+                    found=True,
+                    detail={
+                        "ingredient_key": lot.ingredient_key,
+                        "water_kind": lot.water_kind,
+                        "ndef_payload": lot.ndef_payload,
+                        "amount": lot.amount,
+                        "amount_unit": lot.amount_unit,
+                        "status": lot.status,
+                    },
+                )
+            badge = self._inventory._get_employee_by_nfc_sync(nfc_uid)
+            if badge is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_EMPLOYEE,
+                    object_id=badge.id,
+                    label=badge.label,
+                    found=True,
+                    detail={"ndef_payload": badge.ndef_payload},
+                )
+            machine = self._inventory._get_machine_by_nfc_sync(nfc_uid)
+            if machine is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_MACHINE,
+                    object_id=machine.id,
+                    label=machine.label,
+                    found=True,
+                    detail={"ndef_payload": machine.ndef_payload},
+                )
+
+        if self._locations is not None:
+            zone = self._locations._get_zone_by_nfc_sync(nfc_uid)
+            if zone is not None:
+                return NfcResolution(
+                    nfc_uid=nfc_uid,
+                    object_type=OBJECT_LOCATION,
+                    object_id=zone.id,
+                    label=zone.name,
+                    zone_id=zone.id,
+                    found=True,
+                    detail={"ndef_payload": zone.ndef_payload},
+                )
+
         return NfcResolution(
             nfc_uid=nfc_uid,
             object_type=OBJECT_UNKNOWN,
@@ -153,8 +213,8 @@ class NfcRepository(SqliteRepository):
         return self._cultures._row_to_media(row)
 
     async def async_insert_checkin(self, event: NfcCheckin) -> NfcCheckin:
-        return await self._hass.async_add_executor_job(self._locked, 
-            self._insert_checkin_sync, event
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_checkin_sync, event
         )
 
     def _insert_checkin_sync(self, event: NfcCheckin) -> NfcCheckin:
@@ -183,3 +243,47 @@ class NfcRepository(SqliteRepository):
         )
         conn.commit()
         return event
+
+    async def async_insert_scan_event(self, event: NfcScanEvent) -> NfcScanEvent:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._insert_scan_event_sync, event
+        )
+
+    def _insert_scan_event_sync(self, event: NfcScanEvent) -> NfcScanEvent:
+        conn = getattr(self._batches, "_conn", None)
+        assert conn is not None
+        conn.execute(
+            """
+            INSERT INTO nfc_scan_events (
+              stable_id, site_id, nfc_uid, object_type, object_id,
+              found, source, recorded_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.id,
+                event.site_id,
+                event.nfc_uid,
+                event.object_type,
+                event.object_id,
+                1 if event.found else 0,
+                event.source,
+                event.recorded_at,
+                event.recorded_at,
+            ),
+        )
+        conn.commit()
+        return event
+
+    async def async_count_scan_events(self, nfc_uid: str) -> int:
+        return await self._hass.async_add_executor_job(
+            self._locked, self._count_scan_events_sync, nfc_uid
+        )
+
+    def _count_scan_events_sync(self, nfc_uid: str) -> int:
+        conn = getattr(self._batches, "_conn", None)
+        assert conn is not None
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM nfc_scan_events WHERE nfc_uid = ?",
+            (nfc_uid,),
+        ).fetchone()
+        return int(row["c"] if row else 0)

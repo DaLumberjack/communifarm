@@ -26,9 +26,9 @@ class WeightEventRepository(SqliteRepository):
             INSERT INTO weight_events (
               stable_id, site_id, environment_id, batch_id,
               ingredient_key, ingredient_label, mass_g, unit,
-              source_entity_id, nfc_uid, recorded_at, created_at,
+              source_entity_id, nfc_uid, inventory_lot_id, recorded_at, created_at,
               recipe_scale, target_amount
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.id,
@@ -41,6 +41,7 @@ class WeightEventRepository(SqliteRepository):
                 event.unit,
                 event.source_entity_id,
                 event.nfc_uid,
+                event.inventory_lot_id,
                 event.recorded_at,
                 created,
                 event.recipe_scale,
@@ -60,7 +61,7 @@ class WeightEventRepository(SqliteRepository):
             """
             SELECT stable_id, site_id, environment_id, batch_id,
                    ingredient_key, ingredient_label, mass_g, unit,
-                   source_entity_id, nfc_uid, recorded_at,
+                   source_entity_id, nfc_uid, inventory_lot_id, recorded_at,
                    recipe_scale, target_amount
             FROM weight_events
             WHERE batch_id = ?
@@ -80,6 +81,7 @@ class WeightEventRepository(SqliteRepository):
                 unit=row["unit"],
                 source_entity_id=row["source_entity_id"],
                 nfc_uid=row["nfc_uid"],
+                inventory_lot_id=row["inventory_lot_id"],
                 recorded_at=row["recorded_at"],
                 recipe_scale=row["recipe_scale"],
                 target_amount=row["target_amount"],

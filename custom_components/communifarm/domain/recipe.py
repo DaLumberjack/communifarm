@@ -35,6 +35,8 @@ WOOD_LOVER_RECIPE: tuple[RecipeLine, ...] = (
     RecipeLine("coco coir", 2.0, "qts"),
     RecipeLine("gypsum", 200.0, "g"),
     RecipeLine("potash", 50.0, "g"),
+    # Total process water — do not over-add; types are inventory/NFC variants.
+    RecipeLine("water", 10200.0, "g"),
 )
 
 
@@ -81,15 +83,14 @@ class WeighSessionProgress:
     def summary(self) -> str:
         return f"{self.completed}/{self.total} lines recorded"
 
-    def progress_text(self) -> str:
-        """Markdown-friendly table for HA sensors / Lovelace."""
+    def _line_table(self, lines: list[LineProgress], *, heading: str) -> list[str]:
         rows = [
-            f"Scale **×{self.recipe_scale:g}** · Batch NFC `{self.batch_nfc_uid}`",
+            heading,
             "",
             "| Status | Ingredient | Target | Recorded | Close |",
             "| --- | --- | ---: | ---: | ---: |",
         ]
-        for line in self.lines:
+        for line in lines:
             rec = (
                 f"{line.recorded_amount:g} {line.unit}"
                 if line.recorded_amount is not None
@@ -111,10 +112,47 @@ class WeighSessionProgress:
                 f"| {mark} {line.status} | {line.label} | "
                 f"{line.target_amount:g} {line.unit} | {rec} | {pct} |"
             )
-        if self.next_label:
-            rows.append("")
-            rows.append(f"**Next:** {self.next_label}")
+        return rows
+
+    def dry_lines(self) -> list[LineProgress]:
+        return [line for line in self.lines if line.key != "water"]
+
+    def wet_lines(self) -> list[LineProgress]:
+        return [line for line in self.lines if line.key == "water"]
+
+    def dry_progress_text(self) -> str:
+        rows = self._line_table(self.dry_lines(), heading="### Dry ingredients")
+        pending = next((ln.label for ln in self.dry_lines() if ln.status == "pending"), None)
+        if pending:
+            rows.extend(["", f"**Next dry:** {pending}"])
         return "\n".join(rows)
+
+    def wet_progress_text(self) -> str:
+        rows = self._line_table(
+            self.wet_lines(),
+            heading="### Water (pours sum toward target — do not over-add)",
+        )
+        rows.extend(
+            [
+                "",
+                "Use **Location tare** on the mix vessel, add a pour, then "
+                "**Record water pour**. First + remaining pours accumulate.",
+            ]
+        )
+        return "\n".join(rows)
+
+    def progress_text(self) -> str:
+        """Markdown-friendly table for HA sensors / Lovelace."""
+        body = self._line_table(self.lines, heading="")
+        # body[0] is empty heading, body[1] blank — keep the table from body[2:]
+        out = [
+            f"Scale **×{self.recipe_scale:g}** · Batch NFC `{self.batch_nfc_uid}`",
+            "",
+            *body[2:],
+        ]
+        if self.next_label:
+            out.extend(["", f"**Next:** {self.next_label}"])
+        return "\n".join(out)
 
 
 def clamp_recipe_scale(value: float) -> float:
@@ -131,11 +169,21 @@ def build_weigh_session_progress(
     recipe_name: str = "Simpler Wood Lover",
     close_band_pct: float = 5.0,
 ) -> WeighSessionProgress:
-    """Map latest weight_events per ingredient onto scaled recipe targets."""
+    """Map weight_events onto scaled recipe targets.
+
+    Dry lines use the latest event per key. Water sums all pours toward the
+    single 10200 g target so first + remaining water do not overwrite each other.
+    """
     scale = clamp_recipe_scale(recipe_scale)
     latest: dict[str, WeightEvent] = {}
+    water_sum = 0.0
+    water_seen = False
     for event in events:
         if not event.ingredient_key:
+            continue
+        if event.ingredient_key == "water":
+            water_sum += float(event.mass_g)
+            water_seen = True
             continue
         latest[event.ingredient_key] = event
 
@@ -144,8 +192,11 @@ def build_weigh_session_progress(
     next_label: str | None = None
     for line in recipe:
         target = line.amount * scale
-        event = latest.get(line.key)
-        recorded = float(event.mass_g) if event is not None else None
+        if line.key == "water":
+            recorded = water_sum if water_seen else None
+        else:
+            event = latest.get(line.key)
+            recorded = float(event.mass_g) if event is not None else None
         # Volumetric lines may later use a different measure; for now record mass_g as amount.
         if recorded is None:
             status = "pending"

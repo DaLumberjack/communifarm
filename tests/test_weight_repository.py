@@ -132,7 +132,7 @@ async def test_record_weight_service_persists(
 
     session = hass.states.get("sensor.communifarm_weigh_session")
     assert session is not None
-    assert session.state == "1/9 lines recorded"
+    assert session.state == "1/10 lines recorded"
     assert "gypsum" in session.attributes["progress_text"]
     assert session.attributes.get("warnings") == []
 

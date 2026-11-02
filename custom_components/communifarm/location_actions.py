@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN, SIGNAL_BATCH_UPDATED, SIGNAL_WEIGH_SESSION_UPDATED
-from .domain.location import suggest_area_kind_for_production_stage
+from .domain.location import AREA_STORAGE, suggest_area_kind_for_production_stage
 from .domain.models import CommunifarmState
 from .storage.batch_repository import BatchRepository
 from .storage.location_repository import LocationRepository
@@ -117,6 +117,48 @@ async def async_set_batch_location(
     )
     _notify_batch(hass, entry_id)
     return zone.id
+
+
+async def async_first_zone_for_area_kind(
+    hass: HomeAssistant,
+    entry_id: str,
+    area_kind: str,
+) -> str | None:
+    """Return the first zone id for an area_kind (Shelf 1 / Row 1 Pos 1)."""
+    state = _state(hass, entry_id)
+    loc_repo = _location_repo(hass, entry_id)
+    areas, _zones = await loc_repo.async_ensure_default_layout(state.site.id)
+    for area in areas:
+        if area.area_kind != area_kind:
+            continue
+        zones = await loc_repo.async_list_zones_for_area(area.id)
+        if zones:
+            return sorted(zones, key=lambda z: z.slot_index)[0].id
+    return None
+
+
+async def async_ensure_storage_zone(
+    hass: HomeAssistant,
+    entry_id: str,
+    *,
+    zone_id: str | None = None,
+) -> str:
+    """Resolve a Storage zone — remap non-storage picks to Storage Shelf 1 (5A)."""
+    loc_repo = _location_repo(hass, entry_id)
+    if zone_id:
+        zone = await loc_repo.async_get_zone(str(zone_id).strip())
+        if zone is not None:
+            area = await loc_repo.async_get_area(zone.area_id)
+            if area is not None and area.area_kind == AREA_STORAGE:
+                return zone.id
+    storage_zone = await async_first_zone_for_area_kind(
+        hass, entry_id, AREA_STORAGE
+    )
+    if not storage_zone:
+        raise HomeAssistantError(
+            "Storage layout missing — run ensure_placement_layout"
+        )
+    return storage_zone
 
 
 async def async_list_locations(

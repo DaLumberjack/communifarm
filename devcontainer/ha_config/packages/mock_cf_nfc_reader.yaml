@@ -1,22 +1,67 @@
 # Mock dedicated PN532 handheld / bench NFC reader for T1/T2.
 # Complements scale NFC stub (input_text.esp32dev_last_nfc_uid).
 # Public surface matches esphome nfc-scanner / nfc-writer Last NFC UID text sensor.
+#
+# Sandbox rule: fake sensors + injectors HERE (devcontainer packages) are required
+# so UX and Playwright can drive NFC without hardware. Production Communifarm
+# integration must NOT create these entities — only bind to real ESPHome sensors.
 
 input_text:
   cf_mixroom_nfc_scan01_last_nfc_uid:
     name: "cf-mixroom-nfc-scan01 Last NFC UID"
-    initial: ""
+    initial: "nfc-bag-01"
     max: 64
   cf_lab_nfc_write01_last_nfc_uid:
     name: "cf-lab-nfc-write01 Last NFC UID"
-    initial: ""
+    initial: "nfc-bag-01"
     max: 64
+  cf_lab_nfc_write01_pending_ndef:
+    name: "cf-lab-nfc-write01 Pending NDEF"
+    initial: ""
+    max: 255
+
+input_select:
+  # Kit UIDs match custom_components/.../domain/shipment_tags.py DEFAULT_SHIPMENT_TAGS
+  cf_sandbox_shipment_nfc_uid:
+    name: "Sandbox shipment NFC UID (mock kit)"
+    options:
+      - "(none)"
+      - "nfc-hardwood-pellets"
+      - "nfc-hardwood-shavings"
+      - "nfc-wheat-straw"
+      - "nfc-worm-castings"
+      - "nfc-wheat-bran"
+      - "nfc-vermiculite"
+      - "nfc-coco-coir"
+      - "nfc-gypsum"
+      - "nfc-potash"
+      - "nfc-water-tap"
+      - "nfc-bag-01"
+      - "nfc-bag-02"
+      - "nfc-bag-03"
+      - "nfc-bag-04"
+      - "nfc-bag-05"
+      - "nfc-employee-01"
+      - "nfc-loc-cold-01"
+      - "nfc-loc-sterile-01"
+    initial: "nfc-bag-01"
+
+input_number:
+  cf_mixroom_field_capacity_pct:
+    name: "cf-mixroom Field capacity %"
+    min: 0
+    max: 100
+    step: 0.5
+    initial: 55
+    unit_of_measurement: "%"
 
 input_button:
   cf_mixroom_nfc_scan01_simulate_scan:
     name: "cf-mixroom-nfc-scan01 Simulate Scan"
   cf_lab_nfc_write01_simulate_scan:
     name: "cf-lab-nfc-write01 Simulate Scan"
+  cf_sandbox_apply_shipment_nfc:
+    name: "Sandbox apply shipment NFC to last-scan helpers"
 
 template:
   - sensor:
@@ -26,6 +71,10 @@ template:
       - name: "cf-lab-nfc-write01 Last NFC UID"
         unique_id: cf_lab_nfc_write01_last_nfc_uid_sensor
         state: "{{ states('input_text.cf_lab_nfc_write01_last_nfc_uid') }}"
+      - name: "cf-mixroom Field capacity %"
+        unique_id: cf_mixroom_field_capacity_pct
+        unit_of_measurement: "%"
+        state: "{{ states('input_number.cf_mixroom_field_capacity_pct') }}"
   - button:
       - name: "cf-lab-nfc-write01 Prepare NDEF Write"
         unique_id: cf_lab_nfc_write01_prepare_ndef_write
@@ -35,10 +84,39 @@ template:
             data:
               title: "cf-lab-nfc-write01 mock NDEF"
               message: >-
-                Mock only. Real NDEF write belongs on PN532 ESPHome firmware.
-                Tags must store stable refs only.
+                Pending payload:
+                {{ states('input_text.cf_lab_nfc_write01_pending_ndef') }}.
+                Communifarm prepare_nfc_write / confirm_nfc_write own the bind.
 
 automation:
+  - id: cf_sandbox_apply_shipment_nfc
+    alias: "Sandbox apply shipment NFC UID to mock last-scan helpers"
+    trigger:
+      - platform: state
+        entity_id: input_button.cf_sandbox_apply_shipment_nfc
+      - platform: state
+        entity_id: input_select.cf_sandbox_shipment_nfc_uid
+    condition:
+      - condition: template
+        value_template: >-
+          {{ states('input_select.cf_sandbox_shipment_nfc_uid') not in
+             ['(none)', 'unknown', 'unavailable', ''] }}
+    action:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.cf_mixroom_nfc_scan01_last_nfc_uid
+        data:
+          value: "{{ states('input_select.cf_sandbox_shipment_nfc_uid') }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.cf_lab_nfc_write01_last_nfc_uid
+        data:
+          value: "{{ states('input_select.cf_sandbox_shipment_nfc_uid') }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.esp32dev_last_nfc_uid
+        data:
+          value: "{{ states('input_select.cf_sandbox_shipment_nfc_uid') }}"
   - id: cf_nfc_scan01_simulate_echo
     alias: "cf NFC scan01 simulate keeps last UID"
     trigger:

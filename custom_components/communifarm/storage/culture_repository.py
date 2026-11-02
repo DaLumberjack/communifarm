@@ -264,6 +264,19 @@ class CultureRepository(SqliteRepository):
         )
         self._conn.commit()
 
+    async def async_set_culture_nfc(self, culture_id: str, nfc_uid: str) -> None:
+        await self._hass.async_add_executor_job(
+            self._locked, self._set_culture_nfc_sync, culture_id, nfc_uid
+        )
+
+    def _set_culture_nfc_sync(self, culture_id: str, nfc_uid: str) -> None:
+        assert self._conn is not None
+        self._conn.execute(
+            "UPDATE culture_lots SET nfc_uid = ? WHERE stable_id = ?",
+            (nfc_uid, culture_id),
+        )
+        self._conn.commit()
+
     # --- Varieties ---
 
     async def async_list_varieties(

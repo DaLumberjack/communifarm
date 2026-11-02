@@ -16,6 +16,10 @@ from . import sqlite_db
 _LOGGER = logging.getLogger(__name__)
 
 
+class RepositoryClosedError(RuntimeError):
+    """Raised when a query races unload after ``async_close`` cleared ``_conn``."""
+
+
 class SqliteRepository:
     """Open ``communifarm.db``, apply migrations, and serialize access."""
 
@@ -63,9 +67,17 @@ class SqliteRepository:
         """Hook while ``DB_LOCK`` is held, after migrations."""
 
     async def async_close(self) -> None:
-        await self._hass.async_add_executor_job(self._close_sync)
+        # Close under lock without going through ``_locked`` (that rejects
+        # ``_conn is None`` and would refuse the close itself).
+        await self._hass.async_add_executor_job(self._close_locked)
+
+    def _close_locked(self) -> None:
+        with sqlite_db.DB_LOCK:
+            self._close_sync()
 
     def _close_sync(self) -> None:
+        # Must run under DB_LOCK: concurrent query + close segfaults sqlite3
+        # (CI exit 139). Callers use ``_close_locked`` or ``_locked``.
         if self._conn is not None:
             self._conn.close()
             self._conn = None
@@ -73,4 +85,6 @@ class SqliteRepository:
     def _locked(self, fn, /, *args):
         """Serialize all Communifarm SQLite access (process-wide DB_LOCK)."""
         with sqlite_db.DB_LOCK:
+            if self._conn is None:
+                raise RepositoryClosedError("Communifarm SQLite repository closed")
             return fn(*args)

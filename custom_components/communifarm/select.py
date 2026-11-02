@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 
 from homeassistant.components.select import SelectEntity
@@ -10,6 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    DOMAIN,
     ENTITY_ACQUIRE_FORM,
     ENTITY_ACQUIRE_SOURCE,
     ENTITY_ACTIVE_INOCULUM,
@@ -17,10 +19,22 @@ from .const import (
     ENTITY_CONTAINER_TYPE,
     ENTITY_CULTURE_VESSEL_STATUS,
     ENTITY_HEAT_TREATMENT,
+    ENTITY_INTAKE_AMOUNT_UNIT,
+    ENTITY_INTAKE_PAYMENT,
+    ENTITY_INTAKE_PROCESS_MODE,
+    ENTITY_INTAKE_RECEIPT,
+    ENTITY_INTAKE_TAG_UID,
+    ENTITY_INTAKE_TRACKED,
+    ENTITY_INTAKE_ZONE,
+    ENTITY_NFC_SCAN_MODE,
+    ENTITY_NFC_WRITE_LABEL,
+    ENTITY_NFC_WRITE_OBJECT_TYPE,
     ENTITY_PAYMENT_METHOD,
+    ENTITY_RELOCATE_ZONE,
     ENTITY_SALE_BUYER,
     ENTITY_SALE_VENUE,
     SIGNAL_CULTURE_UPDATED,
+    SIGNAL_NFC_CHECKIN_UPDATED,
 )
 from .domain.batch_milestones import HEAT_PASTEURIZED, HEAT_STERILIZED
 from .domain.culture import (
@@ -35,6 +49,24 @@ from .domain.culture import (
     SOURCE_WILD,
     VESSEL_STATUSES,
 )
+from .domain.inventory import (
+    AMOUNT_UNITS,
+    INTAKE_PROCESS_COMBINED,
+    INTAKE_PROCESS_MARK_TAGS,
+    INTAKE_PROCESS_PURCHASE,
+    OBJECT_BATCH,
+    OBJECT_CONTAINER,
+    OBJECT_CULTURE,
+    OBJECT_EMPLOYEE,
+    OBJECT_INVENTORY,
+    OBJECT_LOCATION,
+    OBJECT_MACHINE,
+    PAYMENT_ACCOUNT,
+    PAYMENT_CASH,
+    SCAN_MODE_NORMAL,
+    SCAN_MODE_REGISTER_BLOCK,
+    inventory_write_choices,
+)
 from .domain.production import (
     CONTAINER_BAG,
     CONTAINER_BLOCK,
@@ -43,7 +75,6 @@ from .domain.production import (
     CONTAINER_TUB,
 )
 from .domain.sale import (
-    PAYMENT_CASH,
     PAYMENT_CHECK,
     PAYMENT_DIGITAL,
     PAYMENT_OTHER,
@@ -192,6 +223,90 @@ _BUCKET_SELECTS: tuple[_SelectSpec, ...] = (
         "sale_buyer_label",
         "Walk-up",
     ),
+    _spec(
+        "Intake tag type",
+        "communifarm_nfc_write_object_type",
+        ENTITY_NFC_WRITE_OBJECT_TYPE,
+        "mdi:nfc",
+        (
+            OBJECT_INVENTORY,
+            OBJECT_LOCATION,
+            OBJECT_CONTAINER,
+            OBJECT_BATCH,
+            OBJECT_CULTURE,
+            OBJECT_MACHINE,
+            OBJECT_EMPLOYEE,
+        ),
+        "nfc_write_object_type",
+        OBJECT_INVENTORY,
+    ),
+    _spec(
+        "Intake asset / ingredient label",
+        "communifarm_nfc_write_label",
+        ENTITY_NFC_WRITE_LABEL,
+        "mdi:tag-text",
+        tuple(inventory_write_choices()),
+        "nfc_write_label",
+        "hardwood pellets",
+    ),
+    _spec(
+        "NFC scan mode",
+        "communifarm_nfc_scan_mode",
+        ENTITY_NFC_SCAN_MODE,
+        "mdi:nfc-variant",
+        (SCAN_MODE_NORMAL, SCAN_MODE_REGISTER_BLOCK),
+        "nfc_scan_mode",
+        SCAN_MODE_NORMAL,
+    ),
+    _spec(
+        "Intake process mode",
+        "communifarm_intake_process_mode",
+        ENTITY_INTAKE_PROCESS_MODE,
+        "mdi:view-dashboard-variant",
+        (
+            INTAKE_PROCESS_COMBINED,
+            INTAKE_PROCESS_MARK_TAGS,
+            INTAKE_PROCESS_PURCHASE,
+        ),
+        "intake_process_mode",
+        INTAKE_PROCESS_COMBINED,
+    ),
+    _spec(
+        "Intake amount unit",
+        "communifarm_intake_amount_unit",
+        ENTITY_INTAKE_AMOUNT_UNIT,
+        "mdi:weight",
+        AMOUNT_UNITS,
+        "intake_amount_unit",
+        "g",
+    ),
+    _spec(
+        "Intake payment location",
+        "communifarm_intake_payment_location",
+        ENTITY_INTAKE_PAYMENT,
+        "mdi:cash-register",
+        (PAYMENT_ACCOUNT, PAYMENT_CASH),
+        "intake_payment_location",
+        PAYMENT_CASH,
+    ),
+    _spec(
+        "Intake tracked",
+        "communifarm_intake_tracked",
+        ENTITY_INTAKE_TRACKED,
+        "mdi:clipboard-check",
+        ("yes", "no"),
+        "intake_tracked",
+        "yes",
+    ),
+    _spec(
+        "Intake receipt tracked",
+        "communifarm_intake_receipt_tracked",
+        ENTITY_INTAKE_RECEIPT,
+        "mdi:receipt",
+        ("yes", "no"),
+        "intake_receipt_tracked",
+        "no",
+    ),
 )
 
 
@@ -207,9 +322,128 @@ async def async_setup_entry(
             CommunifarmBucketSelect(entry_id, _BUCKET_SELECTS[1]),
             CommunifarmActiveInoculumSelect(entry_id),
             CommunifarmCatalogVarietySelect(entry_id),
+            CommunifarmZoneSelect(
+                entry_id,
+                name="Intake location zone",
+                unique_id="communifarm_intake_zone",
+                entity_id=ENTITY_INTAKE_ZONE,
+                bucket_key="intake_zone_label",
+            ),
+            CommunifarmZoneSelect(
+                entry_id,
+                name="Relocate to Storage (post-sterile)",
+                unique_id="communifarm_relocate_zone",
+                entity_id=ENTITY_RELOCATE_ZONE,
+                bucket_key="relocate_zone_label",
+                area_kind="storage",
+            ),
+            CommunifarmTagSourceSelect(entry_id),
             *[CommunifarmBucketSelect(entry_id, spec) for spec in _BUCKET_SELECTS[2:]],
         ]
     )
+
+
+class CommunifarmTagSourceSelect(CommunifarmSelect):
+    """Choose last scanned UID or a chip from the shipment / CF tag pool."""
+
+    _attr_name = "Tag source (scan or DB)"
+    _attr_unique_id = "communifarm_intake_tag_uid"
+    _attr_icon = "mdi:nfc"
+    _attr_options = ["(last scanned)"]
+
+    def __init__(self, entry_id: str) -> None:
+        super().__init__(entry_id, entity_id=ENTITY_INTAKE_TAG_UID)
+        self._current = "(last scanned)"
+
+    async def async_added_to_hass(self) -> None:
+        await self.async_refresh_options()
+        self.listen_entry_signals(SIGNAL_NFC_CHECKIN_UPDATED, method="async_refresh_options")
+
+    async def async_refresh_options(self) -> None:
+        from . import inventory_actions
+        from .domain.inventory import TAG_SOURCE_LAST_SCANNED
+
+        if self._entry_id not in self.hass.data.get(DOMAIN, {}):
+            return
+        try:
+            options = await inventory_actions.async_list_tag_source_options(
+                self.hass, self._entry_id
+            )
+        except (OSError, RuntimeError, sqlite3.ProgrammingError):
+            # Unload / closed shared SQLite during eager dispatcher refresh.
+            return
+        self._attr_options = options
+        # Prefer a choice already set on the bucket (e.g. after seed shipment).
+        bucket_choice = self.bucket().get("intake_tag_uid_choice")
+        if isinstance(bucket_choice, str) and bucket_choice in options:
+            self._current = bucket_choice
+        elif self._current not in options:
+            self._current = TAG_SOURCE_LAST_SCANNED
+            self.bucket()["intake_tag_uid_choice"] = self._current
+        else:
+            self.bucket()["intake_tag_uid_choice"] = self._current
+        self.async_write_ha_state()
+
+    @property
+    def current_option(self) -> str | None:
+        return self._current
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        self._current = option
+        self.bucket()["intake_tag_uid_choice"] = option
+        self.async_write_ha_state()
+
+
+class CommunifarmZoneSelect(CommunifarmSelect):
+    """Dynamic 'Area / Zone' options from the placement layout."""
+
+    _attr_icon = "mdi:map-marker"
+    _attr_options = ["(loading zones…)"]
+
+    def __init__(
+        self,
+        entry_id: str,
+        *,
+        name: str,
+        unique_id: str,
+        entity_id: str,
+        bucket_key: str,
+        area_kind: str | None = None,
+    ) -> None:
+        super().__init__(
+            entry_id,
+            name=name,
+            unique_id=unique_id,
+            entity_id=entity_id,
+            icon="mdi:map-marker",
+        )
+        self._bucket_key = bucket_key
+        self._area_kind = area_kind
+        self._current = "(loading zones…)"
+
+    async def async_added_to_hass(self) -> None:
+        from . import inventory_actions
+
+        labels = await inventory_actions.async_list_zone_option_labels(
+            self.hass, self._entry_id, area_kind=self._area_kind
+        )
+        self._attr_options = labels
+        self._current = labels[0]
+        self.bucket()[self._bucket_key] = self._current
+        self.async_write_ha_state()
+
+    @property
+    def current_option(self) -> str | None:
+        return self._current
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        self._current = option
+        self.bucket()[self._bucket_key] = option
+        self.async_write_ha_state()
 
 
 class CommunifarmActiveInoculumSelect(CommunifarmSelect):
