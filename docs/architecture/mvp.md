@@ -21,7 +21,7 @@ Home Assistant platform modules stay at the component root (`button.py`, `sensor
 | 1 | `CommunifarmEntity` | config-entry bucket, `unique_id`, explicit `entity_id` |
 | 2 | `CommunifarmButton`, `CommunifarmSelect`, `CommunifarmNumber`, `CommunifarmSensor`, `CommunifarmText`, `CommunifarmSwitch` | platform behavior |
 
-Subclasses override the method that differs (`async_press`, `native_value`, and so on). Data-only buttons, selects, and draft numbers are descriptions, not extra classes. Do not add a third inheritance level.
+Subclasses override the method that differs (`async_press`, `native_value`, and so on). Data-only buttons, selects, and draft numbers are descriptions (`_ButtonSpec`, `_SelectSpec`, …), not extra classes. Prefer `CommunifarmEntryActionButton` / Spec-driven leaves when press/select only forwards to one `*_actions` helper. Do not add a third inheritance level. See ADR 0008.
 
 SQLite table SQL stays in `storage/sqlite_db.py` `MIGRATIONS`. Repositories inherit `SqliteRepository` for the connection and lock, and keep their own queries. There is no schema class hierarchy.
 
